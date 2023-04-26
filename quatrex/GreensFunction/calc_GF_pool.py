@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan 31 18:02:03 2023
-
-@author: leonard
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 import concurrent.futures
 from itertools import repeat
 

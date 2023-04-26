@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan 31 18:02:43 2023
-
-@author: anders, leonard
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 import numpy as np
 from scipy import sparse
 from utils.linalg import invert

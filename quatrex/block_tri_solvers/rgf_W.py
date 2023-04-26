@@ -1,3 +1,4 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """
 The rgf solver for the step from the polarization OP to the screened interaction W is
 implemented.

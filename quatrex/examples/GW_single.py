@@ -1,10 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jan 16 12:16:16 2023
-
-@author: dleonard
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import time
 
