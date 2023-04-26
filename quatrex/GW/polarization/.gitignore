@@ -1,0 +1,11 @@
+*.mat
+__pycache__/
+*.qdrep
+*.sqlite
+*.nsys-rep
+*.npy
+*.png
+.mypy_cache
+.ipynb_checkpoints
+.dacecache
+tmp.py
