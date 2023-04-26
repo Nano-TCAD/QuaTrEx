@@ -1,4 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+"""Computing a single iteration of the GW iteration for a carbon nanotube configuration.
+Timing Results are reported at the end of the script."""
 
 import time
 
