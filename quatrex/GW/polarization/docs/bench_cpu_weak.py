@@ -8,20 +8,17 @@ import numba
 import timeit
 import argparse
 
-# ghetto solution from ghetto coder
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
-gggparent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
-sys.path.append(gggparent_path)
 
-from GW_SE_python.gold_solution import read_solution
-from GW_SE_python.polarization.sparse import g2p_sparse
-from GW_SE_python.polarization.initialization import gf_init
+from utils import change_format
+from GW.polarization.kernel import g2p_cpu
+from GW.polarization.initialization import gf_init
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Strong scaling benchmarks"
+        description="Weak scaling benchmarks"
     )
     parser.add_argument("-t", "--type", default="cpu_fft",
                     choices=["cpu_fft_inlined", "cpu_fft",
@@ -101,7 +98,7 @@ if __name__ == "__main__":
 
         # generate data in the loop
         energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
-        ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
         denergy:    np.double               = energy[1] - energy[0]
         ne:         np.int32                = energy.shape[0]
         no:         np.int32                = gg.shape[0]
@@ -127,24 +124,24 @@ if __name__ == "__main__":
 
         if args.type == "cpu_fft":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         elif args.type == "cpu_fft_inlined":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         elif args.type  == "conv":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_sparse.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         else:
             raise ValueError(

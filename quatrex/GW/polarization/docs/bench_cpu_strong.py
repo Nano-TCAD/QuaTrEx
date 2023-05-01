@@ -1,4 +1,5 @@
-"""Generate data for weak scaling cpu plot
+"""
+Generate data for strong scaling benchmarks for the CPU version of the polarization
 """
 import numpy as np
 import numpy.typing as npt
@@ -8,16 +9,13 @@ import timeit
 import os
 import argparse
 
-# ghetto solution from ghetto coder
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
-gggparent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
-sys.path.append(gggparent_path)
 
-from GW_SE_python.gold_solution import read_solution
-from GW_SE_python.polarization.sparse import g2p_sparse
-from GW_SE_python.polarization.initialization import gf_init
+from utils import change_format
+from GW.polarization.kernel import g2p_cpu
+from GW.polarization.initialization import gf_init
 
 
 if __name__ == "__main__":
@@ -31,19 +29,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print("Format: ", args.type)
 
-
-
     # number of repeats
     num_run = 20
     num_warm = 5
     # 28 thread cluster node
     num_threads = 28
 
-
     threads: npt.NDArray[np.int32] = np.arange(1, num_threads+1, 1, dtype=np.int32)
     times: npt.NDArray[np.double] = np.empty((num_run, num_threads), dtype=np.double)
     speed_ups: npt.NDArray[np.double] = np.empty_like(times, dtype=np.double)
-
 
     # number of energy points
     ne = 400
@@ -53,7 +47,7 @@ if __name__ == "__main__":
     # random seed
     seed = 2
     energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
-    ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+    ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    np.double               = energy[1] - energy[0]
     ne:         np.int32                = energy.shape[0]
     no:         np.int32                = gg.shape[0]
@@ -83,28 +77,28 @@ if __name__ == "__main__":
 
         if args.type == "cpu_fft":
             time_warm = timeit.timeit(
-                lambda: g2p_sparse.g2p_fft_cpu(denergy, ij2ji, data_1ne_1, 
+                lambda: g2p_cpu.g2p_fft_cpu(denergy, ij2ji, data_1ne_1, 
                 data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu(denergy, ij2ji, data_1ne_1,
+                stmt=lambda: g2p_cpu.g2p_fft_cpu(denergy, ij2ji, data_1ne_1,
                 data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         elif args.type == "cpu_fft_inlined":
             time_warm = timeit.timeit(
-                lambda: g2p_sparse.g2p_fft_cpu_inlined(denergy, ij2ji, data_1ne_1, 
+                lambda: g2p_cpu.g2p_fft_cpu_inlined(denergy, ij2ji, data_1ne_1, 
                 data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_fft_cpu_inlined(denergy, ij2ji, data_1ne_1,
+                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(denergy, ij2ji, data_1ne_1,
                 data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         elif args.type == "cpu_conv":
             time_warm = timeit.timeit(
-                lambda: g2p_sparse.g2p_conv_cpu(denergy, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                lambda: g2p_cpu.g2p_conv_cpu(denergy, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_sparse.g2p_conv_cpu(denergy, ij2ji, data_1ne_1,
+                stmt=lambda: g2p_cpu.g2p_conv_cpu(denergy, ij2ji, data_1ne_1,
                 data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
         else:

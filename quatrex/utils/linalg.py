@@ -1,3 +1,7 @@
+"""
+Todo refactore
+"""
+
 import numpy as np
 import copy, logging, time
 import scipy.signal

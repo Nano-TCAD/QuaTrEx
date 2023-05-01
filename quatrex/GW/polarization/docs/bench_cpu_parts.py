@@ -1,23 +1,21 @@
-"""Generate data for weak scaling cpu plot
+"""
+Generate data strong scaling data for the CPU version of the polarization
 """
 import numpy as np
 import numpy.typing as npt
 import sys
-from scipy import fft
 import numba
 import timeit
 import os
 
-# ghetto solution from ghetto coder
-main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
-gggparent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
-sys.path.append(parent_path)
-sys.path.append(gggparent_path)
 
-from GW_SE_python.polarization.initialization import gf_init
-from GW_SE_python.gold_solution import read_solution
-from GW_SE_python.polarization.sparse import helper
+main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+sys.path.append(parent_path)
+
+from GW.polarization.initialization import gf_init
+from utils import change_format
+from utils import linalg_cpu
 
 if __name__ == "__main__":
 
@@ -44,7 +42,7 @@ if __name__ == "__main__":
     energy:     npt.NDArray[np.double]  = np.squeeze(energy)
     rows:       npt.NDArray[np.int32]   = np.squeeze(rows)
     columns:    npt.NDArray[np.int32]   = np.squeeze(columns)
-    ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+    ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    np.double               = energy[1] - energy[0]
     ne:         np.int32                = energy.shape[0]
     no:         np.int32                = gg.shape[0]
@@ -75,31 +73,31 @@ if __name__ == "__main__":
 
 
         time_warm = timeit.timeit(
-            stmt=lambda: helper.fft_numba(gg,2*ne, no),
+            stmt=lambda: linalg_cpu.fft_numba(gg,2*ne, no),
             number=num_warm) / num_warm
         time1 = timeit.repeat(
-            stmt=lambda: helper.fft_numba(gg,2*ne, no),
+            stmt=lambda: linalg_cpu.fft_numba(gg,2*ne, no),
             number=1, repeat=num_run)
 
         time_warm = timeit.timeit(
-             stmt=lambda: helper.reversal_transpose(data_2ne_1, ij2ji),
+             stmt=lambda: linalg_cpu.reversal_transpose(data_2ne_1, ij2ji),
             number=num_warm) / num_warm
         time2 = timeit.repeat(
-             stmt=lambda: helper.reversal_transpose(data_2ne_1, ij2ji),
+             stmt=lambda: linalg_cpu.reversal_transpose(data_2ne_1, ij2ji),
             number=1, repeat=num_run)
 
         time_warm = timeit.timeit(
-            stmt=lambda: helper.elementmul(data_2ne_1, data_2ne_2),
+            stmt=lambda: linalg_cpu.elementmul(data_2ne_1, data_2ne_2),
             number=num_warm) / num_warm
         time3 = timeit.repeat(
-            stmt=lambda: helper.elementmul(data_2ne_1, data_2ne_2),
+            stmt=lambda: linalg_cpu.elementmul(data_2ne_1, data_2ne_2),
             number=1, repeat=num_run)
 
         time_warm = timeit.timeit(
-             stmt=lambda: helper.scalarmul_ifft(data_2ne_1, pre_factor, ne, no),
+             stmt=lambda: linalg_cpu.scalarmul_ifft(data_2ne_1, pre_factor, ne, no),
             number=num_warm) / num_warm
         time4 = timeit.repeat(
-            stmt=lambda: helper.scalarmul_ifft(data_2ne_1, pre_factor, ne, no),
+            stmt=lambda: linalg_cpu.scalarmul_ifft(data_2ne_1, pre_factor, ne, no),
             number=1, repeat=num_run)
 
 

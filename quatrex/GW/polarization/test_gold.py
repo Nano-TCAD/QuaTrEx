@@ -1,39 +1,51 @@
 """Tests the different polarization implementation 
-a reference solution from a matlab code"""
+a reference solution from a matlab code
+"""
 import numpy as np
 import numpy.typing as npt
 import sys
 import os
-import cupy as cp
 import numba
 import argparse
+import dace
+from dace.transformation.interstate import LoopToMap, StateFusion
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
+sys.path.append(parent_path)
 
-from GW.polarization.sparse import g2p_sparse
+from GW.polarization.kernel import g2p_cpu
 from GW.gold_solution import read_solution
-from GW.polarization.dense import g2p_dense
+from utils import utils_gpu
+from utils import change_format
+
+if utils_gpu.gpu_avail():
+    import cupy as cp
+    from GW.polarization.kernel import g2p_gpu
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join(parent_path, "GW_SE_python", "gold_solution", "data_GPWS.mat")
+    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
+
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the polarization calculation"
     )
     parser.add_argument("-t", "--type", default="cpu_fft",
                         choices=["gpu_fft", "gpu_conv",
                                  "cpu_fft_inlined", "cpu_fft",
-                                 "cpu_conv", "dense"], required=False)
+                                 "cpu_conv", "cpu_conv_dace",
+                                 "cpu_dense"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    # limit the number of threads to not overuse cluster
-    if numba.get_num_threads() >= 12:
-        numba.set_num_threads(12)
+    if args.type in ("gpu_fft", "gpu_conv"):
+        if not utils_gpu.gpu_avail():
+            print("No gpu available")
+            sys.exit(1)
 
     print("Used implementation: ", args.type)
     print("Path to gold solution: ", args.file)
+    # if not set, numba will use max possible threads
     print("Number of used numba threads: ", numba.get_num_threads())
 
     # load greens function
@@ -41,7 +53,7 @@ if __name__ == "__main__":
     # load polarization
     _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file, "p")
 
-    ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+    ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    np.double               = energy[1] - energy[0]
     ne:         np.int32                = np.int32(energy.shape[0])
     no:         np.int32                = np.int32(columns.shape[0])
@@ -84,18 +96,18 @@ if __name__ == "__main__":
     print("Number of energy points: ", ne)
     print("Number of non zero elements: ", no)
 
-    if args.type == "dense":
+    if args.type == "cpu_dense":
 
         # get dense inputs
-        gg_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, gg_gold)
-        gl_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, gl_gold)
-        gr_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, gr_gold)
+        gg_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, gg_gold)
+        gl_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, gl_gold)
+        gr_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, gr_gold)
 
         # check size of arrays
         size_dense = gg_dense.nbytes / (1024**3)
         print(f"Size of one dense greens function in GB: {size_dense:.2f} GB")
 
-        pg_cpu_dense, pl_cpu_dense, pr_cpu_dense, ep_dense = g2p_dense.g2p_dense(
+        pg_cpu_dense, pl_cpu_dense, pr_cpu_dense, ep_dense = g2p_cpu.g2p_dense(
             gg_dense, gl_dense, gr_dense, energy, workers=numba.get_num_threads())
 
         # define energy interval for dense
@@ -111,23 +123,17 @@ if __name__ == "__main__":
         pl_cpu_dense: npt.NDArray[np.complex128] = pl_cpu_dense[energy_s:energy_n]
         pr_cpu_dense: npt.NDArray[np.complex128] = pr_cpu_dense[energy_s:energy_n]
 
-        # assert physical identity
-        # P^{>}_{ij}\left(E\right) = -P^{<}_{ij}\left(-E\right)^{*}
-        # assert np.allclose(pg_cpu_dense, -np.conjugate(np.roll(np.flip(pl_cpu_dense, axis=0), 1, axis=0)))
-        # does not since we cut off 
-
         # transform gold solution to dense
-        pg_gold_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, pg_gold)
-        pl_gold_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, pl_gold)
-        pr_gold_dense: npt.NDArray[np.complex128] = read_solution.sparse_to_dense(rows, columns, pr_gold)
+        pg_gold_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, pg_gold)
+        pl_gold_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, pl_gold)
+        pr_gold_dense: npt.NDArray[np.complex128] = change_format.sparse_to_dense(rows, columns, pr_gold)
 
         # assert solution close to real solution
         # use Frobenius norm
         diff_g: np.int32 = np.linalg.norm(pg_gold_dense - pg_cpu_dense)
         diff_l: np.int32 = np.linalg.norm(pl_gold_dense - pl_cpu_dense)
         diff_r: np.int32 = np.linalg.norm(pr_gold_dense - pr_cpu_dense)
-        print("Differences to Gold Solution g/l/r: ", diff_g, " ", diff_l, " ",
-            diff_r)
+        print(f"Differences to Gold Solution g/l/r:  {diff_g:.4f}, {diff_l:.4f}, {diff_r:.4f}")
         abstol = 1e-14
         reltol = 1e-6
         assert diff_g <= abstol + reltol * np.max(np.abs(pg_gold_dense))
@@ -145,17 +151,38 @@ if __name__ == "__main__":
         # testing on cpu or gpu
         if args.type == "cpu_fft":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_sparse.g2p_fft_cpu(
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
         elif args.type == "cpu_fft_inlined":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_sparse.g2p_fft_cpu_inlined(
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
 
         elif args.type == "cpu_conv":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_sparse.g2p_conv_cpu(
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+
+        elif args.type == "cpu_conv_dace":
+
+            # create zero outputs
+            pg_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
+            pl_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
+            pr_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
+
+
+            # compile to SDFG
+            sdfg: dace.SDFG = g2p_cpu.g2p_conv_dace.to_sdfg(simplify=True)
+            sdfg.apply_transformations(LoopToMap)
+            sdfg.apply_transformations_repeated(StateFusion)
+            sdfg.apply_transformations(LoopToMap)
+            sdfg.simplify()
+            csdfg = sdfg.compile()
+
+            # call compiled function
+            csdfg(pre_factor=np.array([pre_factor]), ij2ji=ij2ji, gg=gg_gold,
+                gl=gl_gold, gr=gr_gold, pg=pg_cpu, pl=pl_cpu, pr=pr_cpu, NE=ne, NO=no)
+
 
         elif args.type == "gpu_fft":
 
@@ -165,7 +192,7 @@ if __name__ == "__main__":
             gl_gold_gpu: cp.ndarray = cp.asarray(gl_gold)
             gr_gold_gpu: cp.ndarray = cp.asarray(gr_gold)
 
-            pg_gpu, pl_gpu, pr_gpu = g2p_sparse.g2p_fft_gpu(
+            pg_gpu, pl_gpu, pr_gpu = g2p_gpu.g2p_fft_gpu(
                 pre_factor, ij2ji_gpu, gg_gold_gpu, gl_gold_gpu, gr_gold_gpu)
 
             # load data to cpu
@@ -188,7 +215,7 @@ if __name__ == "__main__":
             num_blocksx     = (no + num_threadsx - 1) // num_threadsx
             num_blocksy     = (ne + num_threadsy - 1) // num_threadsy
 
-            gpu_conv = g2p_sparse.g2p_conv_gpu(1)
+            gpu_conv = g2p_gpu.g2p_conv_gpu(1)
 
             gpu_conv((num_blocksx, num_blocksy),
                     (num_threadsx, num_threadsy),

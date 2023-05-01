@@ -1,12 +1,13 @@
-"""Few line helper functions used in g2p_sparse.py
-    Most compiled with numba to run parallel on the cpu"""
+"""
+Few line helper functions used in g2p and gw2sigma
+Most compiled with numba to run parallel on the cpu
+"""
 import numpy as np
 import numpy.typing as npt
 import typing
 import numba
-from scipy import fft
-#import cupy as cp
-#from cupyx import jit
+from numpy import fft
+
 
 @numba.njit("(c16[:,:], i4[:])",
             parallel=True,
@@ -107,7 +108,7 @@ def fft_numba(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> np
     """
     out: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
     for i in numba.prange(no):
-        out[i,:] = fft.fft(g1[i,:], n=ne2, workers=1)
+        out[i,:] = fft.fft(g1[i,:], n=ne2)
     return out
 
 @numba.njit("(c16[:,:], c16, i8, i8)",
@@ -133,7 +134,7 @@ def scalarmul_ifft(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.in
     """
     out = np.empty((no,ne), dtype=np.complex128)
     for i in numba.prange(no):
-        out[i,:] = fft.ifft(g1[i,:], workers=1)[:ne]
+        out[i,:] = fft.ifft(g1[i,:])[:ne]
     for i in numba.prange(no):
         for j in numba.prange(ne):
             out[i, j] = out[i, j] * fac
@@ -171,43 +172,3 @@ def reversal_transpose_memory(g1: npt.NDArray[np.complex128], ij2ji_reversal: ty
             np.flip(g1, axis=1), 1, axis=1)[ij2ji, :]
     """
     return g1[ij2ji_reversal]
-
-# @cp.fuse()
-# def retarded_special_gpu(gr: cp.ndarray, gl_mod: cp.ndarray, gl: cp.ndarray) -> cp.ndarray:
-#     """Calculates elementwise gr*gl_mod + gl*gr^* on the gpu
-
-#     Args:
-#         gr (cp.ndarray): complex array size (#orbital,#energy)
-#         gl_mod (cp.ndarray): complex array size (#orbital,#energy)
-#         gl (cp.ndarray): complex array size (#orbital,#energy)
-
-#     Returns:
-#         cp.ndarray: gr*gl_mod + gl*gr^*
-#     """
-#     return gr * gl_mod + gl * cp.conjugate(gr)
-
-# @jit.rawkernel()
-# def reversal_gpu(g1: cp.ndarray, g1_trans: cp.ndarray, sizex: np.int32, sizey: np.int32) -> cp.ndarray:
-#     """reverses the array g1 along the energy axis
-
-#         Example:
-#         pl = cp.empty_like(gg, dtype=cp.cdouble)
-#         num_threads: np.int32 = 256
-#         num_blocks: np.int32 = (no + num_threads - 1) // num_threads
-#         helper.reversal_gpu[num_blocks, num_threads](pg,pl,no,ne)
-        
-#     Args:
-#         g1 (cp.ndarray): input, (#orbital,#energy) 
-#         g1_trans (cp.ndarray): output, (#orbital,#energy)
-#         sizex (np.int32): #orbital
-#         sizey (np.int32): #energy
-
-#     Returns:
-#         cp.ndarray: _description_
-#     """
-#     idx = jit.blockIdx.x * jit.blockDim.x + jit.threadIdx.x
-#     if idx < sizex:
-#         g1_trans[idx, 0] = -cp.conjugate(g1[idx, 0])
-#         for j in range(1,sizey):
-#             g1_trans[idx, j] = -cp.conjugate(g1[idx, 2*sizey-j])
-            

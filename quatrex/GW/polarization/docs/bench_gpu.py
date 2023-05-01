@@ -8,16 +8,13 @@ from cupyx.profiler import benchmark
 import os
 import argparse
 
-# ghetto solution from ghetto coder
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
-gggparent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
-sys.path.append(gggparent_path)
 
-from GW_SE_python.gold_solution import read_solution
-from GW_SE_python.polarization.sparse import g2p_sparse
-from GW_SE_python.polarization.initialization import gf_init
+from GW.polarization.initialization import gf_init
+from utils import change_format
+from GW.polarization.kernel import g2p_gpu
 
 
 if __name__ == "__main__":
@@ -79,7 +76,7 @@ if __name__ == "__main__":
 
         # generate data in the loop
         energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
-        ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
         denergy:    np.double               = energy[1] - energy[0]
         ne:         np.int32                = energy.shape[0]
         no:         np.int32                = gg.shape[0]
@@ -109,7 +106,7 @@ if __name__ == "__main__":
 
         if args.type == "gpu_fft":
 
-            result = benchmark(g2p_sparse.g2p_fft_gpu, (denergy, ij2ji_gpu,
+            result = benchmark(g2p_gpu.g2p_fft_gpu, (denergy, ij2ji_gpu,
                 data_1ne_1_gpu, data_1ne_2_gpu, data_1ne_3_gpu), n_repeat=num_run, n_warmup=num_warm)
 
         elif args.type == "gpu_conv":
@@ -124,7 +121,7 @@ if __name__ == "__main__":
             num_blocksx     = (no + num_threadsx - 1) // num_threadsx
             num_blocksy     = (ne + num_threadsy - 1) // num_threadsy
 
-            gpu_conv = g2p_sparse.g2p_conv_gpu(1)
+            gpu_conv = g2p_gpu.g2p_conv_gpu(1)
 
             def kernel(pre_k, ij_k, gg_k, gl_k, gr_k,
                        pg_k, pl_k, pr_k, ne_k, no_k):

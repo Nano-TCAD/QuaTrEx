@@ -3,7 +3,13 @@ Contains helper functions to transform
 between different formats used in the GW solver parts.
 
 - Dense to block wise for single energy point
-
+- Dense to block wise for multiple energy point
+- 2D format to list/vector of sparse csr matrices
+- Creating mapping from block format to 2D format for single and multiple energy points
+- Apply the the above mapping to go in both directions
+- From sparse 2D to dense
+- The transposition vector for the 2D format
+- Mapping from 2D to its transposed time reversed version (do not use)
 
 """
 import numpy as np
@@ -553,13 +559,26 @@ def sparse2block_alt(
     map_upper: np.ndarray,
     map_lower: np.ndarray,
     x_s: npt.NDArray[np.complex128],
-    bmax,
-    bmin
+    bmax: np.ndarray,
+    bmin: np.ndarray
 ) -> typing.Tuple[
     np.ndarray,
     np.ndarray,
     np.ndarray
 ]:
+    """Applies the map to get from sparse to block form
+
+    Args:
+        map_diag (np.ndarray): Diagonal map, 4 x number of non zeros contained in diag (3*x_diag indexes and last for output)
+        map_upper (np.ndarray): Upper Diagonal map, 4 x number of non zeros contained in upper (3*x_upper indexes and last for output)
+        map_lower (np.ndarray): Lower Diagonal map, 4 x number of non zeros contained in lower (3*x_lower indexes and last for output)
+        x_s (npt.NDArray[np.complex128]): 2D array (nnz,#energy) 
+        bmax (np.ndarray): Ending index of each block
+        bmin (np.ndarray): Starting index of each block
+
+    Returns:
+        typing.Tuple[ np.ndarray, np.ndarray, np.ndarray ]: Diagonal, Upper, Lower blocks
+    """
     # non zero elements
     no = x_s.shape[0]
     # number of blocks
@@ -604,15 +623,14 @@ def sparse2block_energy_alt(
        Alternative map created by map_block2sparse_alt
        The other form does not exist, because 
        the alt implementation will be faster and 
-       I (almaeder) am lazy
 
     Args:
         map_diag (np.ndarray): Diagonal map, 4 x number of non zeros contained in diag (3*x_diag indexes and last for output)
         map_upper (np.ndarray): Upper Diagonal map, 4 x number of non zeros contained in upper (3*x_upper indexes and last for output)
         map_lower (np.ndarray): Lower Diagonal map, 4 x number of non zeros contained in lower (3*x_lower indexes and last for output)
         x_s (npt.NDArray[np.complex128]): 2D array (nnz,#energy)
-        bmax (_type_): vector of end indexes of blocks
-        bmin (_type_): vector of start indexes of blocks
+        bmax (np.ndarray): vector of end indexes of blocks
+        bmin (np.ndarray): vector of start indexes of blocks
 
     Returns:
         typing.Tuple[ np.ndarray, np.ndarray, np.ndarray ]: _description_
@@ -645,3 +663,146 @@ def sparse2block_energy_alt(
     blocks_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]] = x_s[map_upper[3,:],:].transpose()
     blocks_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]] = x_s[map_lower[3,:],:].transpose()
     return blocks_diag, blocks_upper, blocks_lower
+
+
+def sparse_to_dense(rows: npt.NDArray[np.int32], 
+                    columns: npt.NDArray[np.int32], 
+                    data: npt.NDArray[np.complex128]
+) -> npt.NDArray[np.complex128]:
+    """Transform the sparse format rows, columns, 
+        data to a dense format (#energy, #orbitals, #orbitals).
+        Format of input is coo, but data is 2D 
+        (meaning #energy * sparse matrices with all the same position of nnz elements)
+
+    Args:
+        rows (npt.NDArray[np.int32]):       rows idx of sparse matrix (nnz)
+        columns (npt.NDArray[np.int32]):    column idx of sparse matrix (nnz)
+        data (npt.NDArray[np.complex128]):     data vector (nnz, #energy)
+
+    Returns:
+        npt.NDArray[np.complex128]: dense matrix (#energy, nao, nao)
+    """
+
+    # number of energy points
+    ne: np.int32 = np.shape(data)[1]
+    no: np.int32 = np.shape(data)[0]
+
+    # same number of rows, columns, nnz elements
+    assert no == np.shape(rows)[0]
+    assert no == np.shape(columns)[0]
+
+
+    data_1 = sparse.coo_matrix((data[:, 0], (rows, columns)), dtype=np.complex128)
+
+    # assert square matrix
+    assert data_1.shape[0] == data_1.shape[1]
+
+    out: npt.NDArray[np.complex128] = np.empty((ne, data_1.shape[0], data_1.shape[1]), dtype=np.complex128)
+
+    for i in range(ne):
+        out[i, :, :] = sparse.coo_matrix(
+            (data[:, i], (rows, columns)),
+            dtype=np.complex128).todense("C")
+
+    return out
+
+
+def find_idx_transposed(rows: npt.NDArray[np.int32],
+                        columns: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+    """Creates vector with mapping between element ij and ji of a sparse matrix.
+        It is assumed that the matrix is either symmetric/hermitian such that if 
+        ij exists also ji is non-zero.
+
+    Args:
+        rows (npt.NDArray[np.int32]): row index of non-zero values of a matrix
+        columns (npt.NDArray[np.int32]): column index of non-zero values of a matrix
+
+    Returns:
+        npt.NDArray[np.int32]: Array with mapping from ij to ji 
+    """
+
+    assert np.array_equal(np.shape(rows), np.shape(columns))
+
+    # stack to 2D arrays
+    ij: npt.NDArray[np.int32] = np.stack((rows, columns), axis=1)
+    ji: npt.NDArray[np.int32] = np.stack((columns, rows), axis=1)
+
+    # create type for sorting, a column is 8 byte
+    rowtype = np.dtype((np.void, 8))
+    # make contiguous in memory, view with new type and flatten
+    ij_n = np.ascontiguousarray(ij).view(rowtype).ravel()
+    ji_n = np.ascontiguousarray(ji).view(rowtype).ravel()
+
+    # return idx that would sort
+    ij_to_ijs = np.argsort(ij_n)
+
+    # find indexes how to insert ji_n into ij_n such it remains sorted
+    # ij_n is sorted with ij_to_ijs
+    ijs_to_ji = ij_n.searchsorted(ji_n, sorter=ij_to_ijs)
+
+    # take the elements from ij_to_ijs at ijs_to_ji
+    # ij -> ij sorted -> ji mapping
+    idx_transposed: npt.NDArray[np.int32] = ij_to_ijs[ijs_to_ji]
+
+    # assert right shape
+    assert np.array_equal(np.shape(rows), np.shape(idx_transposed))
+    # assert transformation is correct
+    assert np.array_equal(ij, ji[idx_transposed])
+    assert np.array_equal(ij[idx_transposed], ji)
+    assert idx_transposed.size == np.unique(idx_transposed).size
+    idx_transposed = np.int32(idx_transposed)
+    return idx_transposed
+
+
+def find_idx_rt(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
+                ne: np.int32) -> typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32]]:
+    """Creates 2D array with mapping between element ij and ji of a sparse matrix.
+        It is assumed that the matrix is either symmetric/hermitian such that if 
+        ij exists also ji is non-zero. The second axis already creates a time reversal
+        to omit this operation later.
+        Not used and np.ix_ is kinda whack
+
+    Args:
+        rows (npt.NDArray[np.int32]): row index of non-zero values of a matrix
+        columns (npt.NDArray[np.int32]): column index of non-zero values of a matrix
+        ne: np.int32: number of energy points
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32]: 2D Array with mapping from ij to ji and reversal
+    """
+
+    assert np.array_equal(np.shape(rows), np.shape(columns))
+
+    # stack to 2D arrays
+    ij: npt.NDArray[np.int32] = np.stack((rows, columns), axis=1)
+    ji: npt.NDArray[np.int32] = np.stack((columns, rows), axis=1)
+
+    # create type for sorting, a column is 16 byte
+    rowtype = np.dtype((np.void, 16))
+    # make contiguous in memory, view with new type and flatten
+    ij_n = np.ascontiguousarray(ij).view(rowtype).ravel()
+    ji_n = np.ascontiguousarray(ji).view(rowtype).ravel()
+
+    # return idx that would sort
+    ij_to_ijs = np.argsort(ij_n)
+
+    # find indexes how to insert ji_n into ij_n such it remains sorted
+    # ij_n is sorted with ij_to_ijs
+    ijs_to_ji = ij_n.searchsorted(ji_n, sorter=ij_to_ijs)
+
+    # take the elements from ij_to_ijs at ijs_to_ji
+    # ij -> ij sorted -> ji mapping
+    idx_transposed: npt.NDArray[np.int32] = ij_to_ijs[ijs_to_ji]
+
+    # sanity checks
+    # assert right shape
+    assert np.array_equal(np.shape(rows), np.shape(idx_transposed))
+    # assert transformation is correct
+    assert np.array_equal(ij, ji[idx_transposed])
+    assert np.array_equal(ij[idx_transposed], ji)
+    assert idx_transposed.size == np.unique(idx_transposed).size
+
+    # time reversal idx, 2*ne due to the padding in fft
+    reversal = np.roll(np.flip(np.arange(2*ne), axis=0), 1, axis=0)
+
+    return np.ix_(idx_transposed, reversal)

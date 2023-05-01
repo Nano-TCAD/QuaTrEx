@@ -26,7 +26,7 @@ from GreensFunction.calc_GF_pool import calc_GF_pool
 from utils import matrix_creation
 from GW.gold_solution import read_solution
 from GW.polarization.sparse import helper, g2p_sparse
-from GW.screenedinteraction.change_format import map_block2sparse, block2sparse_energy, \
+from utils.change_format import map_block2sparse, block2sparse_energy, \
                     block2sparse_energy_alt, map_block2sparse_alt, sparse2vecsparse
 from GW.screenedinteraction.sparse.calc_W import calc_W
 from GW.screenedinteraction.sparse.calc_W_pool import calc_W_pool

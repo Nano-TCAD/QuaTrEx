@@ -1,0 +1,204 @@
+"""
+Functions to calculate the polarization on the cpu.
+See README.md for more information. 
+"""
+import numpy as np
+import numpy.typing as npt
+import typing
+import cupy as cp
+import sys
+import os
+
+main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+sys.path.append(parent_path)
+
+from utils import linalg_gpu
+
+def g2p_fft_gpu(
+    pre_factor: np.complex128,
+    ij2ji: cp.ndarray,
+    gg: cp.ndarray,
+    gl: cp.ndarray,
+    gr: cp.ndarray
+) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+    """Calculate the polarization with fft on the gpu(see file description). 
+        The inputs are the pre factor and the Green's Functions.
+        Only the data and a mapping to the transposed indices are needed.
+
+    Args:
+        pre_factor       (np.complex128): pre_factor, multiplied at the end
+        ij2ji               (cp.ndarray): mapping to transposed matrix, (#orbital)
+        gg                  (cp.ndarray): Greater Green's Function,     (#orbital, #energy)
+        gl                  (cp.ndarray): Lesser Green's Function,      (#orbital, #energy)
+        gr                  (cp.ndarray): Retarded Green's Function,    (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[cp.ndarray, Greater polarization  (#orbital, #energy)
+                     cp.ndarray, Lesser polarization   (#orbital, #energy)
+                     cp.ndarray  Retarded polarization (#orbital, #energy)
+                    ]
+    """
+
+    # number of energy points
+    ne: int = gg.shape[1]
+
+    # fft
+    gg_t = cp.fft.fft(gg, n=2 * ne, axis=1)
+    gl_t = cp.fft.fft(gl, n=2 * ne, axis=1)
+    gr_t = cp.fft.fft(gr, n=2 * ne, axis=1)
+
+    # reverse and transpose
+    # only once since identity is used for lesser polarization
+    gl_t_mod = cp.roll(cp.flip(gl_t, axis=1), 1, axis=1)[ij2ji, :]
+
+    # multiply elementwise
+    pg_t = cp.multiply(gg_t, gl_t_mod)
+    pr_t = linalg_gpu.retarded_special_gpu(gr_t, gl_t_mod, gl_t)
+
+    # ifft, cutoff and multiply with pre factor
+    pr = cp.multiply(cp.fft.ifft(pr_t, axis=1)[:, :ne], pre_factor)
+    pg = cp.multiply(cp.fft.ifft(pg_t, axis=1), pre_factor)
+
+    # lesser polarization from identity
+    pl = -cp.conjugate(cp.roll(cp.flip(pg, axis=1), 1, axis=1))
+
+    # cutoff
+    pg = pg[:, :ne]
+    pl = pl[:, :ne]
+
+    return (pg, pl, pr)
+
+def g2p_conv_gpu(iteration: np.int32 = 1):
+    """Creates function to calculate the polarization with conv on the gpu(see file description). 
+
+    True Args: 
+        iteration (np.int32): code iteration to test    
+    
+    The created function needs the following arguments and give following returns:
+
+    Args:
+        prefactor   (np.cdouble): 
+        ij2ji       (cp.ndarray): mapping to transposed matrix, (#orbital)
+        gg          (cp.ndarray): Greater Green's Function,     (#orbital, #energy)
+        gl          (cp.ndarray): Lesser Green's Function,      (#orbital, #energy)
+        gr          (cp.ndarray): Retarded Green's Function_,   (#orbital, #energy)
+        pg          (cp.ndarray): Greater Green's polarization,     (#orbital, #energy)
+        pl          (cp.ndarray): Lesser Green's polarization,      (#orbital, #energy)
+        pr          (cp.ndarray): Retarded Green's polarization,   (#orbital, #energy)
+        no                 (int): number of nnz/#orbital
+        ne                 (int): number of energy points/#energy
+    """
+    if iteration == 1:
+        code = r'''
+        #include <cupy/complex.cuh>
+        extern "C" __global__
+        void g2p_conv(const complex<double> prefactor, 
+                    const int* ij2ji, 
+                    const complex<double>* gg, 
+                    const complex<double>* gl, 
+                    const complex<double>* gr, 
+                    complex<double>* pg, 
+                    complex<double>* pl, 
+                    complex<double>* pr,
+                    int no,
+                    int ne) {
+            for (int idx = blockIdx.x * blockDim.x + threadIdx.x;
+                 idx < no;
+                 idx += gridDim.x * blockDim.x) {
+                int ji = ij2ji[idx];
+                for (int idy = blockIdx.y * blockDim.y + threadIdx.y;
+                     idy < ne;
+                     idy += gridDim.y * blockDim.y) {
+                    complex<double> tmpg;
+                    complex<double> tmpl;
+                    complex<double> tmpr;
+                    for (int ep = idy; ep < ne; ep++) {
+                        complex<double> tmpgl1 = gl[ep + idx * ne];
+                        complex<double> tmpgl2 = gl[ep - idy + ji * ne];
+                        tmpg = tmpg + prefactor * gg[ep + idx * ne] * tmpgl2;     
+                        tmpl = tmpl + prefactor * tmpgl1 * gg[ep - idy + ji * ne];     
+                        tmpr = tmpr + prefactor * (gr[ep + idx * ne] * tmpgl2 + 
+                                                   tmpgl1 * conj(gr[ep - idy + idx * ne]));     
+                    }
+                    pg[idy + idx * ne] = tmpg;
+                    pl[idy + idx * ne] = tmpl;
+                    pr[idy + idx * ne] = tmpr;
+                }
+            }
+        }
+        '''
+    else:
+        raise ValueError(
+                "iteration " + str(iteration) + " does not exist")
+
+    kernel = cp.RawKernel(code, "g2p_conv")
+
+    return kernel
+
+def g2p_fft_mpi_gpu(
+    pre_factor: np.complex128,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128],
+    gl_trans: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
+                  npt.NDArray[np.complex128]]:
+    """Calculate the polarization with fft and mpi on the gpu(see file description). 
+
+    Args:
+        pre_factor            (np.complex128): pre_factor, multiplied at the end
+        gg       (npt.NDArray[np.complex128]): Greater Green's Function,          (#orbital/#ranks, #energy)
+        gl       (npt.NDArray[np.complex128]): Lesser Green's Function,           (#orbital/#ranks, #energy)
+        gr       (npt.NDArray[np.complex128]): Retarded Green's Function_,        (#orbital/#ranks, #energy)
+        gl_trans (npt.NDArray[np.complex128]): Transposed Lesser Green's Function (#orbital/#ranks, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)  
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    ne: int = gg.shape[1]
+    
+    # load data to gpu----------------------------------------------------------
+    gg_gpu = cp.asarray(gg)
+    gl_gpu = cp.asarray(gl)
+    gr_gpu = cp.asarray(gr)
+    gl_trans_gpu = cp.asarray(gl_trans)
+
+    # compute pg/pl/pr----------------------------------------------------------
+
+    # fft
+    gg_t_gpu = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+    gl_t_gpu = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+    gr_t_gpu = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
+    gl_t_trans_gpu = cp.fft.fft(gl_trans_gpu, n=2 * ne, axis=1)
+
+    # time reversed
+    gl_t_mod_gpu = cp.roll(cp.flip(gl_t_trans_gpu, axis=1), 1, axis=1)
+
+    # multiply elementwise
+    pg_t_gpu = cp.multiply(gg_t_gpu, gl_t_mod_gpu)
+    pr_t_gpu = linalg_gpu.retarded_special_gpu(gr_t_gpu, gl_t_mod_gpu, gl_t_gpu)
+
+    # ifft, cutoff and multiply with pre factor
+    pr_gpu = cp.multiply(cp.fft.ifft(pr_t_gpu, axis=1)[:, :ne], pre_factor)
+    pg_gpu = cp.multiply(cp.fft.ifft(pg_t_gpu, axis=1), pre_factor)
+
+    # lesser polarization from identity
+    pl_gpu = -cp.conjugate(cp.roll(cp.flip(pg_gpu, axis=1), 1, axis=1))
+
+    # cutoff
+    pg_gpu = pg_gpu[:, :ne]
+    pl_gpu = pl_gpu[:, :ne]
+
+
+    # load data to cpu----------------------------------------------------------
+
+    pg = cp.asnumpy(pg_gpu)
+    pl = cp.asnumpy(pl_gpu)
+    pr = cp.asnumpy(pr_gpu)
+
+    return (pg, pl, pr)

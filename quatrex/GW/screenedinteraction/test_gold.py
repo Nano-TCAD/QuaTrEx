@@ -17,7 +17,7 @@ parent_path = os.path.abspath(os.path.join(main_path, ".."))
 
 from GW.gold_solution import read_solution
 from block_tri_solvers.rgf_W import rgf_W
-from GW.screenedinteraction import change_format
+from utils import change_format
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 
-"""Implemented multi-node polarization computations,
-    includes all MPI communication
+"""
+Implemented multi-node GPU polarization computations.
+Includes all MPI communication needed for the whole chain.
+Assumes every node has a GPU connected.
 """
 import mpi4py
 import sys
@@ -18,8 +20,9 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
-from polarization.sparse import g2p_sparse
-from gold_solution import read_solution
+from GW.polarization.kernel import g2p_gpu
+from GW.gold_solution import read_solution
+from utils import change_format
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
@@ -37,7 +40,7 @@ if __name__ == "__main__":
     # load data on master-------------------------------------------------------
     if rank == 0:
         # read gold solution
-        solution_path = os.path.join(parent_path, "GW_SE_python", "gold_solution", "data_GPWS.mat")
+        solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
 
         parser = argparse.ArgumentParser(
             description="Tests the mpi implementation of the polarization calculation"
@@ -51,7 +54,7 @@ if __name__ == "__main__":
         # load polarization
         _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file, "p")
 
-        ij2ji:      npt.NDArray[np.int32]   = read_solution.find_idx_transposed(rows, columns)
+        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
         denergy:    npt.NDArray[np.double]  = np.array([energy[1] - energy[0]], dtype=np.double)
         ne:         np.int32                = np.int32(energy.shape[0])
         no:         np.int32                = np.int32(columns.shape[0])
@@ -222,7 +225,7 @@ if __name__ == "__main__":
 
     # calculate the polarization at every rank----------------------------------
 
-    pg_g2p, pl_g2p, pr_g2p = g2p_sparse.g2p_fft_mpi_gpu(pre_factor[0],
+    pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(pre_factor[0],
                                                         gg_g2p,
                                                         gl_g2p,
                                                         gr_g2p,
@@ -271,8 +274,7 @@ if __name__ == "__main__":
         diff_g = np.linalg.norm(pg_gold - pg_mpi)
         diff_l = np.linalg.norm(pl_gold - pl_mpi)
         diff_r = np.linalg.norm(pr_gold - pr_mpi)
-        print("Differences to Gold Solution g/l/r: ", diff_g, " ", diff_l, " ",
-            diff_r)
+        print(f"Differences to Gold Solution g/l/r:  {diff_g:.4f}, {diff_l:.4f}, {diff_r:.4f}")
 
         # assert solution close to real solution
         abstol = 1e-12

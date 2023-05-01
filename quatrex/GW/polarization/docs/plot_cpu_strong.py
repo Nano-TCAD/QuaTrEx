@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-import sys
 import os
 import argparse
 main_path = os.path.abspath(os.path.dirname(__file__))
