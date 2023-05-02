@@ -15,7 +15,10 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 
 import sys
-sys.path.insert(0, '..')
+import os
+main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, ".."))
+sys.path.append(parent_path)
 
 from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from OMEN_structure_matrices.OMENHamClass import Hamiltonian
@@ -24,13 +27,14 @@ from GreensFunction.calc_GF import calc_GF
 from GreensFunction.calc_GF_pool import calc_GF_pool
 
 from utils import matrix_creation
+from utils import change_format
 from GW.gold_solution import read_solution
-from GW.polarization.sparse import helper, g2p_sparse
+from GW.polarization.kernel import g2p_cpu
 from utils.change_format import map_block2sparse, block2sparse_energy, \
                     block2sparse_energy_alt, map_block2sparse_alt, sparse2vecsparse
-from GW.screenedinteraction.sparse.calc_W import calc_W
-from GW.screenedinteraction.sparse.calc_W_pool import calc_W_pool
-from GW.selfenergy.sparse import gw2s_sparse
+from GW.screenedinteraction.kernel.calc_W import calc_W
+from GW.screenedinteraction.kernel.calc_W_pool import calc_W_pool
+from GW.selfenergy.kernel import gw2s_cpu
 
 """
 Input parameters for the Si Nanowire.
@@ -120,7 +124,7 @@ energy, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x("/us
 energy, rows_w, columns_w, wg_gold, wl_gold, wr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "w")
 energy, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "s")
 rowsRef, columnsRef, vh_gold                        = read_solution.load_v("/usr/scratch/mont-fort17/dleonard/CNT/data_Vh_4.mat")
-ij2ji = read_solution.find_idx_transposed(rows, columns)
+ij2ji = change_format.find_idx_transposed(rows, columns)
 pre_factor = -1.0j * dE / (np.pi)
 
 # Creating the mask for the energy range of the deleted W elements given by the reference solution
@@ -227,7 +231,7 @@ while (iteration <= max_iteration) and (crit > max_error):
 
     # Calculating the polarization
     tic_polarization = time.perf_counter()
-    pg_computed, pl_computed, pr_computed = g2p_sparse.g2p_fft_cpu_inlined(pre_factor, ij2ji,
+    pg_computed, pl_computed, pr_computed = g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji,
                                                                             gg_computed, gl_computed, gr_computed)
 
     toc_polarization = time.perf_counter()
@@ -289,7 +293,7 @@ while (iteration <= max_iteration) and (crit > max_error):
 
     # Calculating the self-energy
     tic_sigma = time.perf_counter()
-    sg_cpu, sl_cpu, sr_cpu = gw2s_sparse.gw2s_fft_cpu(
+    sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_cpu(
             -pre_factor/2, ij2ji,
             gg_computed, gl_computed, gr_computed,
             wg_computed, wl_computed, wr_computed)

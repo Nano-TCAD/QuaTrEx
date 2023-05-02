@@ -4,7 +4,6 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 import typing
-from scipy import sparse
 
 def load_x(
     path: str,

@@ -60,25 +60,25 @@ from OBC import sancho
 from OBC import dL_OBC_eigenmode
 
 
-
-def rgf_W(vh:       sparse.csr_matrix,
-               pg:       sparse.csr_matrix,
-               pl:       sparse.csr_matrix,
-               pr:       sparse.csr_matrix,
-               bmax:     npt.NDArray[np.int32],
-               bmin:     npt.NDArray[np.int32],
-               wg_diag:  npt.NDArray[np.complex128],
-               wg_upper: npt.NDArray[np.complex128],
-               wl_diag:  npt.NDArray[np.complex128],
-               wl_upper: npt.NDArray[np.complex128],
-               wr_diag:  npt.NDArray[np.complex128],
-               wr_upper: npt.NDArray[np.complex128],
-               xr_diag:  npt.NDArray[np.complex128],
-               nbc:      np.int64,
-               ie:       np.int32,
-               factor:   np.float = 1.0,
-               ref_flag: bool = False,
-               sancho_flag: bool = False
+def rgf_W(
+    vh:       sparse.csr_matrix,
+    pg:       sparse.csr_matrix,
+    pl:       sparse.csr_matrix,
+    pr:       sparse.csr_matrix,
+    bmax:     npt.NDArray[np.int32],
+    bmin:     npt.NDArray[np.int32],
+    wg_diag:  npt.NDArray[np.complex128],
+    wg_upper: npt.NDArray[np.complex128],
+    wl_diag:  npt.NDArray[np.complex128],
+    wl_upper: npt.NDArray[np.complex128],
+    wr_diag:  npt.NDArray[np.complex128],
+    wr_upper: npt.NDArray[np.complex128],
+    xr_diag:  npt.NDArray[np.complex128],
+    nbc:      np.int64,
+    ie:       np.int32,
+    factor:   np.float64 = 1.0,
+    ref_flag: bool = False,
+    sancho_flag: bool = False
 ) -> typing.Tuple[npt.NDArray[np.complex128],
                   npt.NDArray[np.complex128],
                   npt.NDArray[np.complex128],
@@ -102,6 +102,8 @@ def rgf_W(vh:       sparse.csr_matrix,
         wr_diag (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
         wr_upper (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm-1, maxblocklength_mm, maxblocklength_mm)
         xr_diag (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        ie (np.int32): energy index
+        factor (np.float64, optional): factor to multiply the result with. Defaults to 1.0.
         ref_flag (bool, optional): If reference solution to rgf made by np.linalg.inv should be returned
         sancho_flag (bool, optional): If sancho or beyn should be used. Defaults to False.
     

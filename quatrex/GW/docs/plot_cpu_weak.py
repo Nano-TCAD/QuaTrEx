@@ -1,3 +1,6 @@
+"""
+Plotting script for weak scaling plots.
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -7,11 +10,16 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Strong scaling benchmarks"
+        description="Strong scaling benchmark plot"
     )
-    parser.add_argument("-t", "--type", default="cpu_fft",
-                    choices=["cpu_fft_inlined", "cpu_fft",
-                                "cpu_conv"], required=False)
+    parser.add_argument(
+                    "-t", "--type",
+                    default="p_cpu_fft",
+                    choices=["p_cpu_fft_inlined",
+                             "p_cpu_fft",
+                             "p_cpu_conv",
+                             "s_cpu_fft"],
+                    required=False)
     parser.add_argument("-d", "--dimension", default="nnz",
                     choices=["energy", "nnz"], required=False)
 
@@ -23,7 +31,7 @@ if __name__ == "__main__":
     font_type = ""
     font_size = "14"
 
-    load_path = os.path.join(main_path, "cpu_weak_" + args.type + "_" + args.dimension + ".npy")
+    load_path = os.path.join(main_path, "weak_" + args.type + "_" + args.dimension + ".npy")
     data: npt.NDArray[np.double] = np.load(load_path)
 
     num_run = (data.shape[0] - 4) // 2

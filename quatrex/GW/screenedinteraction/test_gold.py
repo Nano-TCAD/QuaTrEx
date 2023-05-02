@@ -5,15 +5,12 @@ import os
 import sys
 import numpy as np
 from scipy import sparse
-import mkl
-import concurrent.futures
-from itertools import repeat
-from functools import partial
 import argparse
 import numba
 
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
+sys.path.append(parent_path)
 
 from GW.gold_solution import read_solution
 from block_tri_solvers.rgf_W import rgf_W
@@ -22,17 +19,8 @@ from utils import change_format
 
 if __name__ == "__main__":
     # parse the possible arguments
-    # solution_path_pw = os.path.join(parent_path, "gold_solution", "data_GPWS.mat")
-    # solution_path_vh = os.path.join(parent_path, "gold_solution", "data_Vh.mat")
-
-    # parse the possible arguments
-    #solution_path_pw = os.path.join(parent_path, "gold_solution", "data_GPWS.mat")
-    #solution_path_vh = os.path.join(parent_path, "gold_solution", "data_Vh.mat")
-
-    solution_path_pw = '/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat'
-    solution_path_vh = '/usr/scratch/mont-fort17/dleonard/CNT/data_Vh_4.mat'
-
-
+    solution_path_pw = os.path.join("/scratch/quatrex_data", "data_GPWS_04.mat")
+    solution_path_vh = os.path.join("/scratch/quatrex_data", "data_Vh_04.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
@@ -41,11 +29,6 @@ if __name__ == "__main__":
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_pw", default=solution_path_pw, required=False)
     args = parser.parse_args()
-
-    # not yet needed as numba is not used for screened interaction
-    # limit the number of threads to not overuse cluster
-    if numba.get_num_threads() >= 12:
-        numba.set_num_threads(12)
 
     print("Used implementation: ", args.type)
     print("Path to gold solution vh: ", args.file_vh)
@@ -61,11 +44,12 @@ if __name__ == "__main__":
     # load interaction hat
     rowsRef, columnsRef, vh_gold                        = read_solution.load_v(args.file_vh)
     # mapping to transposed
-    ij2ji                                               = read_solution.find_idx_transposed(rows, columns)
+    ij2ji                                               = change_format.find_idx_transposed(rows, columns)
 
     # creating the filtering masks
     w_mask = np.ndarray(shape = (energy.shape[0],), dtype = bool)
 
+    # masks describe if energy point got calculated
     wr_mask = np.sum(np.abs(wr_gold), axis = 0) > 1e-10
     wl_mask = np.sum(np.abs(wl_gold), axis = 0) > 1e-10
     wg_mask = np.sum(np.abs(wg_gold), axis = 0) > 1e-10
@@ -91,16 +75,17 @@ if __name__ == "__main__":
     bmin_ref = bmin[0:nb:nbc]
     # number of blocks after matrix multiplication
     nb_mm = bmax_ref.size
-    # larges block length after matrix multiplication 
+    # larges block length after matrix multiplication
     lb_max_mm = np.max(bmax_ref - bmin_ref + 1)
 
     # mapping block to 2D format
     map_diag_alt, map_upper_alt, map_lower_alt = change_format.map_block2sparse_alt(rows, columns,
                                                                                 bmax_ref, bmin_ref)
-    
+
     # creating the smoothing and filtering factors
     dNP = 50
     factor = np.ones(ne)
+    # smoothly go to zero at the end
     factor[ne-dNP-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dNP+1)) + 1)/2
     #factor[0:dNP+1] = (np.cos(np.pi*np.linspace(1, 0, dNP+1)) + 1)/2
 
@@ -132,8 +117,8 @@ if __name__ == "__main__":
         # the input formats are
         # a sparse csr array for vh
         # a vector/list of sparse csr arrays for px
-        vh         = sparse.coo_array((vh_gold, (rows, columns)),
-                                    shape=(nao, nao), dtype = np.complex128).tocsr()
+        vh = sparse.coo_array((vh_gold, (rows, columns)),
+                               shape=(nao, nao), dtype = np.complex128).tocsr()
 
         # transform the 2D format to vector/list of sparse csr arrays
         pg = change_format.sparse2vecsparse(pg_gold,rows,columns,nao)
@@ -146,27 +131,27 @@ if __name__ == "__main__":
         for ie in range(49, 50):
             # buffer for a energy points
             # diagonal blocks
-            xr_diag_out2  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-            wg_diag_out2  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-            wl_diag_out2  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-            wr_diag_out2  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            xr_diag_out  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wg_diag_out  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wl_diag_out  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wr_diag_out  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
 
             # upper diagonal blocks
-            wg_upper_out2 = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
-            wl_upper_out2 = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
-            wr_upper_out2 = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wg_upper_out = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wl_upper_out = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+            wr_upper_out = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
 
             # call obc and rgf for every energy point
-            xr_ref2_dense, wg_ref2_dense, wl_ref2_dense, wr_ref2_dense = rgf_W(
+            xr_ref_dense, wg_ref_dense, wl_ref_dense, wr_ref_dense = rgf_W(
                                                             vh, pg[ie], pl[ie], pr[ie],
                                                             bmax, bmin,
-                                                            wg_diag_out2,
-                                                            wg_upper_out2,
-                                                            wl_diag_out2,
-                                                            wl_upper_out2,
-                                                            wr_diag_out2,
-                                                            wr_upper_out2,
-                                                            xr_diag_out2,
+                                                            wg_diag_out,
+                                                            wg_upper_out,
+                                                            wl_diag_out,
+                                                            wl_upper_out,
+                                                            wr_diag_out,
+                                                            wr_upper_out,
+                                                            xr_diag_out,
                                                             nbc,
                                                             ie,
                                                             factor[ie],
@@ -174,55 +159,55 @@ if __name__ == "__main__":
                                                             )
 
             # transform normal dense matrix inverse to the block format
-            xr_diag_ref2,             _, _ = change_format.dense2block(xr_ref2_dense, bmax_ref, bmin_ref)
-            wg_diag_ref2, wg_upper_ref2, _ = change_format.dense2block(wg_ref2_dense, bmax_ref, bmin_ref)
-            wl_diag_ref2, wl_upper_ref2, _ = change_format.dense2block(wl_ref2_dense, bmax_ref, bmin_ref)
-            wr_diag_ref2, wr_upper_ref2, _ = change_format.dense2block(wr_ref2_dense, bmax_ref, bmin_ref)
+            xr_diag_ref,            _, _ = change_format.dense2block(xr_ref_dense, bmax_ref, bmin_ref)
+            wg_diag_ref, wg_upper_ref, _ = change_format.dense2block(wg_ref_dense, bmax_ref, bmin_ref)
+            wl_diag_ref, wl_upper_ref, _ = change_format.dense2block(wl_ref_dense, bmax_ref, bmin_ref)
+            wr_diag_ref, wr_upper_ref, _ = change_format.dense2block(wr_ref_dense, bmax_ref, bmin_ref)
 
 
             # transform from the block format to the 2D one
             wg_out = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wg_diag_ref2,
-                                                wg_upper_ref2,
-                                                -wg_upper_ref2.conjugate().transpose((0,2,1)),
+                                                wg_diag_ref,
+                                                wg_upper_ref,
+                                                -wg_upper_ref.conjugate().transpose((0,2,1)),
                                                 no)
             wl_out = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wl_diag_ref2,
-                                                wl_upper_ref2,
-                                                -wl_upper_ref2.conjugate().transpose((0,2,1)),
+                                                wl_diag_ref,
+                                                wl_upper_ref,
+                                                -wl_upper_ref.conjugate().transpose((0,2,1)),
                                                 no)
             wr_out = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wr_diag_ref2,
-                                                wr_upper_ref2,
-                                                wr_upper_ref2.transpose((0,2,1)),
+                                                wr_diag_ref,
+                                                wr_upper_ref,
+                                                wr_upper_ref.transpose((0,2,1)),
                                                 no)
             
             wg_computed = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wg_diag_out2,
-                                                wg_upper_out2,
-                                                -wg_upper_out2.conjugate().transpose((0,2,1)),
+                                                wg_diag_out,
+                                                wg_upper_out,
+                                                -wg_upper_out.conjugate().transpose((0,2,1)),
                                                 no)
             wl_computed = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wl_diag_out2,
-                                                wl_upper_out2,
-                                                -wl_upper_out2.conjugate().transpose((0,2,1)),
+                                                wl_diag_out,
+                                                wl_upper_out,
+                                                -wl_upper_out.conjugate().transpose((0,2,1)),
                                                 no)
             wr_computed = change_format.block2sparse_alt(map_diag_alt,
                                                 map_upper_alt,
                                                 map_lower_alt,
-                                                wr_diag_out2,
-                                                wr_upper_out2,
-                                                wr_upper_out2.transpose((0,2,1)),
+                                                wr_diag_out,
+                                                wr_upper_out,
+                                                wr_upper_out.transpose((0,2,1)),
                                                 no)
 
 
@@ -238,13 +223,13 @@ if __name__ == "__main__":
             assert diff_l <= abstol + reltol * np.max(np.abs(wl_gold[:,ie]))
             assert diff_r <= abstol + reltol * np.max(np.abs(wr_gold[:,ie]))
 
-            assert np.allclose(xr_diag_ref2,  xr_diag_out2)
-            assert np.allclose(wg_diag_ref2,  wg_diag_out2)
-            assert np.allclose(wl_diag_ref2,  wl_diag_out2)
-            assert np.allclose(wr_diag_ref2,  wr_diag_out2, atol=1e-6, rtol=1e-6)
-            assert np.allclose(wg_upper_ref2, wg_upper_out2)
-            assert np.allclose(wl_upper_ref2, wl_upper_out2)
-            assert np.allclose(wr_upper_ref2, wr_upper_out2, atol=1e-6, rtol=1e-6)
+            assert np.allclose(xr_diag_ref,  xr_diag_out)
+            assert np.allclose(wg_diag_ref,  wg_diag_out)
+            assert np.allclose(wl_diag_ref,  wl_diag_out)
+            assert np.allclose(wr_diag_ref,  wr_diag_out, atol=1e-6, rtol=1e-6)
+            assert np.allclose(wg_upper_ref, wg_upper_out)
+            assert np.allclose(wl_upper_ref, wl_upper_out)
+            assert np.allclose(wr_upper_ref, wr_upper_out, atol=1e-6, rtol=1e-6)
             assert np.allclose(wg_out, np.squeeze(wg_gold[:,ie]), atol=1e-1, rtol=1e-1)
             assert np.allclose(wl_out, np.squeeze(wl_gold[:,ie]), atol=1e-6, rtol=1e-6)
             assert np.allclose(wr_out, np.squeeze(wr_gold[:,ie]), atol=1e-6, rtol=1e-6)
@@ -256,6 +241,6 @@ if __name__ == "__main__":
     else:
         raise ValueError(
         "Argument error, type input not possible")
-    
+
     print("The chosen implementation " + args.type + " is correct")
 

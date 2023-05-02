@@ -26,7 +26,6 @@ if utils_gpu.gpu_avail():
 if __name__ == "__main__":
     # parse the possible arguments
     solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
-
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the polarization calculation"
     )

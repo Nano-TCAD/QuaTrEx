@@ -9,33 +9,46 @@ import timeit
 import argparse
 
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
 from utils import change_format
 from GW.polarization.kernel import g2p_cpu
+from GW.selfenergy.kernel import gw2s_cpu
 from GW.polarization.initialization import gf_init
 
 if __name__ == "__main__":
+    # parse input arguments
     parser = argparse.ArgumentParser(
-        description="Weak scaling benchmarks"
+        description="Strong scaling benchmarks"
     )
-    parser.add_argument("-t", "--type", default="cpu_fft",
-                    choices=["cpu_fft_inlined", "cpu_fft",
-                                "cpu_conv"], required=False)
-    parser.add_argument("-d", "--dimension", default="nnz",
-                    choices=["energy", "nnz"], required=False)
-
+    parser.add_argument(
+                    "-t", "--type",
+                    default="p_cpu_fft",
+                    choices=["p_cpu_fft_inlined",
+                             "p_cpu_fft",
+                             "p_cpu_conv",
+                             "s_cpu_fft"],
+                    required=False)
+    
+    # number of energy points
+    ne = 400
+    # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
+    nnz = 2500
+    # choose number of orbitals and energy points
+    parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
+    parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
+    parser.add_argument("-th", "--threads", default=28, required=False, type=int)
+    parser.add_argument("-d", "--dimension", default="nnz", choices=["energy", "nnz"], required=False)
+    parser.add_argument("-r", "--runs", default=20, required=False, type=int)
     args = parser.parse_args()
     print("Format: ", args.type)
-    print("Scaling over Energy/nnz: ", args.dimension)
-
 
     # number of repeats
-    num_run = 20
+    num_run = args.runs
     num_warm = 5
     # 28 thread cluster node
-    num_threads = 28
+    num_threads = args.threads
 
 
     threads: npt.NDArray[np.int32] = np.arange(1, num_threads+1, 1, dtype=np.int32)
@@ -50,8 +63,8 @@ if __name__ == "__main__":
     rng = np.random.default_rng(seed)
 
     # number of energy points
-    ne_0 = 400
-    nnz_0 = 2500
+    ne_0 = args.num_energy
+    nnz_0 = args.num_nonzero
     # number of orbitals -> around 0.04*nao*nao are the nonzero amount of nnz
     # nnz_gold=21888
     # nao = 10 -> nnz = 4
@@ -71,7 +84,7 @@ if __name__ == "__main__":
         # calculate new size
         if args.dimension == "energy":
             # different scaling depending on fft (NlogN) or conv(N^2)
-            if args.type in ("cpu_fft","cpu_fft_inlined"):
+            if args.type in ("p_cpu_fft","p_cpu_fft_inlined","s_cpu_fft"):
                 # newtons method it is:
                 num_iteration = 10
                 fac = 1.0
@@ -83,7 +96,7 @@ if __name__ == "__main__":
                     fac = fac - fs(fac)/fprime(fac)
                 print("fac: ", fac)
                 ne = np.int32(ne_0 * fac)
-            elif args.type in ("cpu_conv"):
+            elif args.type in ("p_cpu_conv"):
                 ne = np.int32(ne_0 * np.sqrt(numba.get_num_threads()))
             else:
                 raise ValueError(
@@ -94,10 +107,10 @@ if __name__ == "__main__":
             nao = np.int32(np.sqrt(numba.get_num_threads() * nnz_0 / 0.0394))
         else:
             raise ValueError(
-            "Argument error since not possible input")
+            "Argument error, impossible input")
 
         # generate data in the loop
-        energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
+        energy, rows, columns, gg, gl, gr   = gf_init.init_sparse(ne, nao, seed)
         ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
         denergy:    np.double               = energy[1] - energy[0]
         ne:         np.int32                = energy.shape[0]
@@ -106,13 +119,18 @@ if __name__ == "__main__":
 
 
         data_1ne_1 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         data_1ne_2 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         data_1ne_3 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_4 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_5 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_6 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         size_sparse = data_1ne_1.nbytes / (1024**3)
-
 
         print("Number of nnz: ", no)
         print("Number of energy points: ", ne)
@@ -122,30 +140,47 @@ if __name__ == "__main__":
         gb_sizes[i] = size_sparse
 
 
-        if args.type == "cpu_fft":
+        if args.type == "p_cpu_fft":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, 
+                                            data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, data_1ne_1,
+                                                 data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
-        elif args.type == "cpu_fft_inlined":
+        elif args.type == "p_cpu_fft_inlined":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1,
+                                                    data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1,
+                                                         data_1ne_2, data_1ne_3),
                 number=1, repeat=num_run)
-        elif args.type  == "conv":
+        elif args.type == "p_cpu_conv":
             time_warm = timeit.timeit(
-                stmt=lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, 
+                                             data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
+                stmt=lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1,
+                                                  data_1ne_2, data_1ne_3),
+                number=1, repeat=num_run)
+        elif args.type == "s_cpu_fft":
+            time_warm = timeit.timeit(
+                lambda: gw2s_cpu.gw2s_fft_cpu(pre_factor, ij2ji, data_1ne_1,
+                                              data_1ne_2, data_1ne_3,
+                                              data_1ne_4, data_1ne_5, data_1ne_6),
+                number=num_warm) / num_warm
+            time = timeit.repeat(
+                stmt=lambda: gw2s_cpu.gw2s_fft_cpu(pre_factor, ij2ji, data_1ne_1,
+                                                   data_1ne_2, data_1ne_3,
+                                                   data_1ne_4, data_1ne_5, data_1ne_6),
                 number=1, repeat=num_run)
         else:
             raise ValueError(
-            "Argument error since not possible input")
+            "Invalid input argument")
 
 
         times[:,i] = np.array(time, dtype=np.double)

@@ -23,7 +23,7 @@ if __name__ == "__main__":
     font_type = ""
     font_size = "14"
 
-    load_path = os.path.join(main_path, "gpu_" + args.type + "_" + args.dimension + ".npy")
+    load_path = os.path.join(main_path, args.type + "_" + args.dimension + ".npy")
     data: npt.NDArray[np.double] = np.load(load_path)
 
     num_run = (data.shape[0] - 4)

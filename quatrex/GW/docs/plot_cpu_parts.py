@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # ax.plot(threads, speed_up_mean, ':b', lw=2)
 
     # add legend
-    plt.legend(loc='upper left', fontsize='large')
+    plt.legend(loc="upper left", fontsize="large")
 
     # add ideal scaling
     ax.plot(threads, np.arange(1, num_threads + 1, 1))

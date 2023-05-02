@@ -33,17 +33,6 @@ Where only rocket-fft is a less standard package. It enables the use of scipy.ff
 ## Folder Structure
 ```bash
 .
-├── docs
-│   ├── bench_cpu_parts.py
-│   ├── bench_cpu_strong.py
-│   ├── bench_cpu_weak.py
-│   ├── bench_gpu.py
-│   ├── bench_mpi.py
-│   ├── plot_cpu_parts.py
-│   ├── plot_cpu_strong.py
-│   ├── plot_cpu_weak.py
-│   ├── plot_gpu.py
-│   └── README.md
 ├── initialization
 │   └── gf_init.py
 ├── __init__.py
@@ -57,7 +46,6 @@ Where only rocket-fft is a less standard package. It enables the use of scipy.ff
 ```
 The following folder:
 - `kernel/`: CPU and GPU implementations
-- `docs/`: Benchmarking, and plotting scripts
 - `initialization/`: The script to random initialize the Green's Functions
 The following scripts:
 - `test_gold.py`: Script to test the different single-node implementations
@@ -110,8 +98,8 @@ They enable the creation of strong and weak scaling plots for the different impl
 Please check the code to see which inputs are possible.
 As an example of a strong scaling plot for the FFT implementation with artificial data:
 ```bash
-python -O docs/bench_cpu_strong.py fft art
-python docs/plot_cpu_strong.py fft
+python docs/bench_cpu_strong.py -t pol_fft_cpu -ne 200 -nnz 500
+python docs/plot_cpu_strong.py -t pol_fft_cpu
 ```
 In addition, there is the `docs/bench_cpu_parts.py` script which benchmarks the different parts of 
 the FFT implementation. This file can be extended if other parts should be benchmarked.

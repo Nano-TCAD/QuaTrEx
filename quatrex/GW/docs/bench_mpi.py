@@ -32,8 +32,6 @@ if __name__ == "__main__":
     times: npt.NDArray[np.double] = np.empty((num_run, num_ranks), dtype=np.double)
     speed_ups: npt.NDArray[np.double] = np.empty((num_run, num_ranks), dtype=np.double)
 
-
-
     for i in range(num_ranks):
         print("Number of ranks: ", ranks[i])
         command = ["mpiexec", "-n", str(ranks[i]), "-f", args.pin_path,

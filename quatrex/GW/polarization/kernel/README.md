@@ -1,5 +1,5 @@
 # Functions to Calculate the Polarization. 
-# Problem Description
+## Problem Description
 The polarization is calculated in the following way on a discrete energy grid:
 
 $$P^{\lessgtr}_{ij}\left(E^{\prime}\right) = -2i\frac{dE}{2 \pi} \sum \limits_{E} G^{\lessgtr}_{ij}\left(E\right) G^{\gtrless}_{ji}\left(E-E^{\prime}\right)$$

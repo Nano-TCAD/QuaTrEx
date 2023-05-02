@@ -9,7 +9,7 @@ import os
 import argparse
 
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
 from GW.polarization.initialization import gf_init
@@ -21,24 +21,31 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Strong scaling benchmarks"
     )
+    # number of energy points
+    ne = 400
+    # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
+    nnz = 2500
     parser.add_argument("-t", "--type", default="gpu_fft",
                     choices=["gpu_fft", "gpu_conv"], required=False)
     parser.add_argument("-d", "--dimension", default="nnz",
                     choices=["energy", "nnz"], required=False)
-
+    parser.add_argument("-r", "--runs", default=20, required=False, type=int)
+    parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
+    parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
+    parser.add_argument("-m", "--mem_sizes", default=20, required=False, type=int)
     args = parser.parse_args()
     print("Format: ", args.type)
     print("Scaling over Energy/nnz: ", args.dimension)
 
 
     # number of repeats
-    num_run = 40
+    num_run = args.runs
     num_warm = 5
     # test for 32 memory sizes on the gpu
-    num_mems = 22
+    num_mems = args.mem_sizes
     # number of energy points
-    ne_0 = 400
-    nnz_0 = 2500
+    ne_0 = args.num_energy
+    nnz_0 = args.num_nonzero
     # number of orbitals -> around 0.04*nao*nao are the nonzero amount of nnz
     # nnz_gold=21888
     # nao = 10 -> nnz = 4

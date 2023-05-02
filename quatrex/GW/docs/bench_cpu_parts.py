@@ -7,10 +7,10 @@ import sys
 import numba
 import timeit
 import os
-
+import argparse
 
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
 from GW.polarization.initialization import gf_init
@@ -18,12 +18,26 @@ from utils import change_format
 from utils import linalg_cpu
 
 if __name__ == "__main__":
+   # parse input arguments
+    parser = argparse.ArgumentParser(
+        description="Part strong scaling benchmarks"
+    )
+    # number of energy points
+    ne = 400
+    # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
+    nnz = 50000
+    # choose number of orbitals and energy points
+    parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
+    parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
+    parser.add_argument("-th", "--threads", default=28, required=False, type=int)
+    parser.add_argument("-r", "--runs", default=20, required=False, type=int)
+    args = parser.parse_args()
 
     # number of repeats
-    num_run = 20
+    num_run = args.runs
     num_warm = 5
     # 28 thread cluster node
-    num_threads = 28
+    num_threads = args.threads
     num_parts = 4
 
     threads: npt.NDArray[np.int32] = np.arange(1, num_threads+1, 1, dtype=np.int32)
@@ -32,9 +46,9 @@ if __name__ == "__main__":
 
 
     # number of energy points
-    ne = 400
+    ne = args.num_energy
     # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
-    nnz = 50000
+    nnz = args.num_nonzero
     nao = np.int32(np.sqrt(nnz / 0.0394))
     # random seed
     seed = 2
