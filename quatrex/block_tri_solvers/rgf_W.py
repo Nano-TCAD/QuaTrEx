@@ -112,6 +112,18 @@ def rgf_W(vh:       sparse.csr_matrix,
                   npt.NDArray[np.complex128]     wr from inv
                 ] warning all dense arrays
     """
+
+    # Anti-Hermitian symmetrizing of PL and PG
+    pl = 1j * np.imag(pl)
+    pl = (pl - pl.conj().T) / 2
+
+    pg = 1j * np.imag(pg)
+    pg = (pg - pg.conj().T) / 2
+
+    # PR has to be derived from PL and PG and then has to be symmetrized
+    pr = 1j * np.imag(pg - pl) / 2
+    pr = (pr + pr.T) / 2
+
     # limit for beyn
     imag_lim = 1e-4
     # todo find out what rr/R is

@@ -32,7 +32,7 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads = 1, worker_num = 1):
     
     factor = np.ones(NE)  
     factor[NE-dNP-1:NE] = (np.cos(np.pi*np.linspace(0, 1, dNP+1)) + 1)/2
-    factor[0:dNP+1] = (np.cos(np.pi*np.linspace(1, 0, dNP+1)) + 1)/2
+    # factor[0:dNP+1] = (np.cos(np.pi*np.linspace(1, 0, dNP+1)) + 1)/2
 
     factor[np.where(np.invert(w_mask))[0]] = 0.0
 

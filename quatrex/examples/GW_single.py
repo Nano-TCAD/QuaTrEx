@@ -115,11 +115,11 @@ iteration = 1
 crit = np.inf
 
 #reading reference solution
-energy, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS.mat", "g")
-energy, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS.mat", "p")
-energy, rows_w, columns_w, wg_gold, wl_gold, wr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS.mat", "w")
-energy, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS.mat", "s")
-rowsRef, columnsRef, vh_gold                        = read_solution.load_v("/usr/scratch/mont-fort17/dleonard/CNT/data_Vh.mat")
+energy, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "g")
+energy, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "p")
+energy, rows_w, columns_w, wg_gold, wl_gold, wr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "w")
+energy, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x("/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat", "s")
+rowsRef, columnsRef, vh_gold                        = read_solution.load_v("/usr/scratch/mont-fort17/dleonard/CNT/data_Vh_4.mat")
 ij2ji = read_solution.find_idx_transposed(rows, columns)
 pre_factor = -1.0j * dE / (np.pi)
 
@@ -311,13 +311,13 @@ for i in range(ne_s, ne_f):
     assert np.allclose(pl_computed[:,i-ne_s], pl_gold[:,i], rtol = 1e-6, atol = 1e-6)
     assert np.allclose(pr_computed[:,i-ne_s], pr_gold[:,i], rtol = 1e-6, atol = 1e-6)
     print('checking W')
-    assert np.allclose(wg_computed[:, i-ne_s], wg_gold[:,i], atol=2, rtol=1)
-    assert np.allclose(wl_computed[:, i-ne_s], wl_gold[:,i], atol=1e-1, rtol=1e-2)
-    assert np.allclose(wr_computed[:, i-ne_s], wr_gold[:,i], atol=5, rtol=1)
+    assert np.allclose(wg_computed[:, i-ne_s], wg_gold[:,i], atol=1e-1, rtol=1e-1)
+    assert np.allclose(wl_computed[:, i-ne_s], wl_gold[:,i], atol=1e-6, rtol=1e-6)
+    assert np.allclose(wr_computed[:, i-ne_s], wr_gold[:,i], atol=1e-6, rtol=1e-6)
     print('checking sigma')
-    assert np.allclose(sg_gold[:, i-ne_s], sg_cpu[:, i], atol=5, rtol=1)
-    assert np.allclose(sl_gold[:, i-ne_s], sl_cpu[:, i], atol=5, rtol=1)
-    assert np.allclose(sr_gold[:, i-ne_s], sr_cpu[:, i], atol=5, rtol=1)
+    assert np.allclose(sg_gold[:, i-ne_s], sg_cpu[:, i], atol=1e-2, rtol=1e-2)
+    assert np.allclose(sl_gold[:, i-ne_s], sl_cpu[:, i], atol=1e-2, rtol=1e-2)
+    assert np.allclose(sr_gold[:, i-ne_s], sr_cpu[:, i], atol=1e-2, rtol=1e-2)
 
 toc = time.perf_counter()
 

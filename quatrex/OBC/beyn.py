@@ -131,7 +131,7 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     imag_cond = np.zeros(len(k))
     dEk_dk = np.zeros(len(k), dtype =  np.cfloat)
 
-    ind = np.where(np.abs(np.imag(k)) < np.max(0.5, max_imag))[0]
+    ind = np.where(np.abs(np.imag(k)) < np.max((0.5, max_imag)))[0]
     Ikmax = len(ind)
 
     if Ikmax % 2 == 1:

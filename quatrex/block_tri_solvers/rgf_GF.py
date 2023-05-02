@@ -15,8 +15,6 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, fL, fR, Bmin_fi, Bmax
     imag_lim = 5e-4
     R = 1000
 
-    #print(index_E)
-
     min_dEkL = 1e8
     min_dEkR = 1e8
     Bmax = Bmax_fi - 1

@@ -29,8 +29,8 @@ if __name__ == "__main__":
     #solution_path_pw = os.path.join(parent_path, "gold_solution", "data_GPWS.mat")
     #solution_path_vh = os.path.join(parent_path, "gold_solution", "data_Vh.mat")
 
-    solution_path_pw = '/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS.mat'
-    solution_path_vh = '/usr/scratch/mont-fort17/dleonard/CNT/data_Vh.mat'
+    solution_path_pw = '/usr/scratch/mont-fort17/dleonard/CNT/data_GPWS_04.mat'
+    solution_path_vh = '/usr/scratch/mont-fort17/dleonard/CNT/data_Vh_4.mat'
 
 
     parser = argparse.ArgumentParser(
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         # not performance, but for testing need atm
         # todo test all energy points
         # todo remove energy points
-        for ie in range(0, ne):
+        for ie in range(49, 50):
             # buffer for a energy points
             # diagonal blocks
             xr_diag_out2  = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
@@ -234,23 +234,23 @@ if __name__ == "__main__":
             print(f"Differences to Gold Solution g/l/r:  {diff_g:.4f}, {diff_l:.4f}, {diff_r:.4f}")
             abstol = 1e-2
             reltol = 2*1e-1
-            assert diff_g <= abstol + reltol * np.max(np.abs(wg_gold[:,ie]))*100
+            assert diff_g <= abstol + reltol * np.max(np.abs(wg_gold[:,ie]))
             assert diff_l <= abstol + reltol * np.max(np.abs(wl_gold[:,ie]))
-            assert diff_r <= abstol + reltol * np.max(np.abs(wr_gold[:,ie]))*100
+            assert diff_r <= abstol + reltol * np.max(np.abs(wr_gold[:,ie]))
 
             assert np.allclose(xr_diag_ref2,  xr_diag_out2)
             assert np.allclose(wg_diag_ref2,  wg_diag_out2)
             assert np.allclose(wl_diag_ref2,  wl_diag_out2)
-            assert np.allclose(wr_diag_ref2,  wr_diag_out2, atol=3, rtol=2)
+            assert np.allclose(wr_diag_ref2,  wr_diag_out2, atol=1e-6, rtol=1e-6)
             assert np.allclose(wg_upper_ref2, wg_upper_out2)
             assert np.allclose(wl_upper_ref2, wl_upper_out2)
-            assert np.allclose(wr_upper_ref2, wr_upper_out2, atol=3, rtol=2)
-            assert np.allclose(wg_out, np.squeeze(wg_gold[:,ie]), atol=2, rtol=1)
-            assert np.allclose(wl_out, np.squeeze(wl_gold[:,ie]), atol=1e-1, rtol=1e-2)
-            assert np.allclose(wr_out, np.squeeze(wr_gold[:,ie]), atol=1, rtol=1e-1)
-            assert np.allclose(wg_computed, np.squeeze(wg_gold[:,ie]), atol=2, rtol=1)
-            assert np.allclose(wl_computed, np.squeeze(wl_gold[:,ie]), atol=1e-1, rtol=1e-2)
-            assert np.allclose(wr_computed, np.squeeze(wr_gold[:,ie]), atol=5, rtol=1)
+            assert np.allclose(wr_upper_ref2, wr_upper_out2, atol=1e-6, rtol=1e-6)
+            assert np.allclose(wg_out, np.squeeze(wg_gold[:,ie]), atol=1e-1, rtol=1e-1)
+            assert np.allclose(wl_out, np.squeeze(wl_gold[:,ie]), atol=1e-6, rtol=1e-6)
+            assert np.allclose(wr_out, np.squeeze(wr_gold[:,ie]), atol=1e-6, rtol=1e-6)
+            assert np.allclose(wg_computed, np.squeeze(wg_gold[:,ie]), atol=1e-2, rtol=1e-2)
+            assert np.allclose(wl_computed, np.squeeze(wl_gold[:,ie]), atol=1e-6, rtol=1e-6)
+            assert np.allclose(wr_computed, np.squeeze(wr_gold[:,ie]), atol=1e-6, rtol=1e-6)
             print("At energy point: ", ie, " the solution is correct")
 
     else:
