@@ -315,7 +315,7 @@ def rgf_W(vh:       sparse.csr_matrix,
         mr[slb_ed_mm,slb_ed_mm]     = mr[slb_ed_mm,slb_ed_mm]    - dmr_ed
         vh_cp[slb_ed_mm,slb_ed_mm]  = vh_cp[slb_ed_mm,slb_ed_mm] - dvh_ed
 
-        if not np.isnan(dll_sd).any():
+        if not np.isnan(dll_ed).any():
             lg[slb_ed_mm,slb_ed_mm] = lg[slb_ed_mm,slb_ed_mm]    + dlg_ed
             ll[slb_ed_mm,slb_ed_mm] = ll[slb_ed_mm,slb_ed_mm]    + dll_ed
 

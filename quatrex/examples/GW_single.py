@@ -4,7 +4,7 @@ Timing Results are reported at the end of the script."""
 
 import time
 
-import math
+import copy
 import numpy as np
 from scipy import ndimage as nd
 from scipy.interpolate import RegularGridInterpolator
@@ -166,6 +166,10 @@ nao = DH.Bmax[-1]
 
 print(numba.get_num_threads())
 
+# Observables: DOS, Transmission, Current
+DOS = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
+IdE = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
+
 # Starting the scGW iterations: Currently only testing one iteration
 while (iteration <= max_iteration) and (crit > max_error):
     if(iteration == 1):
@@ -178,10 +182,10 @@ while (iteration <= max_iteration) and (crit > max_error):
             SigG[i-ne_s] = sparse.csr_matrix((NB * Bsize, NB * Bsize), dtype = np.cfloat)
             SigL[i-ne_s] = sparse.csr_matrix((NB * Bsize, NB * Bsize), dtype = np.cfloat)
 
-    # Calculating the Green's function
+    # Calculating the Green's function and OBC (Sigmas should not change)
     tic_rgf_G = time.perf_counter()
     GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E = \
-                calc_GF_pool(DH, E[ne_s:ne_f], SigR, SigG, SigL, EfL, EfR, Temp, gf_mkl_threads, gf_worker_threads)
+                calc_GF_pool(DH, E[ne_s:ne_f], copy.deepcopy(SigR), copy.deepcopy(SigG), copy.deepcopy(SigG), EfL, EfR, Temp, DOS, gf_mkl_threads, gf_worker_threads)
     toc_rgf_G = time.perf_counter()
 
     # Transforming the Green's function to energy contiguous arrays
@@ -311,7 +315,7 @@ for i in range(ne_s, ne_f):
     assert np.allclose(pl_computed[:,i-ne_s], pl_gold[:,i], rtol = 1e-6, atol = 1e-6)
     assert np.allclose(pr_computed[:,i-ne_s], pr_gold[:,i], rtol = 1e-6, atol = 1e-6)
     print('checking W')
-    assert np.allclose(wg_computed[:, i-ne_s], wg_gold[:,i], atol=1e-1, rtol=1e-1)
+    assert np.allclose(wg_computed[:, i-ne_s], wg_gold[:,i], atol=1e-2, rtol=1e-2)
     assert np.allclose(wl_computed[:, i-ne_s], wl_gold[:,i], atol=1e-6, rtol=1e-6)
     assert np.allclose(wr_computed[:, i-ne_s], wr_gold[:,i], atol=1e-6, rtol=1e-6)
     print('checking sigma')
@@ -331,4 +335,4 @@ print("Transforming W into energy-contiguous array took: " + "%.2f" % (toc_trafo
 print("Calculating Sigma took: " + "%.2f" % (toc_sigma-tic_sigma) + " [s]" )
 print("Total Time: " + "%.2f" % (toc_sigma - tic_rgf_G) + " [s]" )
 
-
+np.savetxt('DOS_.dat', DOS, fmt = DH.Bmin.shape[0]*['%.6f'])

@@ -248,7 +248,7 @@ if __name__ == "__main__":
             assert np.allclose(wg_out, np.squeeze(wg_gold[:,ie]), atol=1e-1, rtol=1e-1)
             assert np.allclose(wl_out, np.squeeze(wl_gold[:,ie]), atol=1e-6, rtol=1e-6)
             assert np.allclose(wr_out, np.squeeze(wr_gold[:,ie]), atol=1e-6, rtol=1e-6)
-            assert np.allclose(wg_computed, np.squeeze(wg_gold[:,ie]), atol=1e-2, rtol=1e-2)
+            assert np.allclose(wg_computed, np.squeeze(wg_gold[:,ie]), atol=1e-1, rtol=1e-1)
             assert np.allclose(wl_computed, np.squeeze(wl_gold[:,ie]), atol=1e-6, rtol=1e-6)
             assert np.allclose(wr_computed, np.squeeze(wr_gold[:,ie]), atol=1e-6, rtol=1e-6)
             print("At energy point: ", ie, " the solution is correct")

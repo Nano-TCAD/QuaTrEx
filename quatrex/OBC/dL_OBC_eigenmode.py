@@ -384,7 +384,8 @@ def get_dl_obc_end(
     mr_x_ct: np.ndarray,
     xr_d: np.ndarray,
     xr_d_ct: np.ndarray,
-    ax_diff: np.ndarray
+    ax_diff: np.ndarray,
+    ref_iteration: int
 ) -> np.ndarray:
     """Helper function to replace symmetric computations 
     for both greater and lesser obc corrections.
@@ -402,13 +403,15 @@ def get_dl_obc_end(
         xr_d (np.ndarray):
         xr_d_ct (np.ndarray):
         ax_diff (np.ndarray): different between lesser/greater
+        ref_iteration (int): number of iterations for the refinement
 
     Returns:
         np.ndarray:
     """
     yx_d = np.divide(ieivec @ fx[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
     wx_d = eivec @ yx_d @ eivec_ct
-    wx_d = fx[sl_x,sl_x] + xr_d[sl_x,:] @ mr_x[:,sl_x] @ wx_d @ mr_x_ct[sl_x,:] @ xr_d_ct[:,sl_x]
+    for i in range(ref_iteration):
+        wx_d = fx[sl_x,sl_x] + xr_d[sl_x,:] @ mr_x[:,sl_x] @ wx_d @ mr_x_ct[sl_x,:] @ xr_d_ct[:,sl_x]
 
     dlx_d = mr_x[:,sl_x] @ wx_d @ mr_x_ct[sl_x,:] - ax_diff
     return dlx_d
@@ -441,6 +444,8 @@ def get_dl_obc(
     Returns:
         typing.Tuple[np.ndarray, np.ndarray]: greater and lesser correction
     """
+    # Number of iterations for the refinement
+    ref_iteration = 5
 
     # length of block
     lb = mr_x.shape[0]
@@ -524,7 +529,8 @@ def get_dl_obc(
                         mr_x_ct,
                         xr_d,
                         xr_d_ct,
-                        ag_diff)
+                        ag_diff,
+                        ref_iteration)
 
     # lesser component
     # yl_d = np.divide(ieivec @ fl[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
@@ -543,7 +549,8 @@ def get_dl_obc(
                         mr_x_ct,
                         xr_d,
                         xr_d_ct,
-                        al_diff)
+                        al_diff,
+                        ref_iteration)
 
     return dlg_d, dll_d
 

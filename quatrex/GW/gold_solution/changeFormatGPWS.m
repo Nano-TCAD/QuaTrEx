@@ -160,5 +160,5 @@ function changeFormatGPWS(path)
     formatted.imgsr = imgsr;
 
     % save to file
-    save("data_GPWS.mat", "formatted","-v7.3","-nocompression");
+    save("data_GPWS_04.mat", "formatted","-v7.3","-nocompression");
 end

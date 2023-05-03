@@ -6,7 +6,7 @@ from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_ass
 from OBC.beyn import beyn
 from OBC.sancho import open_boundary_conditions
 
-def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):
+def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):
         # rgf_GF(DH, E, EfL, EfR, Temp) This could be the function call considering Leo's code
     '''
     Working!
@@ -37,7 +37,6 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, fL, fR, Bmin_fi, Bmax
     #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
 
     IdE = np.zeros(NB)
-    DOS = np.zeros(NB)
     n = np.zeros(NB)
     p = np.zeros(NB)
     condL = 0.0
@@ -264,11 +263,13 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, fL, fR, Bmin_fi, Bmax
         GR[IB, :, :] *= factor
         GL[IB, :, :] *= factor
         GG[IB, :, :] *= factor
+        DOS[IB] = 1j * np.trace(GR[IB, :, :] - GR[IB, :, :].T.conj())
 
         if IB < NB-1:
             GRnn1[IB, :, :] *= factor
             GLnn1[IB, :, :] *= factor
             GGnn1[IB, :, :] *= factor
+    
 
 # write if name == __main__:
 if __name__ == '__main__':
