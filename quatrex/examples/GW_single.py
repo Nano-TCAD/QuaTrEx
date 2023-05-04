@@ -339,4 +339,8 @@ print("Transforming W into energy-contiguous array took: " + "%.2f" % (toc_trafo
 print("Calculating Sigma took: " + "%.2f" % (toc_sigma-tic_sigma) + " [s]" )
 print("Total Time: " + "%.2f" % (toc_sigma - tic_rgf_G) + " [s]" )
 
-np.savetxt('DOS_.dat', DOS, fmt = DH.Bmin.shape[0]*['%.6f'])
+folder = 'results/CNT_single/'
+np.savetxt( folder + 'E.dat', E)
+np.savetxt( folder + 'DOS_.dat', DOS.view(float))
+
+
