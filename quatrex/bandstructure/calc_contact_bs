@@ -1,0 +1,21 @@
+import numpy as np
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import eigsh
+
+def calc_bandstructure(S, H, SigmaR_GW, SigmaR_PHN, indE, Bmin, Bmax, side = 'left'):
+    LBsize = Bmax[0] - Bmin[0] + 1
+    
+    #SigR = SigR + np.diag(SigmaR_PHN[indE, :])
+    H = H + SigmaR_GW[indE]
+    
+    H00 = H[:LBsize, :LBsize]
+    H01 = H[:LBsize, LBsize:2*LBsize]
+    H10 = H[LBsize:2*LBsize, :LBsize]
+    
+    S00 = S[:LBsize, :LBsize]
+    S01 = S[:LBsize, LBsize:2*LBsize]
+    S10 = S[LBsize:2*LBsize, :LBsize]
+    
+    Ek = np.sort(np.real(eigsh(H00+H01+H10, k=LBsize, M=S00+S01+S10, which='LM', return_eigenvectors=False)))
+    
+    return Ek
