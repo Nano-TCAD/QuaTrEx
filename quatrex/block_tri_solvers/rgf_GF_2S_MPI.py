@@ -163,7 +163,7 @@ def step1_GF_ls(M, SigL, SigG, glR, glL, glG, Bmin, Bmax):
 def step2_GF_rs(M, SigL, SigG, grR, grL, grG, GR, GRnn1, 
                 GL, GLnn1, GG, GGnn1, Bmin, Bmax):
     """
-    Right sided step-1 of RGF method.
+    Right sided step-2 of RGF method.
     """
 
     NB = len(Bmin)
@@ -250,7 +250,7 @@ def step2_GF_rs(M, SigL, SigG, grR, grL, grG, GR, GRnn1,
 def step2_GF_ls(M, SigL, SigG, glR, glL, glG, GR, GRnn1, 
                 GL, GLnn1, GG, GGnn1, Bmin, Bmax):
     """
-    Left sided step-1 RGF method.
+    Left sided step-2 RGF method.
     """
 
     NB = len(Bmin)
@@ -343,7 +343,7 @@ def rgf_GF_2S_V0(M, SigL, SigG, Bmin, Bmax):
     
     Working!
 
-    Recursive.
+    Sequential.
     '''
 
     Bsize = max(Bmax - Bmin + 1) # Used for declaration of variables
