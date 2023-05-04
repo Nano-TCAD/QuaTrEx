@@ -18,4 +18,5 @@ def calc_bandstructure(S, H, SigmaR_GW, SigmaR_PHN, indE, Bmin, Bmax, side = 'le
     
     Ek = np.sort(np.real(eigsh(H00+H01+H10, k=LBsize, M=S00+S01+S10, which='LM', return_eigenvectors=False)))
     
+    
     return Ek
