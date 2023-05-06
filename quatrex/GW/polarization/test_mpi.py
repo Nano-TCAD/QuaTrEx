@@ -1,4 +1,3 @@
-
 """
 Implemented multi-node GPU polarization computations.
 Includes all MPI communication needed for the whole chain.
@@ -10,12 +9,10 @@ import numpy as np
 import numpy.typing as npt
 import os
 import argparse
-
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False    # do not finalize MPI automatically
 from mpi4py import MPI
 
-# ghetto solution from ghetto coder
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
@@ -40,7 +37,7 @@ if __name__ == "__main__":
     # load data on master-------------------------------------------------------
     if rank == 0:
         # read gold solution
-        solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
+        solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_04.mat")
 
         parser = argparse.ArgumentParser(
             description="Tests the mpi implementation of the polarization calculation"

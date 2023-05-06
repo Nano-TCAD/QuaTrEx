@@ -144,7 +144,8 @@ def g2p_fft_mpi_gpu(
     gl_trans: npt.NDArray[np.complex128]
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
                   npt.NDArray[np.complex128]]:
-    """Calculate the polarization with fft and mpi on the gpu(see file description). 
+    """Calculate the polarization with fft and mpi on the gpu(see file description).
+    In addition, already loads and unloads data to and from the gpu.
 
     Args:
         pre_factor            (np.complex128): pre_factor, multiplied at the end

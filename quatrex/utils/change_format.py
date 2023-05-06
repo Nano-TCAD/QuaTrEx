@@ -178,6 +178,34 @@ def sparse2vecsparse(
                                   shape=(nao, nao), dtype = np.complex128).tocsr()
     return out
 
+def sparse2vecsparse_v2(
+    inp: npt.NDArray[np.complex128],
+    rows: npt.NDArray[np.int32],
+    columns: npt.NDArray[np.int32],
+    nao: np.int64
+) -> np.ndarray:
+    """Convert from the 2D type of (ne,nnz) to a vector 
+        of spare csr matrices, where the vector has size ne.
+        v2 means that the input is transposed compared to normal.
+
+    Args:
+        inp (npt.npt.NDArray[np.complex128]): Dense 2D input of size (ne,nnz)
+        rows (npt.NDArray[np.int32]): row indexes of non zeros (nnz)
+        columns (npt.NDArray[np.int32]): column indexes of non zeros (nnz)
+        nao (np.int64): Number of atomic orbitals, size of the hamiltonian (nao,nao)
+
+    Returns:
+        np.ndarray: vector containing ne times sparse csr matrices (nao,nao)
+    """
+    # number of energy points
+    ne = inp.shape[0]
+    # output buffer
+    out = np.ndarray((ne,), dtype=object)
+    for i in range(ne):
+        out[i] = sparse.coo_array((inp[i,:], (rows, columns)),
+                                  shape=(nao, nao), dtype = np.complex128).tocsr()
+    return out
+
 def map_block2sparse(
     rows: npt.NDArray[np.int32],
     columns: npt.NDArray[np.int32],
@@ -523,7 +551,8 @@ def block2sparse_energy_alt(
     x_upper: npt.NDArray[np.complex128],
     x_lower: npt.NDArray[np.complex128],
     no: np.int64,
-    ne: np.int64
+    ne: np.int64,
+    energy_contiguous: bool = True
 ) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Alternative map created by map_block2sparse_alt
@@ -544,14 +573,24 @@ def block2sparse_energy_alt(
     assert map_diag.shape[0] == map_upper.shape[0]
     assert map_diag.shape[0] == map_lower.shape[0]
     assert map_lower[0,:].size + map_diag[0,:].size + map_upper[0,:].size == no
-    # number of blocks
-    output = np.empty((no, ne), dtype=np.complex128)
+    if energy_contiguous:
+        # number of blocks
+        output = np.empty((no, ne), dtype=np.complex128)
 
-    # diagonal elements
-    output[map_diag[3,:],:] = x_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]].transpose()
-    # off diagonal elements
-    output[map_upper[3,:],:] = x_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]].transpose()
-    output[map_lower[3,:],:] = x_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]].transpose()
+        # diagonal elements
+        output[map_diag[3,:],:] = x_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]].T
+        # off diagonal elements
+        output[map_upper[3,:],:] = x_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]].T
+        output[map_lower[3,:],:] = x_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]].T
+    else:
+        # number of blocks
+        output = np.empty((ne, no), dtype=np.complex128)
+
+        # diagonal elements
+        output[:,map_diag[3,:]] = x_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]]
+        # off diagonal elements
+        output[:,map_upper[3,:]] = x_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]]
+        output[:,map_lower[3,:]] = x_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]]
     return output
 
 def sparse2block_alt(

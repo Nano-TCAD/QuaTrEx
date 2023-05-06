@@ -24,12 +24,12 @@ if utils_gpu.gpu_avail():
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
+    solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the self-energy calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu_fft",
-                        choices=["gpu_fft", "cpu_fft"], required=False)
+    parser.add_argument("-t", "--type", default="gpu_mpi_fft",
+                        choices=["gpu_fft", "cpu_fft", "gpu_mpi_fft"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
@@ -120,7 +120,20 @@ if __name__ == "__main__":
             pre_factor, ij2ji,
             gg_gold, gl_gold, gr_gold,
             wg_gold, wl_gold, wr_gold)
-
+    elif args.type == "gpu_mpi_fft":
+        wg_trans = wg_gold[ij2ji,:]
+        wl_trans = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_gpu.gw2s_fft_mpi_gpu(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_trans,
+                                                        wl_trans
+                                                        )
     else:
         raise ValueError(
         "Argument error, type input not possible")

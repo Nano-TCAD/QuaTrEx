@@ -71,16 +71,16 @@ if __name__ == "__main__":
     nbc = 2
 
     # block sizes after matrix multiplication
-    bmax_ref = bmax[nbc-1:nb:nbc]
-    bmin_ref = bmin[0:nb:nbc]
+    bmax_mm = bmax[nbc-1:nb:nbc]
+    bmin_mm = bmin[0:nb:nbc]
     # number of blocks after matrix multiplication
-    nb_mm = bmax_ref.size
+    nb_mm = bmax_mm.size
     # larges block length after matrix multiplication
-    lb_max_mm = np.max(bmax_ref - bmin_ref + 1)
+    lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
 
     # mapping block to 2D format
     map_diag_alt, map_upper_alt, map_lower_alt = change_format.map_block2sparse_alt(rows, columns,
-                                                                                bmax_ref, bmin_ref)
+                                                                                bmax_mm, bmin_mm)
 
     # creating the smoothing and filtering factors
     dNP = 50
@@ -159,10 +159,10 @@ if __name__ == "__main__":
                                                             )
 
             # transform normal dense matrix inverse to the block format
-            xr_diag_ref,            _, _ = change_format.dense2block(xr_ref_dense, bmax_ref, bmin_ref)
-            wg_diag_ref, wg_upper_ref, _ = change_format.dense2block(wg_ref_dense, bmax_ref, bmin_ref)
-            wl_diag_ref, wl_upper_ref, _ = change_format.dense2block(wl_ref_dense, bmax_ref, bmin_ref)
-            wr_diag_ref, wr_upper_ref, _ = change_format.dense2block(wr_ref_dense, bmax_ref, bmin_ref)
+            xr_diag_ref,            _, _ = change_format.dense2block(xr_ref_dense, bmax_mm, bmin_mm)
+            wg_diag_ref, wg_upper_ref, _ = change_format.dense2block(wg_ref_dense, bmax_mm, bmin_mm)
+            wl_diag_ref, wl_upper_ref, _ = change_format.dense2block(wl_ref_dense, bmax_mm, bmin_mm)
+            wr_diag_ref, wr_upper_ref, _ = change_format.dense2block(wr_ref_dense, bmax_mm, bmin_mm)
 
 
             # transform from the block format to the 2D one

@@ -30,14 +30,14 @@ if __name__ == "__main__":
         description="Tests different implementation of the polarization calculation"
     )
     parser.add_argument("-t", "--type", default="cpu_fft",
-                        choices=["gpu_fft", "gpu_conv",
+                        choices=["gpu_fft", "gpu_conv", "gpu_mpi_fft",
                                  "cpu_fft_inlined", "cpu_fft",
                                  "cpu_conv", "cpu_conv_dace",
                                  "cpu_dense"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    if args.type in ("gpu_fft", "gpu_conv"):
+    if args.type in ("gpu_fft", "gpu_conv", "gpu_mpi_fft"):
         if not utils_gpu.gpu_avail():
             print("No gpu available")
             sys.exit(1)
@@ -184,7 +184,6 @@ if __name__ == "__main__":
 
 
         elif args.type == "gpu_fft":
-
             # load data to gpu
             ij2ji_gpu:   cp.ndarray = cp.asarray(ij2ji)
             gg_gold_gpu: cp.ndarray = cp.asarray(gg_gold)
@@ -198,6 +197,12 @@ if __name__ == "__main__":
             pg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pg_gpu)
             pl_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pl_gpu)
             pr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pr_gpu)
+
+        elif args.type == "gpu_mpi_fft":
+            gl_gold_t = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_t)
+
         elif args.type == "gpu_conv":
             # load data to gpu
             ij2ji_gpu:      cp.ndarray = cp.asarray(ij2ji)
