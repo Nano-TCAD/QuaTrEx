@@ -33,6 +33,7 @@ if __name__ == "__main__":
                         choices=["gpu_fft", "gpu_conv", "gpu_fft_mpi",
                                  "gpu_fft_mpi_streams",
                                  "cpu_fft_inlined", "cpu_fft",
+                                 "cpu_fft_mpi", "cpu_fft_mpi_inlined",
                                  "cpu_conv", "cpu_conv_dace",
                                  "cpu_dense"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
@@ -153,11 +154,23 @@ if __name__ == "__main__":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+            
+        elif args.type == "cpu_fft_mpi":
+
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+
         elif args.type == "cpu_fft_inlined":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+        elif args.type == "cpu_fft_mpi_inlined":
 
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+    
         elif args.type == "cpu_conv":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(
@@ -200,14 +213,14 @@ if __name__ == "__main__":
             pr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pr_gpu)
 
         elif args.type == "gpu_fft_mpi":
-            gl_gold_t = gl_gold[ij2ji,:]
+            gl_gold_transposed = gl_gold[ij2ji,:]
             pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_t)
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
 
         elif args.type == "gpu_fft_mpi_streams":
-            gl_gold_t = gl_gold[ij2ji,:]
+            gl_gold_transposed = gl_gold[ij2ji,:]
             pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu_streams(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_t)
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
 
         elif args.type == "gpu_conv":
             # load data to gpu

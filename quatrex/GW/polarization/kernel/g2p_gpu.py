@@ -188,7 +188,6 @@ def g2p_fft_mpi_gpu(
     pr_gpu = cp.multiply(cp.fft.ifft(pr_t_gpu, axis=1)[:, :ne], pre_factor)
     pg_gpu = cp.multiply(cp.fft.ifft(pg_t_gpu, axis=1), pre_factor)
 
-    # lesser polarization from identity
     pl_gpu = -cp.conjugate(cp.roll(cp.flip(pg_gpu, axis=1), 1, axis=1))
 
     # cutoff
