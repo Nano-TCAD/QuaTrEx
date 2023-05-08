@@ -11,15 +11,15 @@ import argparse
 
 # ghetto solution from ghetto coder
 main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 
 if __name__ == "__main__":
-    pin_path = os.path.abspath(os.path.join(main_path, "..", "attelas.run"))
-    script_path = os.path.abspath(os.path.join(main_path, "..", "test_mpi.py"))
+    script_path = os.path.abspath(os.path.join(parent_path, "GW", "polarization", "test_mpi.py"))
     # parse the possible arguments
     parser = argparse.ArgumentParser(
         description="Benchmark the MPI version of the code"
     )
-    parser.add_argument("-pp", "--pin_path", default=pin_path, required=False)
+    parser.add_argument("-pp", "--pin_path", required=True)
     parser.add_argument("-sp", "--script_path", default=script_path, required=False)
     parser.add_argument("-r", "--ranks", default=4, required=False, type=int)
 
@@ -51,5 +51,6 @@ if __name__ == "__main__":
     output[0,:] = ranks
     output[1:num_run+1,:] = times
     output[num_run+1:2*num_run + 1,:] = speed_ups
+    print(times)
     save_path = os.path.join(main_path, "strong_mpi.npy")
     np.save(save_path, output)

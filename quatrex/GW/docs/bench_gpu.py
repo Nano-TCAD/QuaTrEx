@@ -26,7 +26,8 @@ if __name__ == "__main__":
     # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
     nnz = 2500
     parser.add_argument("-t", "--type", default="gpu_fft",
-                    choices=["gpu_fft", "gpu_conv"], required=False)
+                    choices=["gpu_fft", "gpu_conv",
+                             "gpu_mpi_fft", "gpu_mpi_fft_streams"], required=False)
     parser.add_argument("-d", "--dimension", default="nnz",
                     choices=["energy", "nnz"], required=False)
     parser.add_argument("-r", "--runs", default=20, required=False, type=int)
@@ -90,11 +91,13 @@ if __name__ == "__main__":
         prefactor:  np.double               = -1.0j * denergy / (np.pi)
 
         data_1ne_1 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         data_1ne_2 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         data_1ne_3 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_4 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         size_sparse = data_1ne_1.nbytes / (1024**3)
 
 
@@ -112,10 +115,14 @@ if __name__ == "__main__":
         data_1ne_3_gpu = cp.asarray(data_1ne_3)
 
         if args.type == "gpu_fft":
-
-            result = benchmark(g2p_gpu.g2p_fft_gpu, (denergy, ij2ji_gpu,
+            result = benchmark(g2p_gpu.g2p_fft_gpu, (prefactor, ij2ji_gpu,
                 data_1ne_1_gpu, data_1ne_2_gpu, data_1ne_3_gpu), n_repeat=num_run, n_warmup=num_warm)
-
+        elif args.type ==  "gpu_mpi_fft":
+            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu, (prefactor, data_1ne_1,
+                data_1ne_2, data_1ne_3, data_1ne_4), n_repeat=num_run, n_warmup=num_warm)
+        elif args.type ==  "gpu_mpi_fft_streams":
+            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu_streams, (prefactor, data_1ne_1,
+                data_1ne_2, data_1ne_3, data_1ne_4), n_repeat=num_run, n_warmup=num_warm)
         elif args.type == "gpu_conv":
             # output buffers
             pg_gpu:         cp.ndarray = cp.empty_like(data_1ne_1_gpu, dtype=cp.complex128, order="C")

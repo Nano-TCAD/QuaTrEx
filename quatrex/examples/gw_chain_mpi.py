@@ -234,24 +234,56 @@ if __name__ == "__main__":
     # captures all variables from the outside (comm/count/disp/rank/size/types)
 
     def scatter_master(inp: npt.NDArray[np.complex128],
-                       outp: npt.NDArray[np.complex128]):
-        comm.Scatterv([inp, count[1, :], disp[1, :], COLUMN_RIZ], outp, root=0)
+                       outp: npt.NDArray[np.complex128],
+                       transpose_net: bool = False):
+        if transpose_net:
+            comm.Scatterv([inp, count[1, :], disp[1, :], COLUMN_RIZ], outp, root=0)
+        else:
+            if rank == 0:
+                inp_trans = np.copy(inp.T, order="C")
+            else:
+                inp_trans = None
+            comm.Scatterv([inp_trans, count[1, :]*data_shape[0], disp[1, :]*data_shape[0], BASE_TYPE], outp, root=0)
 
     def gather_master(inp: npt.NDArray[np.complex128],
-                      outp: npt.NDArray[np.complex128]):
-        comm.Gatherv(inp, [outp, count[1, :], disp[1, :], COLUMN_RIZ], root=0)
-
+                      outp: npt.NDArray[np.complex128],
+                      transpose_net: bool = False):
+        if transpose_net:
+            comm.Gatherv(inp, [outp, count[1, :], disp[1, :], COLUMN_RIZ], root=0)
+        else:
+            if rank == 0:
+                out_trans = np.copy(outp.T, order="C")
+            else:
+                out_trans = None
+            comm.Gatherv(inp, [out_trans, count[1, :]*data_shape[0], disp[1, :]*data_shape[0], BASE_TYPE], root=0)
+            if rank == 0:
+                outp[:,:] = out_trans.T
+    
     def alltoall_g2p(inp: npt.NDArray[np.complex128],
-                     outp: npt.NDArray[np.complex128]):
-        comm.Alltoallw(
-        [inp, count[0, :], disp[0, :]*base_size, np.repeat(G2P_S_RIZ, size)],
-        [outp, np.repeat([1], size), disp[1, :]*base_size, G2P_R_RIZ])
+                     outp: npt.NDArray[np.complex128],
+                     transpose_net: bool = False):
+        if transpose_net:
+            comm.Alltoallw(
+            [inp, count[0, :], disp[0, :]*base_size, np.repeat(G2P_S_RIZ, size)],
+            [outp, np.repeat([1], size), disp[1, :]*base_size, G2P_R_RIZ])
+        else:
+            inp_trans = np.copy(inp.T, order="C")
+            comm.Alltoallw(
+            [inp_trans, count[0,:]*count[1, rank], disp[0, :]*count[1, rank]*base_size, np.repeat(BASE_TYPE, size)],
+            [outp, np.repeat([1], size), disp[1, :]*base_size, G2P_R_RIZ])
 
     def alltoall_p2g(inp: npt.NDArray[np.complex128],
-                     outp: npt.NDArray[np.complex128]):
-        comm.Alltoallw(
-        [inp, count[1, :], disp[1, :]*base_size, np.repeat(P2G_S_RIZ, size)],
-        [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
+                     outp: npt.NDArray[np.complex128],
+                     transpose_net: bool = False):
+        if transpose_net:
+            comm.Alltoallw(
+            [inp, count[1, :], disp[1, :]*base_size, np.repeat(P2G_S_RIZ, size)],
+            [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
+        else:
+            inp_trans = np.copy(inp.T, order="C")
+            comm.Alltoallw(
+            [inp_trans, count[1,:]*count[0, rank], disp[1, :]*count[0, rank]*base_size, np.repeat(BASE_TYPE, size)],
+            [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
 
 
     # initialize observables----------------------------------------------------

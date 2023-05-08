@@ -3,18 +3,24 @@
 Implements the calculation of the polarization function from the green's function. 
 The polarization function is calculated in the following way:
 
+
 $$P^{\lessgtr}_{ij}\left(E^{\prime}\right) = -i\frac{dE}{2 \pi} \sum \limits_{E} G^{\lessgtr}_{ij}\left(E\right) G^{\gtrless}_{ji}\left(E-E^{\prime}\right)$$
 
 
 $$P^{r}_{ij}\left(E^{\prime}\right) = -i\frac{dE}{2 \pi} \sum \limits_{E} G^{<}_{ij}\left(E\right) G^{a}_{ji}\left(E-E^{\prime}\right)+ G^{r}_{ij}\left(E\right) G^{<}_{ji}\left(E-E^{\prime}\right)$$
 
-with
+
+with the following identities:
+
 
 $$P^{>}_{ij}\left(E\right) = -P^{<}_{ij}\left(-E\right)^{*}$$
 
+
 $$P^{>}_{ij}\left(E\right) - P^{>}_{ij}\left(E\right) = P^{r}_{ij}\left(E\right) - P^{a}_{ij}\left(E\right)$$
 
+
 $$P^{a}_{ij}\left(E\right) = P^{r}_{ji}\left(-E\right)^{*}$$
+
 
 ## Packages Required
 The following packages are required:
