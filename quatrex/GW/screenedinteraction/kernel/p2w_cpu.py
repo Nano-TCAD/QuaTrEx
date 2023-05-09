@@ -134,33 +134,33 @@ def p2w_mpi_cpu(
     # not used inside rgf_W
     index_e = np.arange(ne)
 
-    # create buffer for every energy point
-    wg_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    wg_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    wl_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    wl_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    wr_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    wr_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    xr_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    
+    # # create buffer for every energy point
+    # wg_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # wg_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # wl_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # wl_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # wr_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # wr_upper_buf = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    # xr_diag_buf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
+    print("We are looping over energy points")
     for ie in range(ne):
         rgf_W.rgf_W(
                 vh,
                 pg[ie], pl[ie], pr[ie],
                 bmax, bmin,
-                wg_diag_buf, wg_upper_buf,
-                wl_diag_buf, wl_upper_buf,
-                wr_diag_buf, wr_upper_buf,
-                xr_diag_buf, nbc,
+                wg_diag[ie], wg_upper[ie],
+                wl_diag[ie], wl_upper[ie],
+                wr_diag[ie], wr_upper[ie],
+                xr_diag[ie], nbc,
                 index_e[ie], factor[ie]
         )
-        # copy buffer to output
-        wg_diag[ie,:,:] = wg_diag_buf
-        wg_upper[ie,:,:] = wg_upper_buf
-        wl_diag[ie,:,:] = wl_diag_buf
-        wl_upper[ie,:,:] = wl_upper_buf
-        wr_diag[ie,:,:] = wr_diag_buf
-        wr_upper[ie,:,:] = wr_upper_buf
-        xr_diag[ie,:,:] = xr_diag_buf
+        # # copy buffer to output
+        # wg_diag[ie,:,:] = wg_diag_buf
+        # wg_upper[ie,:,:] = wg_upper_buf
+        # wl_diag[ie,:,:] = wl_diag_buf
+        # wl_upper[ie,:,:] = wl_upper_buf
+        # wr_diag[ie,:,:] = wr_diag_buf
+        # wr_upper[ie,:,:] = wr_upper_buf
+        # xr_diag[ie,:,:] = xr_diag_buf
 
     return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm

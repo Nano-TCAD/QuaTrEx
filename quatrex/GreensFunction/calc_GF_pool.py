@@ -47,9 +47,6 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, mkl_threads = 1, 
 
     mkl.set_num_threads(mkl_threads)
 
-    print("MKL_THREADS: ", mkl_threads)
-    print("NUM_WORKERS: ", worker_num)
-
     rgf_M = generator_rgf_Hamiltonian(E, DH, SigR)
 
     M_par = np.ndarray(shape = (E.shape[0],),dtype = object)
