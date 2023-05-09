@@ -56,7 +56,7 @@ if __name__ == "__main__":
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
-    parser.add_argument("-p", "--pool", default=False,
+    parser.add_argument("-p", "--pool", default=True,
                 type=bool, required=False)
     args = parser.parse_args()
     # check if gpu is available
