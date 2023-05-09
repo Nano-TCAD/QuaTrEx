@@ -1,6 +1,6 @@
 ## Authors
 - Dr. Alexandros Nikolaos Ziogas, Postdoctoral Researcher at ETH Zurich
-- Leonard Deutschle, PHD student in Electrical Engineering and Information Technology at ETH Zurich
+- Leonard Deuschle, PHD student in Electrical Engineering and Information Technology at ETH Zurich
 - Ouyang Runsheng, Master's Student in Quantum Engineering at ETH Zurich
 - Alexander Maeder, Master's Student in Electrical Engineering and Information Technology at ETH Zurich
 

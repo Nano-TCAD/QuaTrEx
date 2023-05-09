@@ -127,3 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+quatrex/results/CNT_single/DOS_.dat
+quatrex/results/CNT_single/E.dat
+quatrex/bandstructure/calc_contact_bs
+quatrex/results/CNT_single/DOS.gif

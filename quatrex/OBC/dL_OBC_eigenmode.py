@@ -452,7 +452,8 @@ def get_dl_obc(
 
     # non zero indexes of mr_x
     rows, cols = mr_x.nonzero()
-
+    if(not rows.size):
+        return np.nan, np.nan
     # conjugate transpose of mr/xr
     mr_x_ct = mr_x.conjugate().transpose()
     xr_d_ct = xr_d.conjugate().transpose()

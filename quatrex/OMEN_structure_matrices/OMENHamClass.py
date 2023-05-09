@@ -34,6 +34,8 @@ class Hamiltonian:
     # Class variables
     LM = None
     LM_map = None
+    rows = None
+    columns = None
     Smin = None
     
     Bmin = None
@@ -43,57 +45,59 @@ class Hamiltonian:
     NBlock = None
     orb_per_at = None
     
-    NH = {}
+    NH = None
     NA = None
     NB = None
     TB = None
     
     
-    def __init__(self,sim_folder, no_orb):
-        self.no_orb = no_orb
-        self.sim_folder = sim_folder
-        self.blocks = glob.glob(self.sim_folder + '/H*.bin')
-        self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
-        
-        
-        self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
-        
-        
-        #self.Hamiltonian = []
-        #for p in self.blocks:
-        #   self.Hamiltonian.append(read_sparse_matrix(p))
-            
-        self.Hamiltonian = {}
-        self.Overlap = {}
-        
-        #If orthogonal basis set, define S as diagonal.
-        if not self.Sblocks:
-            for ii in range(0,len(self.blocks)):
-                self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix(self.blocks[ii]) 
-                self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
-                self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
-        #Otherwise read from file        
-        else:        
-            for ii in range(0,len(self.blocks)):
-                self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix(self.blocks[ii]) 
-                self.Overlap[self.keys[ii]] = self.read_sparse_matrix(self.Sblocks[ii])
+    def __init__(self,sim_folder, no_orb, rank = 0):
+        if(not rank):
+            self.no_orb = no_orb
+            self.sim_folder = sim_folder
+            self.blocks = glob.glob(self.sim_folder + '/H*.bin')
+            self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
             
             
-            if np.abs(self.Overlap[self.keys[ii]][0,0] + 1) < 1e-6:
-                self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
+            self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
             
-        #Check that hamiltonian is hermitean
-        self.hermitean = self.check_hermitivity(tol = 1e-6)
-        
-        #Read Block Properties
-        self.LM = read_file_to_float_ndarray(sim_folder + '/Layer_Matrix.dat')
-        self.NA = self.LM.shape[0]
-        self.NB = self.LM.shape[1] - 4 
-        self.TB  = np.max(self.no_orb)
-        self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
-        self.Smin = self.Smin.reshape((self.Smin.shape[0],)).astype(np.int)
-        self.prepare_block_properties()
-        self.map_neighbor_indices()
+            
+            #self.Hamiltonian = []
+            #for p in self.blocks:
+            #   self.Hamiltonian.append(read_sparse_matrix(p))
+                
+            self.Hamiltonian = {}
+            self.Overlap = {}
+            
+            #If orthogonal basis set, define S as diagonal.
+            if not self.Sblocks:
+                for ii in range(0,len(self.blocks)):
+                    self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix(self.blocks[ii]) 
+                    self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
+            #Otherwise read from file        
+            else:        
+                for ii in range(0,len(self.blocks)):
+                    self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix(self.blocks[ii]) 
+                    self.Overlap[self.keys[ii]] = self.read_sparse_matrix(self.Sblocks[ii])
+                
+                
+                if np.abs(self.Overlap[self.keys[ii]][0,0] + 1) < 1e-6:
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
+                
+            #Check that hamiltonian is hermitean
+            self.hermitean = self.check_hermitivity(tol = 1e-6)
+            
+            #Read Block Properties
+            self.LM = read_file_to_float_ndarray(sim_folder + '/Layer_Matrix.dat')
+            self.NA = self.LM.shape[0]
+            self.NB = self.LM.shape[1] - 4 
+            self.TB  = np.max(self.no_orb)
+            self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
+            self.Smin = self.Smin.reshape((self.Smin.shape[0],)).astype(np.int)
+            self.prepare_block_properties()
+            self.map_neighbor_indices()
+            self.map_sparse_indices()
 
     #Helper function to initialise all hamiltonians
     def read_sparse_matrix(self,fname = './H_4.bin'):
@@ -281,3 +285,49 @@ class Hamiltonian:
   
     
 
+    def map_sparse_indices(self,):
+        """
+        This functions generates the content of the rows and cols field.
+        The meaning of rows and cols are the non-zero indices of the sparse system matrices,
+        they are derived from the neighbor information in the layer matrix.
+        Using these indices, the transformation between sparse, block and energy contigous formats can be done.
+        """
+        self.NH = self.Bmax[-1]
+        indI = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype = np.int)
+        indJ = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype = np.int)
+        ind = 0
+
+        indA = 0
+
+        for IA in range(self.NA):
+            indR = self.orb_per_at[IA] - 1
+            orbA = self.orb_per_at[IA+1] - self.orb_per_at[IA]
+
+            for IB in range(self.NB + 1):
+                add_element = 1
+
+                if IB == 0:
+                    indC = indR
+                    orbB = orbA
+                else:
+                    if self.LM[IA, 4+IB-1] > 0:
+                        neigh = int(self.LM[IA, 4+IB-1])
+                        indC = self.orb_per_at[neigh-1] - 1
+                        orbB = self.orb_per_at[neigh] - self.orb_per_at[neigh-1]
+                    else:
+                        add_element = 0
+
+                if add_element:
+                    indI[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.arange(indR,indR+orbA),  np.ones((1, orbB))), (1, orbA*orbB)))
+                    indJ[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.ones((orbA,1)),np.arange(indC,indC+orbB)), (1, orbA*orbB)))
+                    
+                    ind += orbA*orbB
+            indI[indA:ind] = np.sort(indI[indA:ind])
+            indJ[indA:ind] = np.sort(indJ[indA:ind])
+            indA = ind
+        self.columns = indI[:ind]
+        self.rows = indJ[:ind]
+    
+
+
+        

@@ -8,6 +8,30 @@ import typing
 import numba
 from numpy import fft
 
+@numba.njit("(c16[:,:],)",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def reversal(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+    """Reverses data in time
+        Single core alternative (Can not be compiled with numba):
+        out = np.roll(np.flip(g1, axis=1), 1, axis=1)
+
+    Args:
+        g1 (npt.NDArray[np.complex128]): 2D array: orbital * energy
+
+    Returns:
+        npt.NDArray[np.complex128]: np.roll(
+            np.flip(g1, axis=1), 1, axis=1)[ij2ji, :]
+    """
+    out: npt.NDArray[np.complex128] = np.empty_like(g1)
+    no:  np.int32                   = np.shape(g1)[0]
+    ne:  np.int32                   = np.shape(g1)[1]
+    for i in numba.prange(no):
+        for j in range(ne):
+            out[i, j] = g1[i, -j]
+    return out
 
 @numba.njit("(c16[:,:], i4[:])",
             parallel=True,
@@ -116,7 +140,7 @@ def fft_numba(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> np
             cache=True,
             nogil=True,
             error_model="numpy")
-def scalarmul_ifft(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.int64, no: np.int64) -> npt.NDArray[np.complex128]:
+def scalarmul_ifft_cutoff(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.int64, no: np.int64) -> npt.NDArray[np.complex128]:
     """IFFT, crops, and multiplies elementwise g1 with fac
         Needs RocketFFT! https://github.com/styfenschaer/rocket-fft
         Numba scalarmul and fft separately takes more or less the same time
@@ -137,6 +161,35 @@ def scalarmul_ifft(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.in
         out[i,:] = fft.ifft(g1[i,:])[:ne]
     for i in numba.prange(no):
         for j in numba.prange(ne):
+            out[i, j] = out[i, j] * fac
+    return out
+
+@numba.njit("(c16[:,:], c16, i8, i8)",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def scalarmul_ifft(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.int64, no: np.int64) -> npt.NDArray[np.complex128]:
+    """IFFT, crops, and multiplies elementwise g1 with fac
+        Needs RocketFFT! https://github.com/styfenschaer/rocket-fft
+        Numba scalarmul and fft separately takes more or less the same time
+        Alternative multicore:
+        g1 = fft.ifft(g1, axis=1, workers=workers)
+        out = np.multiply(g1, fac)
+    Args:
+        g1 (npt.NDArray[np.complex128]): 2D matrix
+        fac (np.complex128): complex double
+        ne (np.int32): #energy points
+        workers(np.int32): #workers for ifft
+
+    Returns:
+        npt.NDArray[np.complex128]: fac*ifft(g1)[:,:ne]
+    """
+    out = np.empty((no,2*ne), dtype=np.complex128)
+    for i in numba.prange(no):
+        out[i,:] = fft.ifft(g1[i,:])
+    for i in numba.prange(no):
+        for j in numba.prange(2*ne):
             out[i, j] = out[i, j] * fac
     return out
 

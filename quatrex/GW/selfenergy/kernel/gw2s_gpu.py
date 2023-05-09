@@ -3,6 +3,7 @@ Functions to calculate the self-energies on the gpu.
 See README for more information.
 """
 import numpy as np
+import numpy.typing as npt
 import typing
 import cupy as cp
 import sys
@@ -144,5 +145,112 @@ def gw2s_fft_gpu(
     sg = cp.multiply(sg_1 + sg_2, pre_factor)
     sl = cp.multiply(sl_1 + sl_2, pre_factor)
     sr = cp.multiply(sr_1 + sr_2, pre_factor)
+
+    return (sg, sl, sr)
+
+
+def gw2s_fft_mpi_gpu(
+    pre_factor: np.complex128,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128],
+    wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128],
+    wg_transposed: npt.NDArray[np.complex128],
+    wl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
+                  npt.NDArray[np.complex128]]:
+    """Calculate the self energy with fft on the gpu(see file description todo). 
+        The inputs are the pre factor, the Green's Functions
+        and the screened interactions.
+        Takes into account the energy grid cutoff.
+        In addition, loads/unloads the data to/from the gpu.
+
+    Args:
+        pre_factor                   (np.complex128): pre_factor, multiplied at the end
+        gg              (npt.NDArray[np.complex128]): Greater Green's Function,                 (#orbital, #energy)
+        gl              (npt.NDArray[np.complex128]): Lesser Green's Function,                  (#orbital, #energy)
+        gr              (npt.NDArray[np.complex128]): Retarded Green's Function,                (#orbital, #energy)
+        wg              (npt.NDArray[np.complex128]): Greater screened interaction,             (#orbital, #energy)
+        wl              (npt.NDArray[np.complex128]): Lesser screened interaction,              (#orbital, #energy)
+        wr              (npt.NDArray[np.complex128]): Retarded screened interaction,            (#orbital, #energy)
+        wg_transposed   (npt.NDArray[np.complex128]): Greater screened interaction transposed,  (#orbital, #energy)
+        wl_transposed   (npt.NDArray[np.complex128]): Lesser screened interaction transposed,   (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater self energy  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser self energy   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded self energy (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    ne: int = gg.shape[1]
+
+    # load data to gpu----------------------------------------------------------
+    gg_gpu       = cp.asarray(gg)
+    gl_gpu       = cp.asarray(gl)
+    gr_gpu       = cp.asarray(gr)
+    wg_gpu       = cp.asarray(wg)
+    wl_gpu       = cp.asarray(wl)
+    wr_gpu       = cp.asarray(wr)
+    wg_transposed_gpu = cp.asarray(wg_transposed)
+    wl_transposed_gpu = cp.asarray(wl_transposed)
+    # compute sg/sl/sr----------------------------------------------------------
+
+    # number of energy points
+    ne = gg.shape[1]
+
+    # todo possibility to avoid fft in global chain
+    # fft
+    gg_t        = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+    gl_t        = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+    gr_t        = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
+    wg_t        = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
+    wl_t        = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
+    wr_t        = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
+    wg_transposed_t  = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
+    wl_transposed_t  = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
+
+    # fft of energy reversed
+    rgg_t = cp.fft.fft(cp.flip(gg_gpu, axis=1), n=2 * ne, axis=1)
+    rgl_t = cp.fft.fft(cp.flip(gl_gpu, axis=1), n=2 * ne, axis=1)
+    rgr_t = cp.fft.fft(cp.flip(gr_gpu, axis=1), n=2 * ne, axis=1)
+
+    # multiply elementwise for sigma_1 the normal term
+    sg_t_1 = cp.multiply(gg_t, wg_t)
+    sl_t_1 = cp.multiply(gl_t, wl_t)
+    sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+
+    # time reverse
+    wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
+
+    # multiply elementwise the energy reversed with difference of transposed and energy zero
+    # see the document "derivation_selfenergy.pdf" for an explanation
+    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+    sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
+              cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
+
+
+    # ifft, cutoff and multiply with pre factor
+    sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
+    sl_1 = cp.fft.ifft(sl_t_1, axis=1)[:, :ne]
+    sr_1 = cp.fft.ifft(sr_t_1, axis=1)[:, :ne]
+
+    sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
+    sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
+    sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
+
+
+    sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
+    sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
+    sr_gpu = cp.multiply(sr_1 + sr_2, pre_factor)
+
+    # load data to cpu----------------------------------------------------------
+
+    sg = cp.asnumpy(sg_gpu)
+    sl = cp.asnumpy(sl_gpu)
+    sr = cp.asnumpy(sr_gpu)
 
     return (sg, sl, sr)

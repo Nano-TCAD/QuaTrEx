@@ -10,7 +10,7 @@ if __name__ == "__main__":
         description="Strong scaling benchmarks"
     )
     parser.add_argument("-t", "--type", default="gpu_fft",
-                    choices=["gpu_fft", "gpu_conv"], required=False)
+                    choices=["gpu_fft", "gpu_conv", "gpu_mpi_fft"], required=False)
     parser.add_argument("-d", "--dimension", default="nnz",
                     choices=["energy", "nnz"], required=False)
 

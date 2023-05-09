@@ -3,10 +3,8 @@
 The polarization is calculated in the following way on a discrete energy grid:
 
 $$P^{\lessgtr}_{ij}\left(E^{\prime}\right) = -2i\frac{dE}{2 \pi} \sum \limits_{E} G^{\lessgtr}_{ij}\left(E\right) G^{\gtrless}_{ji}\left(E-E^{\prime}\right)$$
-$$P^{r}_{ij}\left(E^{\prime}\right) = 
--2i\frac{dE}{2 \pi} \sum \limits_{E} G^{<}_{ij}\left(E\right) 
-G^{a}_{ji}\left(E-E^{\prime}\right)+
-G^{r}_{ij}\left(E\right) G^{<}_{ji}\left(E-E^{\prime}\right)$$
+
+$$P^{r}_{ij}\left(E^{\prime}\right) = -2i\frac{dE}{2 \pi} \sum \limits_{E} G^{<}_{ij}\left(E\right)G^{a}_{ji}\left(E-E^{\prime}\right)+G^{r}_{ij}\left(E\right) G^{<}_{ji}\left(E-E^{\prime}\right)$$
 
 There are two main ways to evaluate the above sums:
 Either directly evaluating the sum or FFT transforming with the convolution/correlation theorem.

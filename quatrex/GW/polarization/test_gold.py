@@ -25,19 +25,21 @@ if utils_gpu.gpu_avail():
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
+    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_04.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the polarization calculation"
     )
     parser.add_argument("-t", "--type", default="cpu_fft",
-                        choices=["gpu_fft", "gpu_conv",
+                        choices=["gpu_fft", "gpu_conv", "gpu_fft_mpi",
+                                 "gpu_fft_mpi_streams",
                                  "cpu_fft_inlined", "cpu_fft",
+                                 "cpu_fft_mpi", "cpu_fft_mpi_inlined",
                                  "cpu_conv", "cpu_conv_dace",
                                  "cpu_dense"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    if args.type in ("gpu_fft", "gpu_conv"):
+    if args.type in ("gpu_fft", "gpu_conv", "gpu_fft_mpi", "gpu_fft_mpi_streams"):
         if not utils_gpu.gpu_avail():
             print("No gpu available")
             sys.exit(1)
@@ -152,11 +154,23 @@ if __name__ == "__main__":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+            
+        elif args.type == "cpu_fft_mpi":
+
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+
         elif args.type == "cpu_fft_inlined":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(
                 pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+        elif args.type == "cpu_fft_mpi_inlined":
 
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+    
         elif args.type == "cpu_conv":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(
@@ -184,7 +198,6 @@ if __name__ == "__main__":
 
 
         elif args.type == "gpu_fft":
-
             # load data to gpu
             ij2ji_gpu:   cp.ndarray = cp.asarray(ij2ji)
             gg_gold_gpu: cp.ndarray = cp.asarray(gg_gold)
@@ -198,6 +211,17 @@ if __name__ == "__main__":
             pg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pg_gpu)
             pl_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pl_gpu)
             pr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pr_gpu)
+
+        elif args.type == "gpu_fft_mpi":
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+
+        elif args.type == "gpu_fft_mpi_streams":
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu_streams(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+
         elif args.type == "gpu_conv":
             # load data to gpu
             ij2ji_gpu:      cp.ndarray = cp.asarray(ij2ji)

@@ -285,6 +285,8 @@ def rgf_W(
         if not np.isnan(dll_sd).any():
             lg[slb_sd_mm,slb_sd_mm] = lg[slb_sd_mm,slb_sd_mm] + dlg_sd
             ll[slb_sd_mm,slb_sd_mm] = ll[slb_sd_mm,slb_sd_mm] + dll_sd
+        else:
+            cond_l = np.nan
 
 
     # correction for last block
@@ -320,6 +322,8 @@ def rgf_W(
         if not np.isnan(dll_ed).any():
             lg[slb_ed_mm,slb_ed_mm] = lg[slb_ed_mm,slb_ed_mm]    + dlg_ed
             ll[slb_ed_mm,slb_ed_mm] = ll[slb_ed_mm,slb_ed_mm]    + dll_ed
+        else:
+            cond_r = np.nan
 
     min_dEk = np.min((min_dEkL, min_dEkR))
 

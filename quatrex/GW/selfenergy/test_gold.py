@@ -6,7 +6,6 @@ import argparse
 import numba
 import numpy as np
 import numpy.typing as npt
-import cupy as cp
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
@@ -24,16 +23,16 @@ if utils_gpu.gpu_avail():
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_old.mat")
+    solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the self-energy calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu_fft",
-                        choices=["gpu_fft", "cpu_fft"], required=False)
+    parser.add_argument("-t", "--type", default="gpu_mpi_fft",
+                        choices=["gpu_fft", "cpu_fft", "cpu_fft_mpi", "gpu_fft_mpi"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    if args.type in ("gpu_fft"):
+    if args.type in ("gpu_fft", "gpu_fft_mpi"):
         if not utils_gpu.gpu_avail():
             print("No gpu available")
             sys.exit(1)
@@ -120,7 +119,34 @@ if __name__ == "__main__":
             pre_factor, ij2ji,
             gg_gold, gl_gold, gr_gold,
             wg_gold, wl_gold, wr_gold)
-
+    elif args.type == "gpu_fft_mpi":
+        wg_trans = wg_gold[ij2ji,:]
+        wl_trans = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_gpu.gw2s_fft_mpi_gpu(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_trans,
+                                                        wl_trans
+                                                        )
+    elif args.type == "cpu_fft_mpi":
+        wg_trans = wg_gold[ij2ji,:]
+        wl_trans = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_trans,
+                                                        wl_trans
+                                                        )
     else:
         raise ValueError(
         "Argument error, type input not possible")
