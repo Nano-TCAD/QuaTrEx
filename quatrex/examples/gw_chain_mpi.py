@@ -8,6 +8,7 @@ import numpy as np
 import numpy.typing as npt
 import os
 import argparse
+import pickle
 import mpi4py
 from scipy import sparse
 import time
@@ -122,7 +123,12 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
     # create hamiltonian object
-    hamiltionian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb)
+    hamiltionian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank)
+    serial_ham = pickle.dumps(hamiltionian_obj)
+    broadcasted_ham = comm.bcast(serial_ham, root=0)
+    hamiltionian_obj = pickle.loads(broadcasted_ham)
+    rows = hamiltionian_obj.rows
+    columns = hamiltionian_obj.columns
     # Fermi Level of Left Contact
     energy_fl = -3.85
     # Fermi Level of Right Contact
@@ -339,7 +345,8 @@ if __name__ == "__main__":
     times_compute[0] = -time.perf_counter()
 
     # calculate the green's function at every rank------------------------------
-    gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
+    if args.pool:
+        gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
                                                             hamiltionian_obj,
                                                             energy_loc,
                                                             sr_h2g_vec,
@@ -352,6 +359,21 @@ if __name__ == "__main__":
                                                             factor_g_loc,
                                                             gf_mkl_threads,
                                                             gf_worker_threads
+                                                        )
+    else:
+        gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_mpi(
+                                                            hamiltionian_obj,   
+                                                            energy_loc,
+                                                            sr_h2g_vec,
+                                                            sl_h2g_vec,
+                                                            sg_h2g_vec,
+                                                            energy_fl,
+                                                            energy_fr,
+                                                            temp,
+                                                            dos,
+                                                            factor_g_loc,
+                                                            gf_mkl_threads,
+                                                            1
                                                         )
     # timing compute
     times_compute[0] += time.perf_counter()

@@ -110,15 +110,7 @@ def calc_GF_pool_mpi(
 
     mkl.set_num_threads(mkl_threads)
 
-    print("MKL_THREADS: ", mkl_threads)
-    print("NUM_WORKERS: ", worker_num)
-
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
-
-    M_par = np.ndarray(shape = (energy.shape[0],),dtype = object)
-
-    for ie in range(ne):
-        M_par[ie] = (energy[ie] + 1j*1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[ie]
     
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
@@ -136,6 +128,59 @@ def calc_GF_pool_mpi(
     
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 
+
+def calc_GF_mpi(
+        DH,
+        energy: npt.NDArray[np.float64],
+        SigR,
+        SigL,
+        SigG,
+        Efl,
+        Efr,
+        Temp,
+        DOS,
+        factor: npt.NDArray[np.float64],
+        mkl_threads: int = 1,
+        worker_num: int = 1
+):
+
+    kB = 1.38e-23
+    q = 1.6022e-19
+    
+    UT = kB * Temp / q
+    
+    vfermi = np.vectorize(fermi_function)
+    fL = vfermi(energy, Efl, UT)
+    fR = vfermi(energy, Efr, UT)
+
+    # initialize the Green's function in block format with zero
+    # number of energy points
+    ne = energy.shape[0]
+    # number of blocks
+    nb = DH.Bmin.shape[0]
+    # length of the largest block
+    lb = np.max(DH.Bmax - DH.Bmin + 1)
+    # init
+    (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(ne, nb, lb)
+
+    mkl.set_num_threads(mkl_threads)
+
+    rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
+    
+    index_e = np.arange(ne)
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
+
+    # Create a process pool with 4 workers
+    for ie in range(ne):
+        rgf_GF(next(rgf_M), SigL[ie], SigG[ie],
+                          GR_3D_E[ie], GRnn1_3D_E[ie],
+                          GL_3D_E[ie], GLnn1_3D_E[ie],
+                          GG_3D_E[ie], GGnn1_3D_E[ie],
+                          DOS[ie], fL[ie], fR[ie],
+                          bmin, bmax, factor[ie], index_e[ie])
+    
+    return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 
 def generator_rgf_Hamiltonian(E, DH, SigR):
     for i in range(E.shape[0]):
