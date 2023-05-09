@@ -22,6 +22,7 @@ from utils import change_format
 if utils_gpu.gpu_avail():
     import cupy as cp
     from GW.polarization.kernel import g2p_gpu
+    from utils import linalg_gpu
 
 if __name__ == "__main__":
     # parse the possible arguments
@@ -219,8 +220,20 @@ if __name__ == "__main__":
 
         elif args.type == "gpu_fft_mpi_streams":
             gl_gold_transposed = gl_gold[ij2ji,:]
-            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu_streams(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+            # allocate streams
+            # start gpu streams
+            streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
+            # allocate pinned memory
+            gg_cpu = linalg_gpu.aloc_pinned_filled(gg_gold)
+            gl_cpu = linalg_gpu.aloc_pinned_filled(gl_gold)
+            gr_cpu = linalg_gpu.aloc_pinned_filled(gr_gold)
+            gl_transposed_cpu = linalg_gpu.aloc_pinned_filled(gl_gold_transposed)
+            pg_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+            pl_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+            pr_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+            g2p_gpu.g2p_fft_mpi_gpu_streams(
+                pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu,
+                pg_cpu, pl_cpu, pr_cpu, streams)
 
         elif args.type == "gpu_conv":
             # load data to gpu

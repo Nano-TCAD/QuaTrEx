@@ -208,12 +208,16 @@ def g2p_fft_mpi_gpu_streams(
     gg: npt.NDArray[np.complex128],
     gl: npt.NDArray[np.complex128],
     gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    gl_transposed: npt.NDArray[np.complex128],
+    pg: npt.NDArray[np.complex128],
+    pl: npt.NDArray[np.complex128],
+    pr: npt.NDArray[np.complex128],
+    streams: cp.cuda.stream.Stream
+):
     """Calculate the polarization with fft and mpi on the gpu(see file description).
     In addition, already loads and unloads data to and from the gpu.
     Uses streams to overlap data transfer and computation.
+    For highest performance, input pinned memory.
 
     Args:
         pre_factor            (np.complex128): pre_factor, multiplied at the end
@@ -221,27 +225,13 @@ def g2p_fft_mpi_gpu_streams(
         gl       (npt.NDArray[np.complex128]): Lesser Green's Function,           (#orbital/#ranks, #energy)
         gr       (npt.NDArray[np.complex128]): Retarded Green's Function_,        (#orbital/#ranks, #energy)
         gl_transposed (npt.NDArray[np.complex128]): Transposed Lesser Green's Function (#orbital/#ranks, #energy)
-
-    Returns:
-        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)  
-                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
-                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
-                    ]
+        pg       (npt.NDArray[np.complex128]): Greater polarization,              (#orbital/#ranks, #energy)
+        pl       (npt.NDArray[np.complex128]): Lesser polarization,               (#orbital/#ranks, #energy)
+        pr       (npt.NDArray[np.complex128]): Retarded polarization,             (#orbital/#ranks, #energy)
     """
+
     # number of energy points
     ne: int = gg.shape[1]
-
-    # use four streams to hide
-    streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
-
-    # pin input memory and output memory
-    gg = linalg_gpu.aloc_pinned_filled(gg)
-    gl = linalg_gpu.aloc_pinned_filled(gl)
-    gr = linalg_gpu.aloc_pinned_filled(gr)
-    pg = linalg_gpu.aloc_pinned_empty_like(gg)
-    pl = linalg_gpu.aloc_pinned_empty_like(gl)
-    pr = linalg_gpu.aloc_pinned_empty_like(gr)
-    gl_transposed = linalg_gpu.aloc_pinned_filled(gl_transposed)
 
     # load data to gpu and compute----------------------------------------------
     gg_gpu = cp.empty_like(gg)
@@ -287,4 +277,3 @@ def g2p_fft_mpi_gpu_streams(
     for stream in streams:
         stream.synchronize()
 
-    return (pg, pl, pr)

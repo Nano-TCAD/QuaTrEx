@@ -30,6 +30,10 @@ from utils import change_format
 from utils import utils_gpu
 
 if utils_gpu.gpu_avail():
+    import cupy as cp
+    from utils import linalg_gpu
+
+if utils_gpu.gpu_avail():
     from GW.polarization.kernel import g2p_gpu
     from GW.selfenergy.kernel import gw2s_gpu
 
@@ -55,10 +59,11 @@ if __name__ == "__main__":
     # change manually the used implementation inside the code
     parser.add_argument("-t", "--type", default="cpu",
                     choices=["cpu", "gpu"], required=False)
-    parser.add_argument("-nt", "--net_transpose", default=False,
-                    type=bool, required=False)
-    parser.add_argument("-p", "--pool", default=True,
-                type=bool, required=False)
+    # boolean to transpose through network
+    parser.add_argument("-nt", "--net_transpose", action="store_true")
+    #string to chose type
+    parser.add_argument("-p", "--pool", default="True",
+                choices=["True", "False"], required=False)
     args = parser.parse_args()
     # check if gpu is available
     if args.type in ("gpu"):
@@ -327,6 +332,50 @@ if __name__ == "__main__":
     sl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
 
+    # allocate memory for steps-------------------------------------------------
+    pg_p2w = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    pl_p2w = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    pr_p2w = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    wg_gw2s = np.empty((count[0, rank], data_shape[1]),
+                      dtype=np.complex128, order="C")
+    wl_gw2s = np.empty((count[0, rank], data_shape[1]),
+                      dtype=np.complex128, order="C")
+    wr_gw2s = np.empty((count[0, rank], data_shape[1]),
+                      dtype=np.complex128, order="C")
+    wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+                      dtype=np.complex128, order="C")
+    wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+                      dtype=np.complex128, order="C")
+    sg_h2g = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    sl_h2g = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    sr_h2g = np.empty((count[1, rank], data_shape[0]),
+                      dtype=np.complex128, order="C")
+    if args.type in ("gpu"):
+        # start gpu streams
+        streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
+        # allocate pinned memory
+        gg_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        gl_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        gr_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        gl_transposed_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        pg_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        pl_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+        pr_g2p = linalg_gpu.aloc_pinned_empty_like(wg_gw2s)
+    else:
+        gg_g2p = np.empty((count[0, rank], data_shape[1]),
+                        dtype=np.complex128, order="C")
+        gl_g2p = np.empty((count[0, rank], data_shape[1]),
+                        dtype=np.complex128, order="C")
+        gr_g2p = np.empty((count[0, rank], data_shape[1]),
+                        dtype=np.complex128, order="C")
+        gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
+                        dtype=np.complex128, order="C")
+
     # todo start self consistent loop-------------------------------------------
 
     # timing transform
@@ -407,16 +456,6 @@ if __name__ == "__main__":
     # calculate the transposed
     gl_transposed_h2g = np.copy(gl_h2g[:,ij2ji], order="C")
 
-    # create local buffers
-    gg_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gl_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gr_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-
 
     # timing communicate
     times_communicate[0] = -time.perf_counter()
@@ -435,19 +474,23 @@ if __name__ == "__main__":
 
     # calculate the polarization at every rank----------------------------------
     if args.type in ("gpu"):
-        pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu_streams(
-                                            pre_factor,
-                                            gg_g2p,
-                                            gl_g2p,
-                                            gr_g2p,
-                                            gl_transposed_g2p)
+        g2p_gpu.g2p_fft_mpi_gpu_streams(
+                                pre_factor,
+                                gg_g2p,
+                                gl_g2p,
+                                gr_g2p,
+                                gl_transposed_g2p,
+                                pg_g2p,
+                                pl_g2p,
+                                pr_g2p,
+                                streams)
     elif args.type in ("cpu"):
         pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(
-                                            pre_factor,
-                                            gg_g2p,
-                                            gl_g2p,
-                                            gr_g2p,
-                                            gl_transposed_g2p)
+                                pre_factor,
+                                gg_g2p,
+                                gl_g2p,
+                                gr_g2p,
+                                gl_transposed_g2p)
     else:
         raise ValueError("Argument error, input type not possible")
 
@@ -456,14 +499,6 @@ if __name__ == "__main__":
 
 
     # distribute polarization function according to p2w step--------------------
-
-    # create local buffers
-    pg_p2w = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    pl_p2w = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    pr_p2w = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
 
     # timing communicate
     times_communicate[1] = -time.perf_counter()
@@ -494,7 +529,7 @@ if __name__ == "__main__":
     times_compute[2] = -time.perf_counter()
 
     # calculate the screened interaction on every rank--------------------------
-    if args.pool:
+    if args.pool in ("True"):
         wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                             hamiltionian_obj, energy_loc,
                                                                                             pg_p2w_vec, pl_p2w_vec,
@@ -542,18 +577,6 @@ if __name__ == "__main__":
     wg_transposed_p2w = np.copy(wg_p2w[:,ij2ji], order="C")
     wl_transposed_p2w = np.copy(wl_p2w[:,ij2ji], order="C")
 
-    # create local buffers
-    wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    
     # timing communicate
     times_communicate[2] = -time.perf_counter()
 
@@ -603,13 +626,6 @@ if __name__ == "__main__":
     times_compute[3] += time.perf_counter()
 
     # distribute screened interaction according to h2g step---------------------
-    # create local buffers
-    sg_h2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    sl_h2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    sr_h2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
 
     # timing communicate
     times_communicate[3] = -time.perf_counter()
