@@ -325,8 +325,8 @@ class Hamiltonian:
             indI[indA:ind] = np.sort(indI[indA:ind])
             indJ[indA:ind] = np.sort(indJ[indA:ind])
             indA = ind
-        self.columns = indI[:ind]
-        self.rows = indJ[:ind]
+        self.columns = indI[:ind].astype('int32')
+        self.rows = indJ[:ind].astype('int32')
     
 
 

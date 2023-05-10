@@ -131,3 +131,11 @@ quatrex/results/CNT_single/DOS_.dat
 quatrex/results/CNT_single/E.dat
 quatrex/bandstructure/calc_contact_bs
 quatrex/results/CNT_single/DOS.gif
+quatrex/results/CNT_sc/DOS_0.dat
+quatrex/results/CNT_sc/DOS_1.dat
+quatrex/results/CNT_sc/DOS_2.dat
+quatrex/results/CNT_sc/DOS.gif
+quatrex/results/CNT_sc/E.dat
+quatrex/results/CNT_sc/EFR.dat
+quatrex/results/CNT_sc/EFL.dat
+quatrex/results/CNT_single/DOS_old.gif

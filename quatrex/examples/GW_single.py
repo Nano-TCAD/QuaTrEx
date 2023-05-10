@@ -79,6 +79,9 @@ NE = E.shape[0]
 EfL = -3.85 # Fermi Level of Left Contact
 EfR = -3.85 # Fermi Level of Right Contact
 
+ECmin = -3.55 # DFT conuction band minimum
+EVmax = -4.05 # DFT valence band maximum
+
 Temp = 300 # Temperature in Kelvin
 epsR = 11.9 # Dielectric Constant 
 
@@ -339,8 +342,8 @@ print("Transforming W into energy-contiguous array took: " + "%.2f" % (toc_trafo
 print("Calculating Sigma took: " + "%.2f" % (toc_sigma-tic_sigma) + " [s]" )
 print("Total Time: " + "%.2f" % (toc_sigma - tic_rgf_G) + " [s]" )
 
-folder = 'results/CNT_single/'
-np.savetxt( folder + 'E.dat', E)
-np.savetxt( folder + 'DOS_.dat', DOS.view(float))
+folder = '/results/CNT_single/'
+np.savetxt( parent_path + folder + 'E.dat', E)
+np.savetxt( parent_path + folder + 'DOS_.dat', DOS.view(float))
 
 
