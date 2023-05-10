@@ -117,14 +117,13 @@ class bsr(sp.bsr_array):
         if block.shape != self.blocksize:
             raise ValueError("Invalid block size.")
 
-        block_column_indices = self._get_col_indices(row)
+        col_indices = self._get_col_indices(row)
 
-        if col not in block_column_indices:
+        if col not in col_indices:
             raise NotImplementedError("Changing the sparsity pattern is not supported.")
 
-        block_column_data = self._get_data_blocks(row)
-        data_index = np.where(block_column_indices == col)[0][0]
-        block_column_data[data_index] = block
+        block_index = np.where(col_indices == col)[0][0]
+        self.data[self.indptr[row] + block_index] = block
 
     def set_blocksize(self, blocksize: tuple[int, int], enforce: bool = False) -> "bsr":
         """Sets the block size of the matrix.
