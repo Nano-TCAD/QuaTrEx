@@ -71,17 +71,6 @@ if __name__ == "__main__":
     # print chosen implementation
     print(f"Using {args.type} implementation")
 
-    # load greens function as input
-    energy, rows, columns, gg_gold, gl_gold, gr_gold    = read_solution.load_x(args.file_gw, "g")
-    # load polarization to test against
-    _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file_gw, "p")
-    # load screened interaction to test against
-    _, _, _, wg_gold, wl_gold, wr_gold                  = read_solution.load_x(args.file_gw, "w")
-    # load self-energy to test against
-    _, _, _, sg_gold, sl_gold, sr_gold                  = read_solution.load_x(args.file_gw, "s")
-    # load block sizes
-    bmax, bmin                                          = read_solution.load_B(args.file_gw)
-
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
@@ -112,14 +101,11 @@ if __name__ == "__main__":
     pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
     nao:        np.int64                = np.max(bmax) + 1
 
-    data_shape = np.array(gg_gold.shape)
+    data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
 
     if rank == 0:
         # print size of data
         print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
-
-    # lesser green's function transposed
-    gl_gold_t = np.copy(gl_gold[ij2ji,:], order="C")
 
 
     # computation parameters----------------------------------------------------
@@ -152,21 +138,12 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    # creating mask for the energy range of the deleted W elements 
-    # given by the reference solution
-    w_mask = np.ndarray(shape = (energy.shape[0],), dtype = bool)
-
-    wr_mask = np.sum(np.abs(wr_gold), axis = 0) > 1e-10
-    wl_mask = np.sum(np.abs(wl_gold), axis = 0) > 1e-10
-    wg_mask = np.sum(np.abs(wg_gold), axis = 0) > 1e-10
-    w_mask = np.logical_or(np.logical_or(wr_mask, wl_mask), wg_mask)
-
     # create the corresponding factor to mask 
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
     factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
-    factor_w[np.where(np.invert(w_mask))[0]] = 0.0
+    #factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # create factor for the Green's Function
     factor_g = np.ones(ne)
@@ -205,8 +182,7 @@ if __name__ == "__main__":
 
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
-    # split up mask among ranks
-    w_mask_loc = w_mask[disp[1, rank]:disp[1, rank] + count[1, rank]]
+
     # split up the factor between the ranks
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
     factor_g_loc = factor_g[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -218,7 +194,6 @@ if __name__ == "__main__":
 
     # adding checks
     assert energy_loc.size == count[1,rank]
-    assert w_mask_loc.size == count[1,rank]
 
     # create needed data types--------------------------------------------------
 
@@ -496,7 +471,7 @@ if __name__ == "__main__":
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("gpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu_streams(
+            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,

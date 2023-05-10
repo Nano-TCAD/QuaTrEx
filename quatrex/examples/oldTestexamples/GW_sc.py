@@ -495,7 +495,7 @@ if __name__ == "__main__":
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("gpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu_streams(
+            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
