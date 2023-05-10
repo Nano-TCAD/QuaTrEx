@@ -576,33 +576,33 @@ if __name__ == "__main__":
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
         wr_lower = wr_upper.transpose((0,1,3,2))
-        if iter_num == 0:
-            wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wg_diag, wg_upper,
-                                                            wg_lower, no, count[1,rank],
-                                                            energy_contiguous=False)
-            wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wl_diag, wl_upper,
-                                                            wl_lower, no, count[1,rank],
-                                                            energy_contiguous=False)
-            wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wr_diag, wr_upper,
-                                                            wr_lower, no, count[1,rank],
-                                                            energy_contiguous=False)
-        else:
-            # add new contribution to the Screened interaction
-            wg_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wg_diag, wg_upper,
-                                                            wg_lower, no, count[1,rank],
-                                                            energy_contiguous=False) + mem_w * wg_p2w
-            wl_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wl_diag, wl_upper,
-                                                            wl_lower, no, count[1,rank],
-                                                            energy_contiguous=False) + mem_w * wl_p2w
-            wr_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                            map_lower_mm, wr_diag, wr_upper,
-                                                            wr_lower, no, count[1,rank],
-                                                            energy_contiguous=False) + mem_w * wr_p2w
+        # if iter_num == 0:
+        #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wg_diag, wg_upper,
+        #                                                     wg_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wl_diag, wl_upper,
+        #                                                     wl_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wr_diag, wr_upper,
+        #                                                     wr_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        # else:
+        # add new contribution to the Screened interaction
+        wg_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wg_diag, wg_upper,
+                                                        wg_lower, no, count[1,rank],
+                                                        energy_contiguous=False) + mem_w * wg_p2w
+        wl_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wl_diag, wl_upper,
+                                                        wl_lower, no, count[1,rank],
+                                                        energy_contiguous=False) + mem_w * wl_p2w
+        wr_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wr_diag, wr_upper,
+                                                        wr_lower, no, count[1,rank],
+                                                        energy_contiguous=False) + mem_w * wr_p2w
 
         # timing transform
         times_transform_block[1] += time.perf_counter()
@@ -700,10 +700,10 @@ if __name__ == "__main__":
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
-        if iter_num == max_iter - 1:
-            alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
-            alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
-            alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
+        # if iter_num == max_iter - 1:
+        #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
+        #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
+        #     alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
 
         # timing communicate
         times_communicate[3] += time.perf_counter()
@@ -744,124 +744,6 @@ if __name__ == "__main__":
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
-    # culminate on master again-------------------------------------------------
-    if rank == 0:
-        # average time
-        comm.Reduce(MPI.IN_PLACE, times_transform_list, op=MPI.SUM, root=0)
-        comm.Reduce(MPI.IN_PLACE, times_transform_block, op=MPI.SUM, root=0)
-        comm.Reduce(MPI.IN_PLACE, times_communicate, op=MPI.SUM, root=0)
-        comm.Reduce(MPI.IN_PLACE, times_compute, op=MPI.SUM, root=0)
-        times_transform_list /= size
-        times_transform_block /= size
-        times_communicate /= size
-        times_compute /= size
-
-
-        # create buffers at master
-        gg_mpi = np.empty_like(gg_gold)
-        gl_mpi = np.empty_like(gg_gold)
-        gr_mpi = np.empty_like(gg_gold)
-        pg_mpi = np.empty_like(gg_gold)
-        pl_mpi = np.empty_like(gg_gold)
-        pr_mpi = np.empty_like(gg_gold)
-        wg_mpi = np.empty_like(gg_gold)
-        wl_mpi = np.empty_like(gg_gold)
-        wr_mpi = np.empty_like(gg_gold)
-        sg_mpi = np.empty_like(gg_gold)
-        sl_mpi = np.empty_like(gg_gold)
-        sr_mpi = np.empty_like(gg_gold)
-
-        gather_master(gg_h2g, gg_mpi, transpose_net=args.net_transpose)
-        gather_master(gl_h2g, gl_mpi, transpose_net=args.net_transpose)
-        gather_master(gr_h2g, gr_mpi, transpose_net=args.net_transpose)
-        gather_master(pg_p2w, pg_mpi, transpose_net=args.net_transpose)
-        gather_master(pl_p2w, pl_mpi, transpose_net=args.net_transpose)
-        gather_master(pr_p2w, pr_mpi, transpose_net=args.net_transpose)
-        gather_master(wg_p2w, wg_mpi, transpose_net=args.net_transpose)
-        gather_master(wl_p2w, wl_mpi, transpose_net=args.net_transpose)
-        gather_master(wr_p2w, wr_mpi, transpose_net=args.net_transpose)
-        gather_master(sg_h2g, sg_mpi, transpose_net=args.net_transpose)
-        gather_master(sl_h2g, sl_mpi, transpose_net=args.net_transpose)
-        gather_master(sr_h2g, sr_mpi, transpose_net=args.net_transpose)
-    else:
-        # send time to master
-        comm.Reduce(times_transform_list, None, op=MPI.SUM, root=0)
-        comm.Reduce(times_transform_block, None, op=MPI.SUM, root=0)
-        comm.Reduce(times_communicate, None, op=MPI.SUM, root=0)
-        comm.Reduce(times_compute, None, op=MPI.SUM, root=0)
-
-        gather_master(gg_h2g, None, transpose_net=args.net_transpose)
-        gather_master(gl_h2g, None, transpose_net=args.net_transpose)
-        gather_master(gr_h2g, None, transpose_net=args.net_transpose)
-        gather_master(pg_p2w, None, transpose_net=args.net_transpose)
-        gather_master(pl_p2w, None, transpose_net=args.net_transpose)
-        gather_master(pr_p2w, None, transpose_net=args.net_transpose)
-        gather_master(wg_p2w, None, transpose_net=args.net_transpose)
-        gather_master(wl_p2w, None, transpose_net=args.net_transpose)
-        gather_master(wr_p2w, None, transpose_net=args.net_transpose)
-        gather_master(sg_h2g, None, transpose_net=args.net_transpose)
-        gather_master(sl_h2g, None, transpose_net=args.net_transpose)
-        gather_master(sr_h2g, None, transpose_net=args.net_transpose)
-
-
-    # test against gold solution------------------------------------------------
-
-    if rank == 0:
-        # print times
-        print("Times to transform 2D to sparsematrix_vector: ", times_transform_list)
-        print("Times to transform Block-4D to 2D: ", times_transform_block)
-        print("Times to communicate: ", times_communicate)
-        print("Times to compute: ", times_compute)
-        print("Total time: ", np.sum(times_transform_list) + np.sum(times_transform_block) + np.sum(times_communicate) + np.sum(times_compute))
-
-        # print difference to given solution
-        # use Frobenius norm
-        diff_gg = np.linalg.norm(gg_gold - gg_mpi)
-        diff_gl = np.linalg.norm(gl_gold - gl_mpi)
-        diff_gr = np.linalg.norm(gr_gold - gr_mpi)
-        diff_pg = np.linalg.norm(pg_gold - pg_mpi)
-        diff_pl = np.linalg.norm(pl_gold - pl_mpi)
-        diff_pr = np.linalg.norm(pr_gold - pr_mpi)
-        diff_wg = np.linalg.norm(wg_gold - wg_mpi)
-        diff_wl = np.linalg.norm(wl_gold - wl_mpi)
-        diff_wr = np.linalg.norm(wr_gold - wr_mpi)
-        diff_sg = np.linalg.norm(sg_gold - sg_mpi)
-        diff_sl = np.linalg.norm(sl_gold - sl_mpi)
-        diff_sr = np.linalg.norm(sr_gold - sr_mpi)
-        print(f"Green's Function differences to Gold Solution g/l/r:  {diff_gg:.4f}, {diff_gl:.4f}, {diff_gr:.4f}")
-        print(f"Polarization differences to Gold Solution g/l/r:  {diff_pg:.4f}, {diff_pl:.4f}, {diff_pr:.4f}")
-        print(f"Screened interaction differences to Gold Solution g/l/r:  {diff_wg:.4f}, {diff_wl:.4f}, {diff_wr:.4f}")
-        print(f"Screened self-energy differences to Gold Solution g/l/r:  {diff_sg:.4f}, {diff_sl:.4f}, {diff_sr:.4f}")
-
-        # assert solution close to real solution
-        abstol = 1e-2
-        reltol = 1e-1
-        assert diff_gg <= abstol + reltol * np.max(np.abs(gg_gold))
-        assert diff_gl <= abstol + reltol * np.max(np.abs(gl_gold))
-        assert diff_gr <= abstol + reltol * np.max(np.abs(gr_gold))
-        assert diff_pg <= abstol + reltol * np.max(np.abs(pg_gold))
-        assert diff_pl <= abstol + reltol * np.max(np.abs(pl_gold))
-        assert diff_pr <= abstol + reltol * np.max(np.abs(pr_gold))
-        assert diff_wg <= abstol + reltol * np.max(np.abs(wg_gold))
-        assert diff_wl <= abstol + reltol * np.max(np.abs(wl_gold))
-        assert diff_wr <= abstol + reltol * np.max(np.abs(wr_gold))
-        assert diff_sg <= abstol + reltol * np.max(np.abs(sg_gold))
-        assert diff_sl <= abstol + reltol * np.max(np.abs(sl_gold))
-        assert diff_sr <= abstol + reltol * np.max(np.abs(sr_gold))
-        assert np.allclose(gg_gold, gg_mpi, atol=1e-3, rtol=1e-3)
-        assert np.allclose(gl_gold, gl_mpi, atol=1e-3, rtol=1e-3)
-        assert np.allclose(gr_gold, gr_mpi, atol=1e-3, rtol=1e-3)
-        assert np.allclose(pg_gold, pg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(pl_gold, pl_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(pr_gold, pr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(wg_gold, wg_mpi, rtol=1e-2, atol=1e-2)
-        assert np.allclose(wl_gold, wl_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(wr_gold, wr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sg_gold, sg_mpi, atol=1e-2, rtol=1e-2)
-        assert np.allclose(sl_gold, sl_mpi, atol=1e-2, rtol=1e-2)
-        assert np.allclose(sr_gold, sr_mpi, atol=1e-2, rtol=1e-2)
-        print("The mpi implementation is correct")
-
 
     # free datatypes------------------------------------------------------------
 

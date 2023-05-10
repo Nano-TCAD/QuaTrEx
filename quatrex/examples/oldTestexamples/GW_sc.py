@@ -18,7 +18,7 @@ mpi4py.rc.finalize = False    # do not finalize MPI automatically
 from mpi4py import MPI
 
 main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
+parent_path = os.path.abspath(os.path.join(main_path, "../.."))
 sys.path.append(parent_path)
 
 from bandstructure.calc_band_edge import get_band_edge
@@ -737,13 +737,14 @@ if __name__ == "__main__":
             print("Times to compute: ", times_compute)
             print("Total time: ", np.sum(times_transform_list) + np.sum(times_transform_block) + np.sum(times_communicate) + np.sum(times_compute))
 
-            np.savetxt(parent_path + folder + 'E.dat', energy)
-            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            #np.savetxt(parent_path + folder + 'E.dat', energy)
+            #np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
 
 
     if rank == 0:
-        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+        pass
+        #np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+        #np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
     # culminate on master again-------------------------------------------------
     if rank == 0:
         # average time
