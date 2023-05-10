@@ -3,6 +3,9 @@ An implementation of a variable block sparse row matrix.
 
 """
 
+import sys
+from typing import Callable
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.sparse as sp
@@ -33,9 +36,9 @@ class vbsr:
     ----------
     dtype : np.dtype
         Data type of the matrix blocks.
-    data : np.ndarray
-        Data of the matrix. This is an array of different sized blocks,
-        thus dtype is object.
+    data : list[np.ndarray]
+        Data of the matrix. Rather than a single array, this is a list
+        of arrays of different sizes.
     indices : np.ndarray[int]
         Column indices of the matrix.
     indptr : np.ndarray[int]
@@ -67,15 +70,20 @@ class vbsr:
     ) -> None:
         """Initializes a VBSR matrix."""
         self.dtype = np.find_common_type([block.dtype for block in data], [])
-        data = [np.asarray(block, dtype=self.dtype) for block in data]
-
-        self.data = np.array(data, dtype=object)
+        # NOTE: Using ndarrays to store ragged nested sequences is
+        # deprecated (see NEP 34). Best option is to use lists.
+        self.data = [np.asarray(block, dtype=self.dtype) for block in data]
         self.indices = np.asarray(indices, dtype=int)
         self.indptr = np.asarray(indptr, dtype=int)
 
         self.num_blocks = self.indptr.size - 1
         self.nnz = sum(block.size for block in self.data)
-        self.nbytes = self.data.nbytes + self.indices.nbytes + self.indptr.nbytes
+        self.nbytes = (
+            sys.getsizeof(self.data)
+            + sum(block.nbytes for block in self.data)
+            + self.indices.nbytes
+            + self.indptr.nbytes
+        )
 
         if blocksizes is None:
             self.blocksizes = self._get_blocksizes()
@@ -111,7 +119,7 @@ class vbsr:
         """Returns the indices of the blocks in the given block row."""
         return self.indices[self.indptr[row] : self.indptr[row + 1]]
 
-    def _get_data_blocks(self, row: int) -> np.ndarray[np.ndarray]:
+    def _get_data_blocks(self, row: int) -> list[np.ndarray]:
         """Returns the data of the blocks in the given block row."""
         return self.data[self.indptr[row] : self.indptr[row + 1]]
 
@@ -202,11 +210,37 @@ class vbsr:
         block_index = np.where(col_indices == col)[0][0]
         return blocks[block_index]
 
+    def get_blocks(self, *indices: ArrayLike) -> tuple[np.ndarray]:
+        """Returns the blocks at the given indices."""
+        indices = np.asarray(indices)
+        if not indices.ndim == 2:
+            raise ValueError("Indices must be 2D.")
+
+        if len(indices) == 1:
+            return self.get_block(*indices[0])
+
+        return tuple(self.get_block(*index) for index in indices)
+
     def set_block(self, row: int, col: int, block: ArrayLike) -> None:
-        """Sets the block at the given row and column."""
-        # TODO: Implement. Changing sparsity structure should not be
-        # allowed.
-        raise NotImplementedError
+        """Sets the block at the given row and column.
+
+        It is not possible to change the sparsity pattern of the matrix.
+
+        """
+        row, col = self._unsign_block_indices(row, col)
+        self._check_block_in_bounds(row, col)
+
+        block = np.asarray(block)
+        if block.shape != (self.blocksizes[row], self.blocksizes[col]):
+            raise ValueError("Invalid block size.")
+
+        col_indices = self._get_col_indices(row)
+
+        if col not in col_indices:
+            raise NotImplementedError("Changing the sparsity pattern is not supported.")
+
+        block_index = np.where(col_indices == col)[0][0]
+        self.data[self.indptr[row] + block_index] = block
 
     def diagonal_blocks(self, k: int = 0) -> np.ndarray:
         """Returns the k-th block-diagonal.
@@ -260,9 +294,9 @@ class vbsr:
 
         return ax
 
-    def _tosliceable(self, sliceable: type):
+    def _tosliceable(self, init: Callable):
         """Converts the sparse matrix to a sliceable matrix."""
-        mat = sliceable(self.shape, dtype=self.dtype)
+        mat = init(self.shape, dtype=self.dtype)
         for row, m in enumerate(self.blockoffsets):
             col_indices = self._get_col_indices(row)
             blocks = self._get_data_blocks(row)
@@ -278,7 +312,7 @@ class vbsr:
 
     def toarray(self) -> np.ndarray:
         """Converts the sparse matrix to a dense array."""
-        return self._tosliceable(np.ndarray)
+        return self._tosliceable(np.zeros)
 
     @staticmethod
     def _blocksize_heuristic(arr: ArrayLike) -> np.ndarray:
@@ -338,16 +372,16 @@ class vbsr:
         return cls(data, indices, indptr, blocksizes)
 
     @classmethod
-    def from_lil(cls, mat: sp.lil_array, blocksizes: ArrayLike) -> "vbsr":
-        """Creates a matrix from a lil_matrix.
+    def from_spmatrix(cls, mat: sp.spmatrix, blocksizes: ArrayLike) -> "vbsr":
+        """Creates a matrix from any sp.spmatrix.
 
-        Since lil_arrays are sliceable, this just calls the from_array
-        class method and requires the blocksizes argument.
+        Since lil_arrays are sliceable, this just calls 'mat.tolil()'
+        first. No blocksize heuristic is implemented.
 
         Parameters
         ----------
-        mat : sp.lil_array
-            The lil_array to convert to a vbsr matrix.
+        mat : sp.spmatrix
+            The spmatrix to convert to a vbsr matrix.
         blocksizes : ArrayLike
             The block sizes.
 
@@ -357,7 +391,23 @@ class vbsr:
             The vbsr matrix.
 
         """
-        return cls.from_array(mat, blocksizes)
+        mat = mat.tolil()
+        if mat.shape[0] != mat.shape[1]:
+            raise ValueError("Array must be square.")
+
+        blockoffsets = np.cumsum(blocksizes) - blocksizes
+        data = []
+        indices = []
+        indptr = [0]
+        for i, m in enumerate(blockoffsets):
+            for j, n in enumerate(blockoffsets):
+                block = mat[m : m + blocksizes[i], n : n + blocksizes[j]]
+                if block.nnz > 0:
+                    data.append(block.toarray())
+                    indices.append(j)
+            indptr.append(len(data))
+
+        return cls(data, indices, indptr, blocksizes)
 
     @classmethod
     def diag(cls, blocks: ArrayLike, overlap: int = 0) -> "vbsr":
@@ -391,4 +441,4 @@ class vbsr:
             blockoffsets.append(m)
 
         blocksizes = np.diff(blockoffsets)
-        return cls.from_lil(out, blocksizes=blocksizes)
+        return cls.from_spmatrix(out, blocksizes=blocksizes)
