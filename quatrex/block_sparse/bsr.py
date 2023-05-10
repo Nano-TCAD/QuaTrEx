@@ -9,7 +9,7 @@ from numpy.typing import ArrayLike
 
 
 class bsr(sp.bsr_array):
-    """A sparse matrix in block sparse row format.
+    """A block sparse row matrix.
 
     This class extends scipy.sparse.bsr_array with some useful methods.
 
@@ -32,6 +32,14 @@ class bsr(sp.bsr_array):
             return bsr(item)
         return item
 
+    def _get_col_indices(self, row: int) -> np.ndarray:
+        """Returns the indices of the blocks in the given block row."""
+        return self.indices[self.indptr[row] : self.indptr[row + 1]]
+
+    def _get_data_blocks(self, row: int) -> np.ndarray:
+        """Returns the data of the blocks in the given block row."""
+        return self.data[self.indptr[row] : self.indptr[row + 1]]
+
     def _check_block_in_bounds(self, row: int, col: int):
         """Checks if the given block is in bounds."""
         m, n = self.shape
@@ -40,7 +48,7 @@ class bsr(sp.bsr_array):
             raise IndexError("Block index out of bounds.")
 
     def _unsign_block_indices(self, row: int, col: int) -> tuple[int, int]:
-        """Switches signs accordingly for negative indices."""
+        """Calculates effective positive index for negative indices."""
         m, n = self.shape
         r, c = self.blocksize
 
@@ -48,30 +56,42 @@ class bsr(sp.bsr_array):
             row = m // r + row
         if col < 0:
             col = n // c + col
+        if row < 0 or col < 0:
+            raise IndexError("Block index out of bounds.")
 
         return row, col
 
-    def _get_block_column_indices(self, row: int) -> np.ndarray:
-        """Returns the indices of the blocks in the given block row."""
-        return self.indices[self.indptr[row] : self.indptr[row + 1]]
-
-    def _get_block_column_data(self, row: int) -> np.ndarray:
-        """Returns the data of the blocks in the given block row."""
-        return self.data[self.indptr[row] : self.indptr[row + 1]]
-
     def get_block(self, row: int, col: int) -> np.ndarray:
-        """Returns the block at the given row and column."""
-        # TODO: This gives inconsistent results.
+        """Returns the block at the given row and column.
+
+        If the block is not present in the sparse matrix, a zero block
+        of the appropriate shape is returned.
+
+        Supports negative indices.
+
+        Parameters
+        ----------
+        row : int
+            The row index of the block.
+        col : int
+            The column index of the block.
+
+        Returns
+        -------
+        block : np.ndarray
+            The block at the given row and column.
+
+        """
         row, col = self._unsign_block_indices(row, col)
         self._check_block_in_bounds(row, col)
 
-        block_column_indices = self._get_block_column_indices(row)
-        if col not in block_column_indices:
+        col_indices = self._get_col_indices(row)
+        if col not in col_indices:
             return np.zeros(self.blocksize)
 
-        block_column_data = self._get_block_column_data(row)
-        data_index = np.where(block_column_indices == col)[0][0]
-        return block_column_data[data_index]
+        blocks = self._get_data_blocks(row)
+        block_index = np.where(col_indices == col)[0][0]
+        return blocks[block_index]
 
     def get_blocks(self, *indices: ArrayLike) -> tuple[np.ndarray]:
         """Returns the blocks at the given indices."""
@@ -84,8 +104,12 @@ class bsr(sp.bsr_array):
 
         return tuple(self.get_block(*index) for index in indices)
 
-    def set_block(self, row: int, col: int, block: ArrayLike):
-        """Sets the block at the given row and column."""
+    def set_block(self, row: int, col: int, block: ArrayLike) -> None:
+        """Sets the block at the given row and column.
+
+        It is not possible to change the sparsity pattern of the matrix.
+
+        """
         row, col = self._unsign_block_indices(row, col)
         self._check_block_in_bounds(row, col)
 
@@ -93,16 +117,13 @@ class bsr(sp.bsr_array):
         if block.shape != self.blocksize:
             raise ValueError("Invalid block size.")
 
-        block_column_indices = self._get_block_column_indices(row)
+        col_indices = self._get_col_indices(row)
 
-        # TODO: Decide if one wants to support this.
-        if col not in block_column_indices:
+        if col not in col_indices:
             raise NotImplementedError("Changing the sparsity pattern is not supported.")
 
-        # If the block is already in the matrix, we just replace it.
-        block_column_data = self._get_block_column_data(row)
-        data_index = np.where(block_column_indices == col)[0][0]
-        block_column_data[data_index] = block
+        block_index = np.where(col_indices == col)[0][0]
+        self.data[self.indptr[row] + block_index] = block
 
     def set_blocksize(self, blocksize: tuple[int, int], enforce: bool = False) -> "bsr":
         """Sets the block size of the matrix.
@@ -162,12 +183,19 @@ class bsr(sp.bsr_array):
         return self.copy()
 
     def show(self, **kwargs) -> plt.Axes:
-        """Plots the matrix.
+        """Displays the absolute value of the matrix.
+
+        Parameters
+        ----------
+        ax : plt.Axes, optional
+            The axes to plot on. If not given, a new figure is created.
+        kwargs : dict, optional
+            Additional keyword arguments are passed to `plt.matshow`.
 
         Returns
         -------
-        matplotlib.Axes
-            The axes object of the plot.
+        ax : plt.Axes
+            The axes on which the matrix is plotted.
 
         """
         if kwargs.pop("ax", None) is None:
@@ -179,18 +207,18 @@ class bsr(sp.bsr_array):
         ax.set_yticklabels(np.arange(0, self.shape[0], step=self.blocksize[0]))
         ax.set_xticks(np.arange(-0.5, self.shape[1] - 0.5, step=self.blocksize[1]))
         ax.set_xticklabels(np.arange(0, self.shape[1], step=self.blocksize[1]))
-        ax.grid(which="major", color="k", linestyle="-", linewidth=0.5)
+        ax.grid(which="both", color="black", linestyle="-")
 
         return ax
 
     @classmethod
     def diag(
         cls,
-        *blocks: tuple[ArrayLike],
+        blocks: ArrayLike,
         overlap: int = 0,
         blocksize: tuple[int, int] = None,
     ) -> "bsr":
-        """Creates a matrix from the given blocks with given overlap.
+        """Creates a matrix from the given blocks with an overlap.
 
         In analogy to scipy.block_diag, this function creates a block
         diagonal matrix from the given arrays. The overlap of the
