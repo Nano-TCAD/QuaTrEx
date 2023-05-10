@@ -1,21 +1,40 @@
+from typing import Union
+
 import numpy as np
 import numpy.linalg as npla
 
 from bsr import bsr
+from vbsr import vbsr
 
 
-def rgf(M: bsr, off_diagonal=False) -> bsr:
-    """Applies the recursive Green's function method to a BSR matrix."""
-    if off_diagonal:
-        raise NotImplementedError("Off-diagonal RGF not implemented yet.")
-
+def _init_bsr(M: bsr) -> tuple[bsr, int]:
+    """Initializes G for a VBSR matrix."""
     if M.blocksize[0] != M.blocksize[1]:
         raise ValueError("Blocks must be square.")
 
     num_blocks = M.shape[0] // M.blocksize[0]
+    G = bsr.diag(
+        [np.ones(M.blocksize, M.dtype) for __ in range(num_blocks)],
+        blocksize=M.blocksize,
+    )
 
-    diag_blocks = np.repeat(np.ones(M.blocksize, M.dtype), num_blocks)
-    G = bsr.diag(*diag_blocks.reshape(-1, *M.blocksize).tolist(), blocksize=M.blocksize)
+    return G, num_blocks
+
+
+def _init_vbsr(M: vbsr) -> tuple[vbsr, int]:
+    """Initializes G for a VBSR matrix."""
+    G = vbsr.diag([np.ones((s, s), M.dtype) for s in M.blocksizes])
+    return G, M.num_blocks
+
+
+def rgf(M: Union[bsr, vbsr]) -> Union[bsr, vbsr]:
+    """Applies the recursive Green's function method."""
+    if isinstance(M, bsr):
+        G, num_blocks = _init_bsr(M)
+    elif isinstance(M, vbsr):
+        G, num_blocks = _init_vbsr(M)
+    else:
+        raise TypeError("Matrix must be BSR or VBSR.")
 
     G.set_block(0, 0, npla.inv(M.get_block(0, 0)))
 
