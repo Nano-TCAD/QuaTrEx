@@ -85,7 +85,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-
+    energy = np.linspace(-17.5, 7.5, 3001, endpoint = True, dtype = float) # Energy Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -352,6 +352,7 @@ if __name__ == "__main__":
     mem_g = 1.0
     mem_w = 1.0
     # max number of iterations
+
     max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
