@@ -29,3 +29,13 @@ def fullInversion(A):
         return A_inv
     
     
+
+def rgf(A, bandwidth):
+    """
+        Block-diagonal selected inversion using RGF algorithm.
+    """
+
+    
+
+
+

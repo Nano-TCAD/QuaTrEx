@@ -1,16 +1,19 @@
 from matplotlib import pyplot as plt
 
-def vizualiseDenseMatrixFlat(mat):
+def vizualiseDenseMatrixFlat(mat, legend=""):
     """
         Visualise a dense matrix in a 2D plot. Third dimension is represented by color.
     """
-    plt.imshow(mat, cmap='hot', interpolation='nearest')
+    plt.title('Dense matrix hotmat: ' + legend)
+    plt.imshow(abs(mat), cmap='hot', interpolation='nearest')
     plt.show()
 
 
-def vizualiseCSRMatrixFlat(mat):
+def vizualiseCSCMatrixFlat(mat, legend=""):
     """
-        Visualise a CSR matrix in a 2D plot. Third dimension is represented by color.
+        Visualise a CSC matrix in a 2D plot. Third dimension is represented by color.
     """
-    plt.imshow(mat.toarray(), cmap='hot', interpolation='nearest')
+    # add a title and axis labels
+    plt.title('CSC matrix hotmat: '+ legend)
+    plt.imshow(abs(mat.toarray()), cmap='hot', interpolation='nearest')
     plt.show()

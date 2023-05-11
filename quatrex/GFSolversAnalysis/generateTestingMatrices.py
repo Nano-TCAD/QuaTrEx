@@ -32,7 +32,7 @@ def generateBandedDiagonalMatrix(size, bandwidth):
     print("Generating banded diagonal matrix of size: ", size, " and bandwidth: ", bandwidth)
 
     A = np.random.rand(size, size)
-    A[A < 0.5] = 0
+    
     for i in range(size):
         for j in range(size):
             if i - j > bandwidth or j - i > bandwidth:
