@@ -26,13 +26,13 @@ if utils_gpu.gpu_avail():
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_04.mat")
+    solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the polarization calculation"
     )
     parser.add_argument("-t", "--type", default="cpu_fft",
                         choices=["gpu_fft", "gpu_conv", "gpu_fft_mpi",
-                                 "gpu_fft_mpi_streams",
+                                 "gpu_fft_mpi_streams", "gpu_fft_mpi_batched",
                                  "cpu_fft_inlined", "cpu_fft",
                                  "cpu_fft_mpi", "cpu_fft_mpi_inlined",
                                  "cpu_conv", "cpu_conv_dace",
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    if args.type in ("gpu_fft", "gpu_conv", "gpu_fft_mpi", "gpu_fft_mpi_streams"):
+    if args.type in ("gpu_fft", "gpu_conv", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched"):
         if not utils_gpu.gpu_avail():
             print("No gpu available")
             sys.exit(1)
@@ -234,6 +234,27 @@ if __name__ == "__main__":
             g2p_gpu.g2p_fft_mpi_gpu_streams(
                 pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu,
                 pg_cpu, pl_cpu, pr_cpu, streams)
+            
+        elif args.type == "gpu_fft_mpi_batched":
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            # allocate streams
+            # start gpu streams
+            streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
+            # allocate pinned memory
+            gg_cpu = linalg_gpu.aloc_pinned_filled(gg_gold)
+            gl_cpu = linalg_gpu.aloc_pinned_filled(gl_gold)
+            gr_cpu = linalg_gpu.aloc_pinned_filled(gr_gold)
+            gl_transposed_cpu = linalg_gpu.aloc_pinned_filled(gl_gold_transposed)
+            pg_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+            pl_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+            pr_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
+
+            # chose batch size
+            batch_size = no // 5
+
+            g2p_gpu.g2p_fft_mpi_gpu_batched(
+                pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu,
+                pg_cpu, pl_cpu, pr_cpu, streams, batch_size)
 
         elif args.type == "gpu_conv":
             # load data to gpu

@@ -75,7 +75,7 @@ def gw2s_fft_cpu(
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
-    # see the document "derivation_selfenergy.pdf" for an explanation
+    # see the README for derivation
     sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_t[ij2ji,:] - np.repeat(wl[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
     sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_t[ij2ji,:] - np.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
     sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
@@ -165,7 +165,7 @@ def gw2s_fft_mpi_cpu(
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
-    # see the document "derivation_selfenergy.pdf" for an explanation
+    # see the README for derivation
     sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_transposed_t - np.repeat(wl_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
     sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_transposed_t - np.repeat(wg_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
     sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
