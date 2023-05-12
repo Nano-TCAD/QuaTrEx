@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.sparse import csc_matrix
 
-def verifResultsDense(A_ref, A):
+def verifResults(A_ref, A):
     """
-        Verify the results of the inversion of a dense matrix.
+        Compare the results of two matrices. Either dense or sparse.
     """
 
     if type(A_ref) == np.ndarray:
@@ -31,6 +31,17 @@ def verifResultsDense(A_ref, A):
                 return True
             else:
                 return False
+
+
+def verifResultsDiag(A_ref, A):
+    """
+        Compare the diagonal of two matrices.
+    """
+    
+    if np.allclose(np.diag(A_ref), np.diag(A)):
+        return True
+    else:
+        return False
 
 
 
