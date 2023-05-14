@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         # print size of data
-        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
+        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]} #orbitals: {nao}")
 
     # lesser green's function transposed
     gl_gold_t = np.copy(gl_gold[ij2ji,:], order="C")
@@ -530,14 +530,14 @@ if __name__ == "__main__":
 
     # calculate the screened interaction on every rank--------------------------
     if args.pool in ("True"):
-        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                             hamiltionian_obj, energy_loc,
                                                                                             pg_p2w_vec, pl_p2w_vec,
                                                                                             pr_p2w_vec, vh,
                                                                                             factor_w_loc, w_mkl_threads,
                                                                                             w_worker_threads)
     else:
-        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
+        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(
                                                                                             hamiltionian_obj, energy_loc,
                                                                                             pg_p2w_vec, pl_p2w_vec,
                                                                                             pr_p2w_vec, vh,

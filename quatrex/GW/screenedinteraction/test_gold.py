@@ -26,15 +26,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu",
-                        choices=["cpu_pool", "cpu"], required=False)
+    parser.add_argument("-t", "--type", default="cpu_alt",
+                        choices=["cpu_pool", "cpu", "cpu_alt"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     args = parser.parse_args()
 
     # set number of threads for the p2w step
-    w_mkl_threads = 4
+    w_mkl_threads = 8
     w_worker_threads = 10
 
     print("Used implementation: ", args.type)
@@ -54,7 +54,7 @@ if __name__ == "__main__":
     rowsRef, columnsRef, vh_gold                        = read_solution.load_v(args.file_vh)
     # mapping to transposed
     ij2ji                                               = change_format.find_idx_transposed(rows, columns)
-
+    
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
     # create hamiltonian object
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # blocklength
     lb = np.max(bmax - bmin + 1)
     # number of total orbitals
-    nao = nb * lb
+    nao = np.max(bmax) + 1
     # number of energy points
     ne = energy.size
     # number of  non zero elements
@@ -113,8 +113,7 @@ if __name__ == "__main__":
     # check if vh is hermitian
     assert np.allclose(vh_gold, np.conjugate(vh_gold[ij2ji]))
 
-    print("Number of energy points: ", ne)
-    print("Number of non zero elements: ", no)
+    print(f"#Energy: {ne} #nnz: {no} #orbitals: {nao}")
 
     # make input/output contiguous in orbitals
     pg_gold = pg_gold.transpose()
@@ -124,52 +123,105 @@ if __name__ == "__main__":
     wl_gold = wl_gold.transpose()
     wr_gold = wr_gold.transpose()
 
-    # transform from 2D format to list/vector of sparse arrays format
-    pg_cpu_vec = change_format.sparse2vecsparse_v2(pg_gold, rows, columns, nao)
-    pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
-    pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
-    # from data vector to sparse csr format
-    vh = sparse.coo_array((vh_gold, (rows, columns)),
-                          shape=(nao, nao), dtype = np.complex128).tocsr()
-
+    energy_copy = np.copy(energy)
+    ij2ji_copy = np.copy(ij2ji)
+    pg_copy = np.copy(pg_gold)
+    pl_copy = np.copy(pl_gold)
+    pr_copy = np.copy(pr_gold)
+    vh_copy = np.copy(vh_gold)
 
     if args.type == "cpu_pool":
-        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+        # transform from 2D format to list/vector of sparse arrays format
+        pg_cpu_vec = change_format.sparse2vecsparse_v2(pg_gold, rows, columns, nao)
+        pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
+        pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
+        # from data vector to sparse csr format
+        vh = sparse.coo_array((vh_gold, (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128).tocsr()
+
+        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                             hamiltionian_obj, energy,
                                                                                             pg_cpu_vec, pl_cpu_vec,
                                                                                             pr_cpu_vec, vh,
                                                                                             factor_w, w_mkl_threads,
                                                                                             w_worker_threads)
+        # lower diagonal blocks from physics identity
+        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
+        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
+        wr_lower = wr_upper.transpose((0,1,3,2))
+
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wg_diag, wg_upper,
+                                                        wg_lower, no, ne,
+                                                        energy_contiguous=False)
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wl_diag, wl_upper,
+                                                        wl_lower, no, ne,
+                                                        energy_contiguous=False)
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wr_diag, wr_upper,
+                                                        wr_lower, no, ne,
+                                                        energy_contiguous=False)
+
     elif args.type == "cpu":
-        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
+        # transform from 2D format to list/vector of sparse arrays format
+        pg_cpu_vec = change_format.sparse2vecsparse_v2(pg_gold, rows, columns, nao)
+        pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
+        pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
+        # from data vector to sparse csr format
+        vh = sparse.coo_array((vh_gold, (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128).tocsr()
+
+        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(
                                                                                             hamiltionian_obj, energy,
                                                                                             pg_cpu_vec, pl_cpu_vec,
                                                                                             pr_cpu_vec, vh,
-                                                                                            factor_w, w_mkl_threads
+                                                                                            factor_w, mkl_threads=w_mkl_threads
                                                                                             )
+        # lower diagonal blocks from physics identity
+        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
+        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
+        wr_lower = wr_upper.transpose((0,1,3,2))
+
+        wg_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wg_diag, wg_upper,
+                                                        wg_lower, no, ne,
+                                                        energy_contiguous=False)
+        wl_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wl_diag, wl_upper,
+                                                        wl_lower, no, ne,
+                                                        energy_contiguous=False)
+        wr_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wr_diag, wr_upper,
+                                                        wr_lower, no, ne,
+                                                        energy_contiguous=False)
+    elif args.type == "cpu_alt":
+        wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_alt(
+                                            hamiltionian_obj,
+                                            ij2ji,
+                                            rows,
+                                            columns,
+                                            pg_gold,
+                                            pl_gold,
+                                            pr_gold,
+                                            vh_gold,
+                                            factor_w,
+                                            map_diag_mm,
+                                            map_upper_mm,
+                                            map_lower_mm,
+                                            mkl_threads=w_mkl_threads
+                                )
     else:
         raise ValueError(
         "Argument error, type input not possible")
 
-    # lower diagonal blocks from physics identity
-    wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-    wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-    wr_lower = wr_upper.transpose((0,1,3,2))
-
-    wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                    map_lower_mm, wg_diag, wg_upper,
-                                                    wg_lower, no, ne,
-                                                    energy_contiguous=False)
-    wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                    map_lower_mm, wl_diag, wl_upper,
-                                                    wl_lower, no, ne,
-                                                    energy_contiguous=False)
-    wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                    map_lower_mm, wr_diag, wr_upper,
-                                                    wr_lower, no, ne,
-                                                    energy_contiguous=False)
-
     # compare with gold solution and normal matrix inverse
+    assert np.allclose(energy_copy, energy)
+    assert np.allclose(ij2ji_copy, ij2ji)
+    assert np.allclose(pg_copy, pg_gold)
+    assert np.allclose(pl_copy, pl_gold)
+    assert np.allclose(pr_copy, pr_gold)
+    assert np.allclose(vh_copy, vh_gold)
     diff_g = np.linalg.norm(wg_cpu - np.squeeze(wg_gold))
     diff_l = np.linalg.norm(wl_cpu - np.squeeze(wl_gold))
     diff_r = np.linalg.norm(wr_cpu - np.squeeze(wr_gold))
