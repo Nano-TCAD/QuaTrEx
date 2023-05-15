@@ -42,7 +42,6 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, mkl_threads = 1, 
     NT = DH.Bmax[-1] + 1
     Bsize = np.max(DH.Bmax - DH.Bmin + 1)
     
-
     (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(NE, NB, Bsize)
 
     mkl.set_num_threads(mkl_threads)
@@ -52,7 +51,8 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, mkl_threads = 1, 
     M_par = np.ndarray(shape = (E.shape[0],),dtype = object)
 
     for IE in range(NE):
-        M_par[IE] = (E[IE] + 1j*1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[IE]
+        SigL[IE] = (SigL[IE] - SigL[IE].T.conj()) / 2
+        SigG[IE] = (SigG[IE] - SigG[IE].T.conj()) / 2
     
     index_e = np.arange(NE)
     Bmin = DH.Bmin.copy()
@@ -109,6 +109,12 @@ def calc_GF_pool_mpi(
     (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(ne, nb, lb)
 
     mkl.set_num_threads(mkl_threads)
+
+    for ie in range(ne):
+        SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
+        SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
+        SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie])/2  
+        SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
 
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
     

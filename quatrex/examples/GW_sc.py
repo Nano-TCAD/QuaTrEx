@@ -74,7 +74,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-    energy = np.linspace(-17.5, 7.5, 3001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-17.5, 7.5, 251, endpoint = True, dtype = float) # Energy Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -323,9 +323,9 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 1.0
-    mem_g = 1.0
-    mem_w = 1.0
+    mem_s = 0.9
+    mem_g = 0.0
+    mem_w = 0.9
     # max number of iterations
 
     max_iter = 3

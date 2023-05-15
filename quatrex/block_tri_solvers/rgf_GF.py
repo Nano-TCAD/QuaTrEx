@@ -46,7 +46,7 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, fL, fR, Bmin_fi,
     #_, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
-        _, condL, _, SigRBL, min_dEkL  = beyn(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), imag_lim, R, 'L')
+        _, condL, _, SigRBL, min_dEkL  = beyn(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), imag_lim, R, 'L', function = 'G')
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
@@ -65,7 +65,7 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, fL, fR, Bmin_fi,
     
     #GR/GL/GG OBC right
     if not sancho:
-        _, condR, _, SigRBR, min_dEkR  = beyn(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  imag_lim, R, 'R')
+        _, condR, _, SigRBR, min_dEkR  = beyn(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  imag_lim, R, 'R', function = 'G')
 
     if np.isnan(condR) or sancho:
         _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),

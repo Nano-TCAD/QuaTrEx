@@ -26,7 +26,7 @@ from GW.polarization.kernel import g2p_cpu
 from GW.selfenergy.kernel import gw2s_cpu
 from GW.gold_solution import read_solution
 from GW.screenedinteraction.kernel import p2w_cpu
-from GW.coulomb_matrix.read_coulomb_matrix import load_V
+from GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
 from GreensFunction import calc_GF_pool
 from OMEN_structure_matrices import OMENHamClass
 from utils import change_format
@@ -100,8 +100,7 @@ if __name__ == "__main__":
 
 
     # Read Coulomb matrix and extract the nnz data of the coulomb matrix
-    V_sparse = load_V(args.file_hm, rows, columns)
-    V_data = V_sparse.data
+    V_sparse = load_V_mpi(args.file_hm, rows, columns, comm, rank)
 
     vh = V_sparse
 
