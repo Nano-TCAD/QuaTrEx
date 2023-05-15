@@ -6,8 +6,8 @@ Naming is correction_ + from where the correction term is read from.
 Has the same function as get_OBC_blocks.m, but split up for readability
 
 """
-import numpy as np
-from scipy import sparse
+import cupy as cp
+from cupyx.scipy import sparse
 import typing
 
 def stack_three(
@@ -90,7 +90,7 @@ def stack_nine(
 def stack_vh(
     vh_1: sparse.csr_matrix,
     vh_2: sparse.csr_matrix,
-    nbc: np.int64
+    nbc: cp.int64
 ) -> typing.Tuple[sparse.csr_matrix,
                   sparse.csr_matrix,
                   sparse.csr_matrix]:
@@ -100,7 +100,7 @@ def stack_vh(
     Args:
         vh_1 (sparse.csr_matrix): diag lesser polarization (nao,nao)
         vh_2 (sparse.csr_matrix): off lesser polarization (nao,nao)
-        nbc (np.int64): parameter to determine low large block size is after mm
+        nbc (cp.int64): parameter to determine low large block size is after mm
 
     Returns:
         typing.Tuple[sparse.csr_matrix, derived diagonal block
@@ -117,8 +117,8 @@ def stack_vh(
         vh_l = vh_u.conjugate().transpose()
 
     elif nbc == 2:
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
         vh_d = stack_four(vh_1,vh_2,
                           vh_2_ct,vh_1)
         vh_u = stack_three(zs_2,
@@ -127,9 +127,9 @@ def stack_vh(
 
     elif nbc == 3:
         # create empty sparse arrays to stack
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
-        zs_3 = sparse.csr_array((2*lb,3*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
+        zs_3 = sparse.csr_matrix((2*lb,3*lb), dtype=cp.complex128)
 
         # diagonal, upper, lower blocks
         vh_d = stack_nine(vh_1,vh_2,zs_1,
@@ -149,7 +149,7 @@ def stack_vh(
 def stack_pr(
     pr_1: sparse.csr_matrix,
     pr_2: sparse.csr_matrix,
-    nbc: np.int64
+    nbc: cp.int64
 ) -> typing.Tuple[sparse.csr_matrix,
                   sparse.csr_matrix,
                   sparse.csr_matrix]:
@@ -159,7 +159,7 @@ def stack_pr(
     Args:
         pr_1 (sparse.csr_matrix): diag lesser polarization (nao,nao)
         pr_2 (sparse.csr_matrix): off lesser polarization (nao,nao)
-        nbc (np.int64): parameter to determine low large block size is after mm
+        nbc (cp.int64): parameter to determine low large block size is after mm
 
     Returns:
         typing.Tuple[sparse.csr_matrix, derived diagonal block
@@ -177,8 +177,8 @@ def stack_pr(
         pr_l = pr_u.transpose()
 
     elif nbc == 2:
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
         pr_d = stack_four(pr_1,pr_2,
                           pr_2_t,pr_1)
         pr_u = stack_three(zs_2,
@@ -187,9 +187,9 @@ def stack_pr(
 
     elif nbc == 3:
         # create empty sparse arrays to stack
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
-        zs_3 = sparse.csr_array((2*lb,3*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
+        zs_3 = sparse.csr_matrix((2*lb,3*lb), dtype=cp.complex128)
         # diagonal, upper, lower blocks
         pr_d = stack_nine(pr_1,pr_2,zs_1,
                         pr_2_t,pr_1,pr_2,
@@ -206,7 +206,7 @@ def stack_pr(
 def stack_px(
     px_1: sparse.csr_matrix,
     px_2: sparse.csr_matrix,
-    nbc: np.int64
+    nbc: cp.int64
 ) -> typing.Tuple[sparse.csr_matrix,
                   sparse.csr_matrix,
                   sparse.csr_matrix]:
@@ -216,7 +216,7 @@ def stack_px(
     Args:
         px_1 (sparse.csr_matrix): diag lesser polarization (nao,nao)
         px_2 (sparse.csr_matrix): off lesser polarization (nao,nao)
-        nbc (np.int64): parameter to determine low large block size is after mm
+        nbc (cp.int64): parameter to determine low large block size is after mm
 
     Returns:
         typing.Tuple[sparse.csr_matrix, derived diagonal block
@@ -234,8 +234,8 @@ def stack_px(
         px_l = -px_u.conjugate().transpose()
 
     elif nbc == 2:
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
         px_d = stack_four(px_1,px_2,
                           -px_2_ct,px_1)
         px_u = stack_three(zs_2,
@@ -244,9 +244,9 @@ def stack_px(
 
     elif nbc == 3:
         # create empty sparse arrays to stack
-        zs_1 = sparse.csr_array((lb,lb), dtype=np.complex128)
-        zs_2 = sparse.csr_array((lb,2*lb), dtype=np.complex128)
-        zs_3 = sparse.csr_array((2*lb,3*lb), dtype=np.complex128)
+        zs_1 = sparse.csr_matrix((lb,lb), dtype=cp.complex128)
+        zs_2 = sparse.csr_matrix((lb,2*lb), dtype=cp.complex128)
+        zs_3 = sparse.csr_matrix((2*lb,3*lb), dtype=cp.complex128)
         # diagonal, upper, lower blocks
         px_d = stack_nine(px_1,px_2,zs_1,
                         -px_2_ct,px_1,px_2,
@@ -289,7 +289,7 @@ def stack_mr(
         
     """
     lb = vh_d.shape[0]
-    mr_d = sparse.identity(lb, format="csr",dtype=np.complex128) * (1+1j*1e-10)
+    mr_d = sparse.identity(lb, format="csr",dtype=cp.complex128) * (1+1j*1e-10)
     mr_d = mr_d - vh_l @ pr_u - vh_d @ pr_d - vh_u @ pr_l
     mr_u = -vh_d @ pr_u -vh_u @ pr_d
     mr_l = -vh_l @ pr_d -vh_d @ pr_l
@@ -341,25 +341,25 @@ def stack_lx(
     return lx_d, lx_u, lx_l
 
 def get_dl_obc_start(
-    mr_x: np.ndarray,
-    xr_d: np.ndarray,
-    xr_d_ct: np.ndarray,
-    lx_d: np.ndarray,
-    lx_o: np.ndarray
-) -> typing.Tuple[np.ndarray,
-                  np.ndarray]:
+    mr_x: sparse.csr_matrix,
+    xr_d: sparse.csr_matrix,
+    xr_d_ct: sparse.csr_matrix,
+    lx_d: sparse.csr_matrix,
+    lx_o: sparse.csr_matrix
+) -> typing.Tuple[sparse.csr_matrix,
+                  sparse.csr_matrix]:
     """Helper function to replace symmetric computations 
     for both greater and lesser obc corrections.
 
     Args:
-        mr_x (np.ndarray):
-        xr_d (np.ndarray):
-        xr_d_ct (np.ndarray):
-        lx_d (np.ndarray): different between lesser/greater
-        lx_o (np.ndarray): different between lesser/greater
+        mr_x (sparse.csr_matrix):
+        xr_d (sparse.csr_matrix):
+        xr_d_ct (sparse.csr_matrix):
+        lx_d (sparse.csr_matrix): different between lesser/greater
+        lx_o (sparse.csr_matrix): different between lesser/greater
 
     Returns:
-        typing.Tuple[np.ndarray, np.ndarray]: fx and ax_diff
+        typing.Tuple[sparse.csr_matrix, sparse.csr_matrix]: fx and ax_diff
     """
     # honestly no clue why
     # this function does what it does
@@ -373,42 +373,42 @@ def get_dl_obc_start(
 
 
 def get_dl_obc_end(
-    eivec: np.ndarray,
-    eivec_ct: np.ndarray,
-    ieivec: np.ndarray,
-    ieivec_ct: np.ndarray,
-    eival_sq: np.ndarray,
+    eivec: sparse.csr_matrix,
+    eivec_ct: sparse.csr_matrix,
+    ieivec: sparse.csr_matrix,
+    ieivec_ct: sparse.csr_matrix,
+    eival_sq: sparse.csr_matrix,
     sl_x: slice,
-    fx: np.ndarray,
-    mr_x: np.ndarray,
-    mr_x_ct: np.ndarray,
-    xr_d: np.ndarray,
-    xr_d_ct: np.ndarray,
-    ax_diff: np.ndarray,
+    fx: sparse.csr_matrix,
+    mr_x: sparse.csr_matrix,
+    mr_x_ct: sparse.csr_matrix,
+    xr_d: sparse.csr_matrix,
+    xr_d_ct: sparse.csr_matrix,
+    ax_diff: sparse.csr_matrix,
     ref_iteration: int
-) -> np.ndarray:
+) -> sparse.csr_matrix:
     """Helper function to replace symmetric computations 
     for both greater and lesser obc corrections.
 
     Args:
-        eivec (np.ndarray):
-        eivec_ct (np.ndarray):
-        ieivec (np.ndarray):
-        ieivec_ct (np.ndarray):
-        eival_sq (np.ndarray):
+        eivec (sparse.csr_matrix):
+        eivec_ct (sparse.csr_matrix):
+        ieivec (sparse.csr_matrix):
+        ieivec_ct (sparse.csr_matrix):
+        eival_sq (sparse.csr_matrix):
         sl_x (slice):
-        fx (np.ndarray): different between lesser/greater
-        mr_x (np.ndarray):
-        mr_x_ct (np.ndarray):
-        xr_d (np.ndarray):
-        xr_d_ct (np.ndarray):
-        ax_diff (np.ndarray): different between lesser/greater
+        fx (sparse.csr_matrix): different between lesser/greater
+        mr_x (sparse.csr_matrix):
+        mr_x_ct (sparse.csr_matrix):
+        xr_d (sparse.csr_matrix):
+        xr_d_ct (sparse.csr_matrix):
+        ax_diff (sparse.csr_matrix): different between lesser/greater
         ref_iteration (int): number of iterations for the refinement
 
     Returns:
-        np.ndarray:
+        sparse.csr_matrix:
     """
-    yx_d = np.divide(ieivec @ fx[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
+    yx_d = cp.divide(ieivec @ fx[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
     wx_d = eivec @ yx_d @ eivec_ct
     for i in range(ref_iteration):
         wx_d = fx[sl_x,sl_x] + xr_d[sl_x,:] @ mr_x[:,sl_x] @ wx_d @ mr_x_ct[sl_x,:] @ xr_d_ct[:,sl_x]
@@ -417,15 +417,15 @@ def get_dl_obc_end(
     return dlx_d
 
 def get_dl_obc(
-    xr_d: np.ndarray,
-    lg_d: np.ndarray,
-    lg_o: np.ndarray,
-    ll_d: np.ndarray,
-    ll_o: np.ndarray,
-    mr_x: np.ndarray,
+    xr_d: sparse.csr_matrix,
+    lg_d: sparse.csr_matrix,
+    lg_o: sparse.csr_matrix,
+    ll_d: sparse.csr_matrix,
+    ll_o: sparse.csr_matrix,
+    mr_x: sparse.csr_matrix,
     blk:  str
-) -> typing.Tuple[np.ndarray,
-                  np.ndarray]:
+) -> typing.Tuple[sparse.csr_matrix,
+                  sparse.csr_matrix]:
     """Calculates open boundary corrections for lg and ll
     Todo find out why it does what it does
 
@@ -442,7 +442,7 @@ def get_dl_obc(
         ValueError: if blk is not "R" or "L"
 
     Returns:
-        typing.Tuple[np.ndarray, np.ndarray]: greater and lesser correction
+        typing.Tuple[sparse.csr_matrix, sparse.csr_matrix]: greater and lesser correction
     """
     # Number of iterations for the refinement
     ref_iteration = 5
@@ -453,22 +453,11 @@ def get_dl_obc(
     # non zero indexes of mr_x
     rows, cols = mr_x.nonzero()
     if(not rows.size):
-        return np.nan, np.nan
+        return cp.nan, cp.nan
     # conjugate transpose of mr/xr
     mr_x_ct = mr_x.conjugate().transpose()
     xr_d_ct = xr_d.conjugate().transpose()
 
-    # honestly no clue why
-    # this function does what it does
-    # ag = mr_x @ xr_d @ lg_o
-    # al = mr_x @ xr_d @ ll_o
-
-    # # only difference between ax and ax^H is needed
-    # ag_diff = ag - ag.conjugate().transpose()
-    # al_diff = al - al.conjugate().transpose()
-
-    # fg = xr_d @ (lg_d - ag_diff) @ xr_d_ct
-    # fl = xr_d @ (ll_d - al_diff) @ xr_d_ct
     ag_diff, fg = get_dl_obc_start(
                                 mr_x,
                                 xr_d,
@@ -487,12 +476,12 @@ def get_dl_obc(
     # case for the left/right (start/end) block
     # differentiates between which block to look at
     if blk == "L":
-        idx_max = np.max([np.max(rows), lb - np.min(cols)])
+        idx_max = cp.max(cp.array([cp.max(rows), lb - cp.min(cols)]))
         ip = lb - idx_max
         sl_x = slice(ip,lb+1)
         sl_y = slice(0,idx_max)
     elif blk == "R":
-        idx_max = np.max([np.max(cols), lb - np.min(rows)])
+        idx_max = cp.max(cp.array([cp.max(cols), lb - cp.min(rows)]))
         ip = lb - idx_max
         sl_x = slice(0,idx_max+1)
         sl_y = slice(ip,lb+1)
@@ -502,23 +491,19 @@ def get_dl_obc(
 
     ar = xr_d[sl_x,sl_y] @ mr_x[sl_y,sl_x]
     # add imaginary part to stabilize
-    ar = ar + np.identity(ar.shape[0])*1j*1e-4
+    ar = ar + cp.identity(ar.shape[0])*1j*1e-4
 
     # eigen values and eigen vectors
-    eival, eivec = np.linalg.eig(ar)
+    # eig does not exist in cupy
+    eival, eivec = cp.linalg.eig(ar)
 
     # conjugate/transpose/abs square
     eivec_ct = eivec.conjugate().transpose()
-    ieivec = np.linalg.inv(eivec)
+    ieivec = cp.linalg.inv(eivec)
     ieivec_ct = ieivec.conjugate().transpose()
-    eival_sq = np.diag(eival) @ np.diag(eival).conjugate()
+    eival_sq = cp.diag(eival) @ cp.diag(eival).conjugate()
 
     # greater component
-    # yg_d = np.divide(ieivec @ fg[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
-    # wg_d = eivec @ yg_d @ eivec_ct
-    # wg_d = fg[sl_x,sl_x] + xr_d[sl_x,:] @ mr_x[:,sl_x] @ wg_d @ mr_x_ct[sl_x,:] @ xr_d_ct[:,sl_x]
-
-    # dlg_d = mr_x[:,sl_x] @ wg_d @ mr_x_ct[sl_x,:] - ag_diff
     dlg_d = get_dl_obc_end(eivec,
                         eivec_ct,
                         ieivec,
@@ -534,11 +519,6 @@ def get_dl_obc(
                         ref_iteration)
 
     # lesser component
-    # yl_d = np.divide(ieivec @ fl[sl_x,sl_x] @ ieivec_ct, 1 - eival_sq)
-    # wl_d = eivec @ yl_d @ eivec_ct
-    # wl_d = fl[sl_x,sl_x] + xr_d[sl_x,:] @ mr_x[:,sl_x] @ wl_d @ mr_x_ct[sl_x,:] @ xr_d_ct[:,sl_x]
-
-    # dll_d = mr_x[:,sl_x] @ wl_d @ mr_x_ct[sl_x,:] - al_diff
     dll_d = get_dl_obc_end(eivec,
                         eivec_ct,
                         ieivec,
@@ -554,4 +534,3 @@ def get_dl_obc(
                         ref_iteration)
 
     return dlg_d, dll_d
-

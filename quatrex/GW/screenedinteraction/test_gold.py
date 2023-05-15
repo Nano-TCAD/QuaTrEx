@@ -14,6 +14,8 @@ sys.path.append(parent_path)
 
 from GW.gold_solution import read_solution
 from GW.screenedinteraction.kernel import p2w_cpu
+# todo if gpu avail
+from GW.screenedinteraction.kernel import p2w_gpu
 from utils import change_format
 from OMEN_structure_matrices import OMENHamClass
 
@@ -27,7 +29,8 @@ if __name__ == "__main__":
         description="Tests different implementation of the screened interaction calculation"
     )
     parser.add_argument("-t", "--type", default="cpu_alt",
-                        choices=["cpu_pool", "cpu", "cpu_alt"], required=False)
+                        choices=["cpu_pool", "cpu",
+                        "cpu_alt", "gpu"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -183,21 +186,39 @@ if __name__ == "__main__":
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
         wr_lower = wr_upper.transpose((0,1,3,2))
 
-        wg_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wg_diag, wg_upper,
                                                         wg_lower, no, ne,
                                                         energy_contiguous=False)
-        wl_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wl_diag, wl_upper,
                                                         wl_lower, no, ne,
                                                         energy_contiguous=False)
-        wr_cpu2 = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wr_diag, wr_upper,
                                                         wr_lower, no, ne,
                                                         energy_contiguous=False)
     elif args.type == "cpu_alt":
         wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_alt(
                                             hamiltionian_obj,
+                                            ij2ji,
+                                            rows,
+                                            columns,
+                                            pg_gold,
+                                            pl_gold,
+                                            pr_gold,
+                                            vh_gold,
+                                            factor_w,
+                                            map_diag_mm,
+                                            map_upper_mm,
+                                            map_lower_mm,
+                                            mkl_threads=w_mkl_threads
+                                )
+    elif args.type == "gpu":
+        slicing_obj = p2w_gpu.Slice_w2p(bmax, bmin, nao, nbc)
+        # todo does not work
+        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu(
+                                            slicing_obj,
                                             ij2ji,
                                             rows,
                                             columns,
