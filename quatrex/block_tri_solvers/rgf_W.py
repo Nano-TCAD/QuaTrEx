@@ -51,13 +51,12 @@ but this goes against python naming style guide
 import numpy as np
 import numpy.typing as npt
 from scipy import sparse
-import sys
-import os
+import time
 import typing
 
-from OBC import beyn
+from OBC import beyn_cpu
 from OBC import sancho
-from OBC import dL_OBC_eigenmode
+from OBC import dL_OBC_eigenmode_cpu
 
 
 def rgf_W(
@@ -113,8 +112,15 @@ def rgf_W(
                   npt.NDArray[np.complex128],    wg from inv
                   npt.NDArray[np.complex128],    wl from inv
                   npt.NDArray[np.complex128]     wr from inv
-                ] warning all dense arrays
+                ] warning all dense arrays, only returned if ref_flag is True
     """
+
+    
+    times = np.zeros((10))
+
+
+    times[0] = -time.perf_counter()
+
 
     # Anti-Hermitian symmetrizing of PL and PG
     pl = 1j * np.imag(pl)
@@ -126,6 +132,12 @@ def rgf_W(
     # PR has to be derived from PL and PG and then has to be symmetrized
     pr = 1j * np.imag(pg - pl) / 2
     pr = (pr + pr.T) / 2
+
+
+    times[0] += time.perf_counter()
+
+    times[1] = -time.perf_counter()
+
 
     # limit for beyn
     imag_lim = 1e-4
@@ -180,36 +192,42 @@ def rgf_W(
     ll = vh_cp @ pl @ vh_cp_ct
 
 
+    times[1] += time.perf_counter()
+
+
+    times[2] = -time.perf_counter()
+
+
     # from G^{\lessgtr}\left(E\right) / G^{r}\left(E\right)
     # (diagonal, upper, lower block of the start block at the left)
-    pg_sd, pg_su, pg_sl = dL_OBC_eigenmode.stack_px(pg[slb_sd,slb_sd], pg[slb_sd,slb_so], nbc)
-    pl_sd, pl_su, pl_sl = dL_OBC_eigenmode.stack_px(pl[slb_sd,slb_sd], pl[slb_sd,slb_so], nbc)
-    pr_sd, pr_su, pr_sl = dL_OBC_eigenmode.stack_pr(pr[slb_sd,slb_sd], pr[slb_sd,slb_so], nbc)
+    pg_sd, pg_su, pg_sl = dL_OBC_eigenmode_cpu.stack_px(pg[slb_sd,slb_sd], pg[slb_sd,slb_so], nbc)
+    pl_sd, pl_su, pl_sl = dL_OBC_eigenmode_cpu.stack_px(pl[slb_sd,slb_sd], pl[slb_sd,slb_so], nbc)
+    pr_sd, pr_su, pr_sl = dL_OBC_eigenmode_cpu.stack_pr(pr[slb_sd,slb_sd], pr[slb_sd,slb_so], nbc)
     # (diagonal, upper, lower block of the end block at the right)
-    pg_ed, pg_eu, pg_el = dL_OBC_eigenmode.stack_px(pg[slb_ed,slb_ed], -pg[slb_ed,slb_eo].conjugate().transpose(), nbc)
-    pl_ed, pl_eu, pl_el = dL_OBC_eigenmode.stack_px(pl[slb_ed,slb_ed], -pl[slb_ed,slb_eo].conjugate().transpose(), nbc)
-    pr_ed, pr_eu, pr_el = dL_OBC_eigenmode.stack_pr(pr[slb_ed,slb_ed], pr[slb_ed,slb_eo].transpose(), nbc)
+    pg_ed, pg_eu, pg_el = dL_OBC_eigenmode_cpu.stack_px(pg[slb_ed,slb_ed], -pg[slb_ed,slb_eo].conjugate().transpose(), nbc)
+    pl_ed, pl_eu, pl_el = dL_OBC_eigenmode_cpu.stack_px(pl[slb_ed,slb_ed], -pl[slb_ed,slb_eo].conjugate().transpose(), nbc)
+    pr_ed, pr_eu, pr_el = dL_OBC_eigenmode_cpu.stack_pr(pr[slb_ed,slb_ed], pr[slb_ed,slb_eo].transpose(), nbc)
 
     # from \hat(V)\left(E\right) / G^{r}\left(E\right)
     # (diagonal, upper, lower block of the start block at the left)
-    vh_sd, vh_su, vh_sl = dL_OBC_eigenmode.stack_vh(vh[slb_sd,slb_sd], vh[slb_sd,slb_so], nbc)
+    vh_sd, vh_su, vh_sl = dL_OBC_eigenmode_cpu.stack_vh(vh[slb_sd,slb_sd], vh[slb_sd,slb_so], nbc)
     # (diagonal, upper, lower block of the end block at the right)
-    vh_ed, vh_eu, vh_el = dL_OBC_eigenmode.stack_vh(vh[slb_ed,slb_ed], vh[slb_ed,slb_eo].conjugate().transpose(), nbc)
+    vh_ed, vh_eu, vh_el = dL_OBC_eigenmode_cpu.stack_vh(vh[slb_ed,slb_ed], vh[slb_ed,slb_eo].conjugate().transpose(), nbc)
 
     # from L^{\lessgtr}\left(E\right)
     # (diagonal, upper, lower block of the start block at the left)
-    lg_sd, lg_su, lg_sl = dL_OBC_eigenmode.stack_lx(vh_sd, vh_su, vh_sl, pg_sd, pg_su, pg_sl)
-    ll_sd, ll_su, ll_sl = dL_OBC_eigenmode.stack_lx(vh_sd, vh_su, vh_sl, pl_sd, pl_su, pl_sl)
+    lg_sd, lg_su, lg_sl = dL_OBC_eigenmode_cpu.stack_lx(vh_sd, vh_su, vh_sl, pg_sd, pg_su, pg_sl)
+    ll_sd, ll_su, ll_sl = dL_OBC_eigenmode_cpu.stack_lx(vh_sd, vh_su, vh_sl, pl_sd, pl_su, pl_sl)
 
     # (diagonal, upper, lower block of the end block at the right)
-    lg_ed, lg_eu, lg_el = dL_OBC_eigenmode.stack_lx(vh_ed, vh_eu, vh_el, pg_ed, pg_eu, pg_el)
-    ll_ed, ll_eu, ll_el = dL_OBC_eigenmode.stack_lx(vh_ed, vh_eu, vh_el, pl_ed, pl_eu, pl_el)
+    lg_ed, lg_eu, lg_el = dL_OBC_eigenmode_cpu.stack_lx(vh_ed, vh_eu, vh_el, pg_ed, pg_eu, pg_el)
+    ll_ed, ll_eu, ll_el = dL_OBC_eigenmode_cpu.stack_lx(vh_ed, vh_eu, vh_el, pl_ed, pl_eu, pl_el)
 
     # from M^{r}\left(E\right)
     # (diagonal, upper, lower block of the start block at the left)
-    mr_sd, mr_su, mr_sl = dL_OBC_eigenmode.stack_mr(vh_sd, vh_su, vh_sl, pr_sd, pr_su, pr_sl)
+    mr_sd, mr_su, mr_sl = dL_OBC_eigenmode_cpu.stack_mr(vh_sd, vh_su, vh_sl, pr_sd, pr_su, pr_sl)
     # (diagonal, upper, lower block of the end block at the right)
-    mr_ed, mr_eu, mr_el = dL_OBC_eigenmode.stack_mr(vh_ed, vh_eu, vh_el, pr_ed, pr_eu, pr_el)
+    mr_ed, mr_eu, mr_el = dL_OBC_eigenmode_cpu.stack_mr(vh_ed, vh_eu, vh_el, pr_ed, pr_eu, pr_el)
 
     # correction for matrix multiplication--------------------------------------
 
@@ -246,7 +264,12 @@ def rgf_W(
     ll[slb_ed_mm, slb_ed_mm] = ll[slb_ed_mm, slb_ed_mm] + vh_eu @ pl_ed @ vh_el
 
 
+    times[2] += time.perf_counter()
+
     # correction for the matrix inverse calculations----------------------------
+
+    times[3] = -time.perf_counter()
+
 
     # conditions about convergence or meaningful results from
     # boundary correction calculations
@@ -255,7 +278,7 @@ def rgf_W(
 
     # correction for first block
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn.beyn(
+        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn(
                                                 mr_sd.toarray(),
                                                 mr_su.toarray(),
                                                 mr_sl.toarray(),
@@ -269,9 +292,32 @@ def rgf_W(
                                                 mr_sl.toarray(),
                                                 mr_su.toarray(),
                                                 vh_su.toarray())
+    # correction for last block
+    if not sancho_flag:
+        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_cpu.beyn(
+                                                mr_ed.toarray(),
+                                                mr_eu.toarray(),
+                                                mr_el.toarray(),
+                                                imag_lim, rr, "R")
+        if not np.isnan(cond_r):
+            dvh_ed = mr_eu @ dxr_ed @ vh_el
+
+    if np.isnan(cond_r) or sancho_flag:
+        dxr_ed, dmr_ed, dvh_ed, cond_r = sancho.open_boundary_conditions(
+                                                mr_ed.toarray(),
+                                                mr_eu.toarray(),
+                                                mr_el.toarray(),
+                                                vh_el.toarray())
+
+
+    times[3] += time.perf_counter()
+
+    times[4] = -time.perf_counter()
+
+
     # beyn gave a meaningful result
     if not np.isnan(cond_l):
-        dlg_sd, dll_sd = dL_OBC_eigenmode.get_dl_obc(
+        dlg_sd, dll_sd = dL_OBC_eigenmode_cpu.get_dl_obc(
                                                 dxr_sd,
                                                 lg_sd.toarray(),
                                                 lg_su.toarray(),
@@ -290,25 +336,10 @@ def rgf_W(
             cond_l = np.nan
 
 
-    # correction for last block
-    if not sancho_flag:
-        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn.beyn(
-                                                mr_ed.toarray(),
-                                                mr_eu.toarray(),
-                                                mr_el.toarray(),
-                                                imag_lim, rr, "R")
-        if not np.isnan(cond_r):
-            dvh_ed = mr_eu @ dxr_ed @ vh_el
 
-    if np.isnan(cond_r) or sancho_flag:
-        dxr_ed, dmr_ed, dvh_ed, cond_r = sancho.open_boundary_conditions(
-                                                mr_ed.toarray(),
-                                                mr_eu.toarray(),
-                                                mr_el.toarray(),
-                                                vh_el.toarray())
     # condR = np.nan
     if not np.isnan(cond_r):
-        dlg_ed, dll_ed = dL_OBC_eigenmode.get_dl_obc(
+        dlg_ed, dll_ed = dL_OBC_eigenmode_cpu.get_dl_obc(
                                                 dxr_ed,
                                                 lg_ed.toarray(),
                                                 lg_el.toarray(),
@@ -329,8 +360,11 @@ def rgf_W(
     min_dEk = np.min((min_dEkL, min_dEkR))
 
 
+    times[4] += time.perf_counter()
     # start of rgf_W------------------------------------------------------------
 
+
+    times[5] = -time.perf_counter()
 
     # check if OBC did not fail
     if not np.isnan(cond_r) and not np.isnan(cond_l):
@@ -619,7 +653,10 @@ def rgf_W(
                 wr_upper[idx_ib, :, :] *= factor
                 wg_upper[idx_ib, :, :] *= factor
                 wl_upper[idx_ib, :, :] *= factor
-                
+
+        times[5] += time.perf_counter()
+
+
         if ref_flag:
             # reference solution
             # invert m
@@ -633,4 +670,5 @@ def rgf_W(
 
             return xr_ref*factor, wg_ref*factor, wl_ref*factor, wr_ref*factor
 
+        return times
 
