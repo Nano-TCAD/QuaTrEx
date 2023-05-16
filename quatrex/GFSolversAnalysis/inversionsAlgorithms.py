@@ -31,37 +31,39 @@ def fullInversion(A):
 
 def rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     """
-        Block-diagonal selected inversion using RGF algorithm.
+        Block-tridiagonal selected inversion using RGF algorithm.
     """
     nblocks = A_bloc_diag.shape[0]
     blockSize = A_bloc_diag.shape[1]
     size = A_bloc_diag.shape[0] * A_bloc_diag.shape[1]
 
-    g = np.zeros((nblocks, blockSize, blockSize))
+    # Incomplete forward substitution
+    g_diag  = np.zeros((nblocks, blockSize, blockSize))
+
+    # Full backward substitution
+    G_diag  = np.zeros((nblocks, blockSize, blockSize))
+    G_upper = np.zeros((nblocks-1, blockSize, blockSize))
+    G_lower = np.zeros((nblocks-1, blockSize, blockSize))
 
     tic = time.perf_counter()
     # Initialisation of g
-    g[0, ] = np.linalg.inv(A_bloc_diag[0, ])
+    g_diag[0, ] = np.linalg.inv(A_bloc_diag[0, ])
 
     # Forward substitution
     for i in range(1, nblocks):
-        g[i, ] = np.linalg.inv(A_bloc_diag[i, ] - A_bloc_lower[i-1, ] @ g[i-1, ] @ A_bloc_upper[i-1, ])
+        g_diag[i, ] = np.linalg.inv(A_bloc_diag[i, ] - A_bloc_lower[i-1, ] @ g_diag[i-1, ] @ A_bloc_upper[i-1, ])
+
+    # Initialisation of last element of G
+    G_diag[-1, ] = g_diag[-1, ]
 
     # Backward substitution
     for i in range(nblocks-2, -1, -1): 
-        g[i, ] = g[i, ] @ (np.identity(blockSize) + A_bloc_upper[i, ] @ g[i+1, ] @ A_bloc_lower[i, ] @ g[i, ])
+        G_diag[i, ]  = g_diag[i, ] @ (np.identity(blockSize) + A_bloc_upper[i, ] @ G_diag[i+1, ] @ A_bloc_lower[i, ] @ g_diag[i, ])
+        G_upper[i, ] = -g_diag[i, ] @ A_bloc_upper[i, ] @ G_diag[i+1, ]
+        G_lower[i, ] = -g_diag[i, ] @ A_bloc_lower[i, ] @ G_diag[i+1, ]
     toc = time.perf_counter()
 
     print(f"RGF: Inversion took {toc - tic:0.4f} seconds")
 
-    # Reshape g to a 2D matrix
-    G = np.zeros((size, size))
-
-    for i in range(nblocks):
-        G[i*blockSize:(i+1)*blockSize, i*blockSize:(i+1)*blockSize] = g[i, ]
-
-    # Only return the diagonal
-    G_diag = np.array([G[i, i] for i in range(size)])
-
-    return G, G_diag
+    return G_diag, G_upper, G_lower
 

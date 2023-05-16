@@ -48,12 +48,13 @@ def denseToSparseStorage(A):
     return csc_matrix(A)
 
 
-def denseToBlockStorage(A, nBlocks):
+
+def denseToBlocksTriDiagStorage(A, blockSize):
     """
         Converte a numpy dense matrix to 3 dimensional numpy array of blocks. Handling
         the diagonal blocks, upper diagonal blocks and lower diagonal blocks separately.
     """
-    blockSize = int(np.ceil(A.shape[0]/nBlocks))
+    nBlocks = int(np.ceil(A.shape[0]/blockSize))
 
     A_bloc_diag = np.zeros((nBlocks, blockSize, blockSize))
     A_bloc_upper = np.zeros((nBlocks-1, blockSize, blockSize))
