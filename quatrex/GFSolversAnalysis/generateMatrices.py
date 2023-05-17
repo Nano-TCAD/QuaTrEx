@@ -1,22 +1,28 @@
 import numpy as np
 from scipy.sparse import csc_matrix
 
-def generateDenseMatrix(size):
+def generateDenseMatrix(size, seed=None):
     """
         Generate a dense matrix of shape: (size x size) filled with random numbers.
     """
     print("Generating dense matrix of size: ", size)
 
+    if seed is not None:
+        np.random.seed(seed)
+
     return np.random.rand(size, size)
 
 
 
-def generateSparseMatrix(size, density):
+def generateSparseMatrix(size, density, seed=None):
     """
         Generate a sparse matrix of shape: (size x size), densisty of non-zero elements: density,
         filled with random numbers.
     """
     print("Generating sparse matrix of size: ", size, " and density: ", density)
+
+    if seed is not None:
+        np.random.seed(seed)
 
     A = np.random.rand(size, size)
     A[A < (1-density)] = 0
@@ -24,12 +30,15 @@ def generateSparseMatrix(size, density):
     
 
 
-def generateBandedDiagonalMatrix(size, bandwidth):
+def generateBandedDiagonalMatrix(size, bandwidth, seed=None):
     """
         Generate a banded diagonal matrix of shape: (size x size), bandwidth: bandwidth,
         filled with random numbers.
     """
     print("Generating banded diagonal matrix of size: ", size, " and bandwidth: ", bandwidth)
+
+    if seed is not None:
+        np.random.seed(seed)
 
     A = np.random.rand(size, size)
     
