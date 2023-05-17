@@ -29,38 +29,37 @@ def get_band_edge(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, Bmin, Bmax, side = 
 
 def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, Bmin, Bmax, comm, rank, size, count, disp, side = 'left'):
     nao = Bmax[-1] + 1
-    # First step: get a first estimate of the CB edge
 
+    # First step: get a first estimate of the CB edge
     ## Broadcasting minimum index
     if rank == 0:
         min_ind = np.argmin(np.abs(E - ECmin_DFT))
-        print(min_ind)
         comm.Bcast([min_ind, MPI.INT], root = 0)
     else:
         min_ind = np.empty(1, dtype = np.int64)
         comm.Bcast([min_ind, MPI.INT], root = 0)
+        min_ind = min_ind[0]
     
     ## Checking which rank has the minimum index
     send_rank = 0
 
     for check_rank in range(size):
-        if check_rank in range(disp[1, check_rank], disp[1, check_rank] + count[1, check_rank]):
+        if min_ind in range(disp[1, check_rank], disp[1, check_rank] + count[1, check_rank]):
             send_rank = check_rank
             break
     
     ## Sending the SigmaR_GW and SigmaR_PHN from the rank with the minimum index to rank 0
     if rank == 0:
-        print(send_rank)
         if send_rank == 0:
             Ek = calc_bandstructure_mpi(S, H, SigmaR_GW[min_ind % (disp[1, rank] + min_ind)], SigmaR_PHN[min_ind % (disp[1, rank] + min_ind)], Bmin, Bmax, side)
             ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
             ECmin_int = Ek[ind_ek_plus]
             
         else:
-            sr_gw_buf = np.empty(count[1, send_rank], dtype = np.float64)
-            sr_phn_buf = np.empty(count[1, send_rank], dtype = np.float64)
-            comm.Receive([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = send_rank, tag = 0)
-            comm.Receive([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = send_rank, tag = 1)
+            sr_gw_buf = np.empty(rows.shape[0], dtype = np.complex128)
+            sr_phn_buf = np.empty(rows.shape[0], dtype = np.complex128)
+            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source = send_rank, tag = 0)
+            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source = send_rank, tag = 1)
 
             SigmaR_recv = csc_array((sr_gw_buf, (rows, columns)), shape = (nao, nao))
             SigmaR_PHN_recv = csc_array((sr_phn_buf, (rows, columns)), shape = (nao, nao))
@@ -70,8 +69,9 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
 
     else:
         if send_rank == rank:
-            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].data
-            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].data
+            print(min_ind % disp[1, rank])
+            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].toarray()[rows, columns]
+            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].toarray()[rows, columns]
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 0)
             comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 1)
 
@@ -83,12 +83,13 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
     else:
         min_ind = np.empty(1, dtype = np.int64)
         comm.Bcast(min_ind, root = 0)
+        min_ind = min_ind[0]
 
     ## Checking which rank has the minimum index
     send_rank = 0
 
     for check_rank in range(size):
-        if check_rank in range(disp[1, check_rank], disp[1, check_rank] + count[1, check_rank]):
+        if min_ind in range(disp[1, check_rank], disp[1, check_rank] + count[1, check_rank]):
             send_rank = check_rank
             break
 
@@ -100,10 +101,10 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
             ECmin = Ek[ind_ek]
             
         else:
-            sr_gw_buf = np.empty(count[1, send_rank], dtype = np.float64)
-            sr_phn_buf = np.empty(count[1, send_rank], dtype = np.float64)
-            comm.Receive([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = send_rank, tag = 0)
-            comm.Receive([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = send_rank, tag = 1)
+            sr_gw_buf = np.empty(rows.shape[0], dtype = np.complex128)
+            sr_phn_buf = np.empty(rows.shape[0], dtype = np.complex128)
+            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source = send_rank, tag = 0)
+            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source = send_rank, tag = 1)
 
             SigmaR_recv = csc_array((sr_gw_buf, (rows, columns)), shape = (nao, nao))
             SigmaR_PHN_recv = csc_array((sr_phn_buf, (rows, columns)), shape = (nao, nao))
@@ -113,8 +114,8 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
 
     else:
         if send_rank == rank:
-            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].data
-            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].data
+            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].toarray()[rows, columns]
+            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].toarray()[rows, columns]
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 0)
             comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 1)
 
@@ -179,12 +180,13 @@ if __name__ == '__main__':
     sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     # transform from 2D format to list/vector of sparse arrays format-----------
     sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
+    
     # Adjusting Fermi Levels of both contacts to the current iteration band minima
     sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-    ECmin = get_band_edge(ECmin, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
+    # ECmin = get_band_edge(ECmin, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
 
-    print(ECmin)
 
     ECmin_MPI = get_band_edge_mpi(ECmin, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
 
-    print(ECmin_MPI)
+    if rank == 0:
+        print(ECmin_MPI)

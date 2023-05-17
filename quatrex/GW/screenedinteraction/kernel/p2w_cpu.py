@@ -19,6 +19,7 @@ def p2w_pool_mpi_cpu(
     pl: npt.NDArray[np.complex128],
     pr: npt.NDArray[np.complex128],
     vh: npt.NDArray[np.complex128],
+    dosw: npt.NDArray[np.complex128],
     factor: npt.NDArray[np.float64],
     mkl_threads: int = 1,
     worker_num: int = 1
@@ -76,7 +77,7 @@ def p2w_pool_mpi_cpu(
                     wg_diag, wg_upper,
                     wl_diag, wl_upper,
                     wr_diag, wr_upper,
-                    xr_diag, repeat(nbc),
+                    xr_diag, dosw, repeat(nbc),
                     index_e, factor
                      )
 
@@ -89,6 +90,7 @@ def p2w_mpi_cpu(
     pl: npt.NDArray[np.complex128],
     pr: npt.NDArray[np.complex128],
     vh: npt.NDArray[np.complex128],
+    dosw: npt.NDArray[np.complex128],
     factor: npt.NDArray[np.float64],
     mkl_threads: int = 1
 ) -> typing.Tuple[
@@ -142,7 +144,7 @@ def p2w_mpi_cpu(
                 wg_diag[ie], wg_upper[ie],
                 wl_diag[ie], wl_upper[ie],
                 wr_diag[ie], wr_upper[ie],
-                xr_diag[ie], nbc,
+                xr_diag[ie], dosw[ie], nbc,
                 index_e[ie], factor[ie]
         )
         

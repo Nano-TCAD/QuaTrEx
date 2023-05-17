@@ -111,6 +111,9 @@ def calc_GF_pool_mpi(
     mkl.set_num_threads(mkl_threads)
 
     for ie in range(ne):
+        SigL[ie] = 1j * np.imag(SigL[ie])
+        SigG[ie] = 1j * np.imag(SigG[ie])  
+
         SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
         SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
         SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie])/2  

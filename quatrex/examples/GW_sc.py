@@ -335,13 +335,15 @@ if __name__ == "__main__":
 
     # output folder
     folder = '/results/CNT_sc/'
+    dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+    dosw = np.zeros(shape=(ne,3), dtype = np.complex128)
 
     # todo start self consistent loop-------------------------------------------
     for iter_num in range(max_iter):
 
         # initialize observables----------------------------------------------------
         # density of states
-        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+
         # current per energy
         ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
         # timing transform
@@ -531,14 +533,14 @@ if __name__ == "__main__":
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                 hamiltonian_obj, energy_loc,
                                                                                                 pg_p2w_vec, pl_p2w_vec,
-                                                                                                pr_p2w_vec, vh,
+                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                 factor_w_loc, w_mkl_threads,
                                                                                                 w_worker_threads)
         else:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                                                                                                 hamiltonian_obj, energy_loc,
                                                                                                 pg_p2w_vec, pl_p2w_vec,
-                                                                                                pr_p2w_vec, vh,
+                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],   
                                                                                                 factor_w_loc, w_mkl_threads
                                                                                                 )
         # timing compute
@@ -687,6 +689,7 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+            #comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
             #average time
             comm.Reduce(MPI.IN_PLACE, times_transform_list, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, times_transform_block, op=MPI.SUM, root=0)

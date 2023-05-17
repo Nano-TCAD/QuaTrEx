@@ -74,6 +74,7 @@ def rgf_W(
     wr_diag:  npt.NDArray[np.complex128],
     wr_upper: npt.NDArray[np.complex128],
     xr_diag:  npt.NDArray[np.complex128],
+    DOSW:      npt.NDArray[np.complex128],
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
@@ -612,6 +613,7 @@ def rgf_W(
             wg_diag[idx_ib, :, :] *= factor
             wl_diag[idx_ib, :, :] *= factor
             wr_diag[idx_ib, :, :] *= factor
+            DOSW[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
 
             if idx_ib < nb_mm - 1:
                 wr_upper[idx_ib, :, :] *= factor
