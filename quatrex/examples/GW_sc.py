@@ -335,14 +335,16 @@ if __name__ == "__main__":
 
     # output folder
     folder = '/results/CNT_sc/'
-    dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
-    dosw = np.zeros(shape=(ne,3), dtype = np.complex128)
+    
+
 
     # todo start self consistent loop-------------------------------------------
     for iter_num in range(max_iter):
 
         # initialize observables----------------------------------------------------
         # density of states
+        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        dosw = np.zeros(shape=(ne,3), dtype = np.complex128)
 
         # current per energy
         ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
@@ -689,7 +691,7 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
-            #comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
             #average time
             comm.Reduce(MPI.IN_PLACE, times_transform_list, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, times_transform_block, op=MPI.SUM, root=0)
@@ -701,6 +703,7 @@ if __name__ == "__main__":
             times_compute /= size
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+            comm.Reduce(dosw, None, op=MPI.SUM, root=0)
             #send time to master
             comm.Reduce(times_transform_list, None, op=MPI.SUM, root=0)
             comm.Reduce(times_transform_block, None, op=MPI.SUM, root=0)

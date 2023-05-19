@@ -15,7 +15,7 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
     theta_max = 2*np.pi
     NT = 51
     eps_lim = 1e-8
-    ref_iteration = 5                                 
+    ref_iteration = 2                                
     cond = 0
     min_dEk = 1e8
 
@@ -117,7 +117,7 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
             if(np.imag(np.trace(gR)) > 0 and function == 'G'):
                     ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, 1.0)
                     gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
-                    for IC in range(4*ref_iteration):
+                    for IC in range(ref_iteration):
                         gR = np.linalg.inv(M00 - M10 @ gR @ M01)
             Sigma = M10 @ gR @ M01
         else:
@@ -127,9 +127,9 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
                 gR = np.linalg.inv(M00 - M01 @ gR @ M10)
             if(np.imag(np.trace(gR)) > 0 and function == 'G'):
                     ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, -1.0)
-                    gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
-                    for IC in range(4*ref_iteration):
-                        gR = np.linalg.inv(M00 - M10 @ gR @ M01)
+                    gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
+                    for IC in range(ref_iteration):
+                        gR = np.linalg.inv(M00 - M01 @ gR @ M10)
             Sigma = M01 @ gR @ M10
 
         ind = np.where(abs(dEk_dk))
