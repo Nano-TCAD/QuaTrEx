@@ -28,9 +28,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu_alt",
+    parser.add_argument("-t", "--type", default="cpu",
                         choices=["cpu_pool", "cpu",
-                        "cpu_alt", "gpu"], required=False)
+                            "cpu_alt", "cpu_block"
+                            "gpu"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -92,7 +93,7 @@ if __name__ == "__main__":
     # larges block length after matrix multiplication
     lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
     # create map from block format to 2D format after matrix multiplication
-    map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns,
+    map_diag_mm2m, map_upper_mm2m, map_lower_mm2m = change_format.map_block2sparse_alt(rows, columns,
                                                                                  bmax_mm, bmin_mm)
     # creating the smoothing and filtering factors
     # number of points to smooth the edges of the Green's Function
@@ -153,16 +154,16 @@ if __name__ == "__main__":
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
         wr_lower = wr_upper.transpose((0,1,3,2))
 
-        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wg_diag, wg_upper,
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wg_diag, wg_upper,
                                                         wg_lower, no, ne,
                                                         energy_contiguous=False)
-        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wl_diag, wl_upper,
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wl_diag, wl_upper,
                                                         wl_lower, no, ne,
                                                         energy_contiguous=False)
-        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wr_diag, wr_upper,
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wr_diag, wr_upper,
                                                         wr_lower, no, ne,
                                                         energy_contiguous=False)
 
@@ -186,16 +187,16 @@ if __name__ == "__main__":
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
         wr_lower = wr_upper.transpose((0,1,3,2))
 
-        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wg_diag, wg_upper,
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wg_diag, wg_upper,
                                                         wg_lower, no, ne,
                                                         energy_contiguous=False)
-        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wl_diag, wl_upper,
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wl_diag, wl_upper,
                                                         wl_lower, no, ne,
                                                         energy_contiguous=False)
-        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wr_diag, wr_upper,
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wr_diag, wr_upper,
                                                         wr_lower, no, ne,
                                                         energy_contiguous=False)
     elif args.type == "cpu_alt":
@@ -209,9 +210,25 @@ if __name__ == "__main__":
                                             pr_gold,
                                             vh_gold,
                                             factor_w,
-                                            map_diag_mm,
-                                            map_upper_mm,
-                                            map_lower_mm,
+                                            map_diag_mm2m,
+                                            map_upper_mm2m,
+                                            map_lower_mm2m,
+                                            mkl_threads=w_mkl_threads
+                                )
+    elif args.type == "cpu_block":
+        wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_block(
+                                            hamiltionian_obj,
+                                            ij2ji,
+                                            rows,
+                                            columns,
+                                            pg_gold,
+                                            pl_gold,
+                                            pr_gold,
+                                            vh_gold,
+                                            factor_w,
+                                            map_diag_mm2m,
+                                            map_upper_mm2m,
+                                            map_lower_mm2m,
                                             mkl_threads=w_mkl_threads
                                 )
     elif args.type == "gpu":
@@ -227,9 +244,9 @@ if __name__ == "__main__":
                                             pr_gold,
                                             vh_gold,
                                             factor_w,
-                                            map_diag_mm,
-                                            map_upper_mm,
-                                            map_lower_mm,
+                                            map_diag_mm2m,
+                                            map_upper_mm2m,
+                                            map_lower_mm2m,
                                             mkl_threads=w_mkl_threads
                                 )
     else:

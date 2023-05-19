@@ -646,6 +646,34 @@ def sparse2block_alt(
     blocks_lower[map_lower[0,:],map_lower[1,:],map_lower[2,:]] = x_s[map_lower[3,:]]
     return blocks_diag, blocks_upper, blocks_lower
 
+
+def sparse2block_no_map(
+    in_sparse: sparse.spmatrix,
+    out_diag: npt.NDArray[np.complex128],
+    out_upper: npt.NDArray[np.complex128],
+    out_lower: npt.NDArray[np.complex128],
+    bmax: np.ndarray,
+    bmin: np.ndarray
+):
+    """
+    Transforms a sparse matrix into the three dense block matrices
+
+    Args:
+        in_sparse (sparse.spmatrix): Sparse matrix to transform
+        out_diag (npt.NDArray[np.complex128]): Diagonal block tensor
+        out_upper (npt.NDArray[np.complex128]): Upper block tensor
+        out_lower (npt.NDArray[np.complex128]): Lower block tensor
+        bmax (np.ndarray): End index of each block
+        bmin (np.ndarray): Start index of each block
+    """
+    # number of blocks
+    nb = bmin.size
+    for i in range(nb):
+        out_diag[i,:,:] = in_sparse[bmin[i]:bmax[i]+1,bmin[i]:bmax[i]+1].toarray()
+    for i in range(nb-1):
+        out_upper[i,:,:] = in_sparse[bmin[i]:bmax[i]+1,bmin[i+1]:bmax[i+1]+1].toarray()
+        out_lower[i,:,:] = in_sparse[bmin[i+1]:bmax[i+1]+1,bmin[i]:bmax[i]+1].toarray()
+
 def sparse2block_energy_alt(
     map_diag: np.ndarray,
     map_upper: np.ndarray,
