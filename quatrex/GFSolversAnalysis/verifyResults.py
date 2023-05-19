@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.sparse import csc_matrix
 
+
+
 def verifResults(A_ref, A):
     """
         Compare the results of two matrices. Either dense or sparse.

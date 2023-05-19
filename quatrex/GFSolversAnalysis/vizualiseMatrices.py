@@ -1,6 +1,8 @@
 from matplotlib import pyplot as plt
 import numpy as np
 
+
+
 def vizualiseDenseMatrixFlat(mat, legend=""):
     """
         Visualise a dense matrix in a 2D plot. Third dimension is represented by color.

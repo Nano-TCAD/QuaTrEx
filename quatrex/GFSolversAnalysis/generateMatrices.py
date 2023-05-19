@@ -1,11 +1,17 @@
 import numpy as np
 from scipy.sparse import csc_matrix
+from mpi4py import MPI
+
 
 def generateDenseMatrix(size, seed=None):
     """
         Generate a dense matrix of shape: (size x size) filled with random numbers.
     """
-    print("Generating dense matrix of size: ", size)
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    if rank == 0:
+        print("Generating dense matrix of size: ", size)
 
     if seed is not None:
         np.random.seed(seed)
@@ -19,7 +25,11 @@ def generateSparseMatrix(size, density, seed=None):
         Generate a sparse matrix of shape: (size x size), densisty of non-zero elements: density,
         filled with random numbers.
     """
-    print("Generating sparse matrix of size: ", size, " and density: ", density)
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    if rank == 0:
+        print("Generating sparse matrix of size: ", size, " and density: ", density)
 
     if seed is not None:
         np.random.seed(seed)
@@ -35,7 +45,11 @@ def generateBandedDiagonalMatrix(size, bandwidth, seed=None):
         Generate a banded diagonal matrix of shape: (size x size), bandwidth: bandwidth,
         filled with random numbers.
     """
-    print("Generating banded diagonal matrix of size: ", size, " and bandwidth: ", bandwidth)
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+
+    if rank == 0:
+        print("Generating banded diagonal matrix of size: ", size, " and bandwidth: ", bandwidth)
 
     if seed is not None:
         np.random.seed(seed)
