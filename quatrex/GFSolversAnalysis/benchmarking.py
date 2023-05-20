@@ -24,6 +24,7 @@ if __name__ == "__main__":
 
     # Dense and sparse initial matrices
     A = gen.generateBandedDiagonalMatrix(size, bandwidth, 63)
+    A = gen.makeSymmetric(A)
     A_csc = gen.denseToSparseStorage(A)
 
     # Dense and sparse reference solutions (Full inversons)

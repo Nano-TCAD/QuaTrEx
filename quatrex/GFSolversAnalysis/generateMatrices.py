@@ -90,3 +90,11 @@ def denseToBlocksTriDiagStorage(A, blockSize):
             A_bloc_lower[i, ] = A[(i+1)*blockSize:(i+2)*blockSize, i*blockSize:(i+1)*blockSize]
 
     return A_bloc_diag, A_bloc_upper, A_bloc_lower
+
+
+
+def makeSymmetric(A):
+    """
+        Make a matrix symmetric by adding its transpose to itself.
+    """
+    return A + A.T
