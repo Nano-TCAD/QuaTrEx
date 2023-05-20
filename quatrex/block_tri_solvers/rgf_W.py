@@ -277,14 +277,24 @@ def rgf_W(
     cond_r = 0.0
 
     # correction for first block
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn(
+    #                                             mr_sd.toarray(),
+    #                                             mr_su.toarray(),
+    #                                             mr_sl.toarray(),
+    #                                             imag_lim, rr, "L")
+    #     if not np.isnan(cond_l):
+    #         dvh_sd = mr_sl @ dxr_sd @ vh_su
+    # old wrong version of beyn
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn(
+        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn_old(
                                                 mr_sd.toarray(),
                                                 mr_su.toarray(),
                                                 mr_sl.toarray(),
                                                 imag_lim, rr, "L")
         if not np.isnan(cond_l):
             dvh_sd = mr_sl @ dxr_sd @ vh_su
+
 
     if np.isnan(cond_l) or sancho_flag:
         dxr_sd, dmr_sd, dvh_sd, cond_l = sancho.open_boundary_conditions(
@@ -293,14 +303,24 @@ def rgf_W(
                                                 mr_su.toarray(),
                                                 vh_su.toarray())
     # correction for last block
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_cpu.beyn(
+    #                                             mr_ed.toarray(),
+    #                                             mr_eu.toarray(),
+    #                                             mr_el.toarray(),
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dvh_ed = mr_eu @ dxr_ed @ vh_el
+    # old wrong version of beyn
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_cpu.beyn(
+        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_cpu.beyn_old(
                                                 mr_ed.toarray(),
                                                 mr_eu.toarray(),
                                                 mr_el.toarray(),
                                                 imag_lim, rr, "R")
         if not np.isnan(cond_r):
             dvh_ed = mr_eu @ dxr_ed @ vh_el
+
 
     if np.isnan(cond_r) or sancho_flag:
         dxr_ed, dmr_ed, dvh_ed, cond_r = sancho.open_boundary_conditions(
@@ -686,6 +706,7 @@ def rgf_w_opt(
     wr_diag:  npt.NDArray[np.complex128],
     wr_upper: npt.NDArray[np.complex128],
     xr_diag:  npt.NDArray[np.complex128],
+    dosw:      npt.NDArray[np.complex128],
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
@@ -714,6 +735,8 @@ def rgf_w_opt(
         wr_diag (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
         wr_upper (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm-1, maxblocklength_mm, maxblocklength_mm)
         xr_diag (npt.NDArray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        dosw (npt.NDArray[np.complex128]): density of states, vector of size number of blocks
+        nbc (np.int64): how block size changes after matrix multiplication
         ie (np.int32): energy index (not used)
         factor (np.float64, optional): factor to multiply the result with. Defaults to 1.0.
         ref_flag (bool, optional): If reference solution to rgf made by np.linalg.inv should be returned
@@ -728,7 +751,7 @@ def rgf_w_opt(
     """
 
     
-    times = np.zeros((10))
+    times = np.zeros((10), dtype=np.float64)
 
 
     times[0] = -time.perf_counter()
@@ -879,8 +902,21 @@ def rgf_w_opt(
     cond_r = 0.0
 
     # correction for first block
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn(
+    #                                             mr_s[0],
+    #                                             mr_s[1],
+    #                                             mr_s[2],
+    #                                             imag_lim, rr, "L")
+        
+        
+    #     if not np.isnan(cond_l):
+    #         dmr_sd -= dmr
+    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
+
+    # old wrong version
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn(
+        _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
                                                 mr_s[0],
                                                 mr_s[1],
                                                 mr_s[2],
@@ -899,8 +935,18 @@ def rgf_w_opt(
                                                 vh_s[0])
         dmr_sd -= dmr
     # correction for last block
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn(
+    #                                             mr_e[0],
+    #                                             mr_e[1],
+    #                                             mr_e[2],
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dmr_ed -= dmr
+    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
+    # old wrong version
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn(
+        _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
                                                 mr_e[0],
                                                 mr_e[1],
                                                 mr_e[2],
@@ -908,7 +954,6 @@ def rgf_w_opt(
         if not np.isnan(cond_r):
             dmr_ed -= dmr
             dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
-
     if np.isnan(cond_r) or sancho_flag:
         dxr_ed, dmr, dvh_ed, cond_r = sancho.open_boundary_conditions(
                                                 mr_e[0],
@@ -1251,6 +1296,7 @@ def rgf_w_opt(
             wg_diag[idx_ib, :, :] *= factor
             wl_diag[idx_ib, :, :] *= factor
             wr_diag[idx_ib, :, :] *= factor
+            dosw[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
 
             if idx_ib < nb_mm - 1:
                 wr_upper[idx_ib, :, :] *= factor

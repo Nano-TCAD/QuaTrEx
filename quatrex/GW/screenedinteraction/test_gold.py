@@ -30,8 +30,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("-t", "--type", default="cpu",
                         choices=["cpu_pool", "cpu",
-                            "cpu_alt", "cpu_block"
-                            "gpu"], required=False)
+                            "cpu_alt", "gpu"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -101,6 +100,8 @@ if __name__ == "__main__":
     factor_w = np.ones(ne)
     factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     factor_w[np.where(np.invert(w_mask))[0]] = 0.0
+    # initialize the density of states
+    dosw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
 
     # sanity checks
     assert np.max(columns) == nao - 1
@@ -144,11 +145,11 @@ if __name__ == "__main__":
                             shape=(nao, nao), dtype = np.complex128).tocsr()
 
         wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                            hamiltionian_obj, energy,
-                                                                                            pg_cpu_vec, pl_cpu_vec,
-                                                                                            pr_cpu_vec, vh,
-                                                                                            factor_w, w_mkl_threads,
-                                                                                            w_worker_threads)
+                                                                                hamiltionian_obj, energy,
+                                                                                pg_cpu_vec, pl_cpu_vec,
+                                                                                pr_cpu_vec, vh,
+                                                                                dosw,factor_w,
+                                                                                w_mkl_threads, w_worker_threads)
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
@@ -177,11 +178,11 @@ if __name__ == "__main__":
                             shape=(nao, nao), dtype = np.complex128).tocsr()
 
         wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(
-                                                                                            hamiltionian_obj, energy,
-                                                                                            pg_cpu_vec, pl_cpu_vec,
-                                                                                            pr_cpu_vec, vh,
-                                                                                            factor_w, mkl_threads=w_mkl_threads
-                                                                                            )
+                                                                                hamiltionian_obj, energy,
+                                                                                pg_cpu_vec, pl_cpu_vec,
+                                                                                pr_cpu_vec, vh,
+                                                                                dosw, factor_w,
+                                                                                mkl_threads=w_mkl_threads)
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
@@ -201,22 +202,6 @@ if __name__ == "__main__":
                                                         energy_contiguous=False)
     elif args.type == "cpu_alt":
         wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_alt(
-                                            hamiltionian_obj,
-                                            ij2ji,
-                                            rows,
-                                            columns,
-                                            pg_gold,
-                                            pl_gold,
-                                            pr_gold,
-                                            vh_gold,
-                                            factor_w,
-                                            map_diag_mm2m,
-                                            map_upper_mm2m,
-                                            map_lower_mm2m,
-                                            mkl_threads=w_mkl_threads
-                                )
-    elif args.type == "cpu_block":
-        wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_block(
                                             hamiltionian_obj,
                                             ij2ji,
                                             rows,
@@ -274,4 +259,3 @@ if __name__ == "__main__":
     assert np.allclose(wr_gold, wr_cpu, atol=1e-6, rtol=1e-6)
 
     print("The chosen implementation " + args.type + " is correct")
-

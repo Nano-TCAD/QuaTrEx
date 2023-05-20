@@ -173,6 +173,7 @@ if __name__ == "__main__":
     # end and starting indexes of off diagonal blocks after matrix multiplication
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
+    nb_mm = bmin_mm.shape[0]
 
     # create map from block format to 2D format
     map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns, bmax, bmin)
@@ -324,6 +325,7 @@ if __name__ == "__main__":
     # initialize observables----------------------------------------------------
     # density of states
     dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+    dosw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
     # current per energy
     ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
@@ -404,7 +406,7 @@ if __name__ == "__main__":
                                                             energy_fl,
                                                             energy_fr,
                                                             temp,
-                                                            dos,
+                                                            dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                             factor_g_loc,
                                                             gf_mkl_threads,
                                                             gf_worker_threads
@@ -419,7 +421,7 @@ if __name__ == "__main__":
                                                             energy_fl,
                                                             energy_fr,
                                                             temp,
-                                                            dos,
+                                                            dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                             factor_g_loc,
                                                             gf_mkl_threads,
                                                             1
@@ -534,13 +536,14 @@ if __name__ == "__main__":
                                                                                             hamiltionian_obj, energy_loc,
                                                                                             pg_p2w_vec, pl_p2w_vec,
                                                                                             pr_p2w_vec, vh,
-                                                                                            factor_w_loc, w_mkl_threads,
-                                                                                            w_worker_threads)
+                                                                                            dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], factor_w_loc,
+                                                                                            w_mkl_threads, w_worker_threads)
     else:
         wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(
                                                                                             hamiltionian_obj, energy_loc,
                                                                                             pg_p2w_vec, pl_p2w_vec,
                                                                                             pr_p2w_vec, vh,
+                                                                                            dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                             factor_w_loc, w_mkl_threads
                                                                                             )
     # timing compute
