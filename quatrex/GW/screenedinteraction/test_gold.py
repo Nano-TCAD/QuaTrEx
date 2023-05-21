@@ -217,10 +217,9 @@ if __name__ == "__main__":
                                             mkl_threads=w_mkl_threads
                                 )
     elif args.type == "gpu":
-        slicing_obj = p2w_gpu.Slice_w2p(bmax, bmin, nao, nbc)
-        # todo does not work
+        # todo suboptimal
         wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu(
-                                            slicing_obj,
+                                            hamiltionian_obj,
                                             ij2ji,
                                             rows,
                                             columns,
@@ -231,8 +230,7 @@ if __name__ == "__main__":
                                             factor_w,
                                             map_diag_mm2m,
                                             map_upper_mm2m,
-                                            map_lower_mm2m,
-                                            mkl_threads=w_mkl_threads
+                                            map_lower_mm2m
                                 )
     else:
         raise ValueError(

@@ -194,7 +194,7 @@ def p2w_mpi_cpu(
     index_e = np.arange(ne)
 
     for ie in range(ne):
-        rgf_W.rgf_W(
+        times += rgf_W.rgf_w_opt(
                 vh,
                 pg[ie],
                 pl[ie],
@@ -206,12 +206,12 @@ def p2w_mpi_cpu(
                 xr_diag[ie], dosw[ie], nbc,
                 index_e[ie], factor[ie]
         )
-    # print("Time symmetrize: ", times[0])
-    # print("Time sr,lg,ll arrays: ", times[1])
-    # print("Time scattering obc: ", times[2])
-    # print("Time beyn obc: ", times[3])
-    # print("Time dl obc: ", times[4])
-    # print("Time inversion: ", times[5])
+    print("Time symmetrize: ", times[0])
+    print("Time sr,lg,ll arrays: ", times[1])
+    print("Time scattering obc: ", times[2])
+    print("Time beyn obc: ", times[3])
+    print("Time dl obc: ", times[4])
+    print("Time inversion: ", times[5])
 
     return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
 
@@ -239,11 +239,13 @@ def p2w_mpi_cpu_alt(
     Uses only mkl threading.
     Splits up the screened interaction calculations into six parts:
     - Symmetrization of the polarization.
-    - Change of the format into vectors of sparse matrices.
-    - Calculation of helper variables.
-    - Application of the scattering boundary conditions.
-    - Application of the beyn boundary conditions.
+    - Change of the format into vectors of sparse matrices
+    + Calculation of helper variables.
+    + calculation of the blocks for boundary conditions.
+    - calculation of the beyn boundary conditions.
+    - calculation of the dl boundary conditions.
     - Inversion
+    - back transformation into 2D format
 
     Args:
         hamiltionian_obj (object): Class containing the hamiltonian information
@@ -278,6 +280,8 @@ def p2w_mpi_cpu_alt(
     # start and end index of each block in python indexing
     bmax = hamiltionian_obj.Bmax - 1
     bmin = hamiltionian_obj.Bmin - 1
+    # block lengths
+    lb = bmax - bmin + 1
     # fix nbc to 2 for the given solution
     # todo calculate it
     nbc = 2
@@ -301,10 +305,28 @@ def p2w_mpi_cpu_alt(
     wl_upper = np.zeros((ne, nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
     wr_upper = np.zeros((ne, nb_mm-1, lb_max_mm, lb_max_mm), dtype = np.complex128)
 
+    # create buffer for boundary conditions
+    mr_sf = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    mr_ef = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    lg_sf = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    lg_ef = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    ll_sf = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    ll_ef = np.zeros((ne, 3, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dxr_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dxr_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)    
+    dmr_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dmr_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dlg_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dlg_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dll_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dll_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    vh_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    vh_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dvh_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+    dvh_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
+
     # set number of mkl threads
     mkl.set_num_threads(mkl_threads)
-
-
 
     times[0] = -time.perf_counter()
     # todo try to not additionally symmetrize
@@ -318,105 +340,91 @@ def p2w_mpi_cpu_alt(
     pr = (pr + pr[:,ij2ji]) / 2
     times[0] += time.perf_counter()
 
-
-    # copy vh to overwrite it
+    # compute helper arrays
     times[1] = -time.perf_counter()
-    # todo possible to merge with later computations
     vh_sparse = sparse.csr_array((vh, (rows, columns)),
                           shape=(nao, nao), dtype = np.complex128)
-    # transform from 2D format to list/vector of sparse arrays format
-    pg_vec = change_format.sparse2vecsparse_v2(pg, rows, columns, nao)
-    pl_vec = change_format.sparse2vecsparse_v2(pl, rows, columns, nao)
-    pr_vec = change_format.sparse2vecsparse_v2(pr, rows, columns, nao)
-    times[1] += time.perf_counter()
-    
-
-    # compute helper arrays
-    # sr is not the self energy, but a helper variable
-    times[2] = -time.perf_counter()
-
-
-    vh_vec = np.array([vh_sparse.copy() for i in range(ne)])
     mr_vec = np.ndarray((ne,), dtype=object)
-    sr_vec = np.ndarray((ne,), dtype=object)
     lg_vec = np.ndarray((ne,), dtype=object)
     ll_vec = np.ndarray((ne,), dtype=object)
     for i in range(ne):
-        sr_vec[i], lg_vec[i], ll_vec[i] = obc_w_cpu.obc_w_sl(vh_vec[i], pg_vec[i], pl_vec[i], pr_vec[i])
+        pg_s = sparse.csr_array((pg[i,:,], (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128)
+        pl_s = sparse.csr_array((pl[i,:,], (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128)
+        pr_s = sparse.csr_array((pr[i,:,], (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128)
+        mr_vec[i], lg_vec[i], ll_vec[i] = obc_w_cpu.obc_w_sl(vh_sparse, pg_s, pl_s, pr_s, nao)
+        obc_w_cpu.obc_w_sc(
+                    pg_s,
+                    pl_s,
+                    pr_s,
+                    vh_sparse,
+                    mr_sf[i],
+                    mr_ef[i],
+                    lg_sf[i],
+                    lg_ef[i],
+                    ll_sf[i],
+                    ll_ef[i],
+                    dmr_sf[i],
+                    dmr_ef[i],
+                    dlg_sf[i],
+                    dlg_ef[i],
+                    dll_sf[i],
+                    dll_ef[i],
+                    vh_sf[i],
+                    vh_ef[i],
+                    bmax,
+                    bmin,
+                    nbc)
+    times[1] += time.perf_counter()
 
-    times[2] += time.perf_counter()
 
-
-
-    # boundary conditions
-    times[3] = -time.perf_counter()
+    times[2] = -time.perf_counter()
     cond_l = np.zeros((ne), dtype=np.float64)
     cond_r = np.zeros((ne), dtype=np.float64)
-
     for i in range(ne):
-        mr_vec[i] = obc_w_cpu.obc_w_sc(
-                                pg_vec[i],
-                                pl_vec[i],
-                                pr_vec[i],
-                                vh_vec[i],
-                                sr_vec[i],
-                                lg_vec[i],
-                                ll_vec[i],
-                                bmax,
-                                bmin,
-                                nbc)
+        cond_r[i], cond_l[i] = obc_w_cpu.obc_w_beyn(
+                        dxr_sf[i],
+                        dxr_ef[i],
+                        mr_sf[i],
+                        mr_ef[i],
+                        vh_sf[i],
+                        vh_ef[i],
+                        dmr_sf[i],
+                        dmr_ef[i],
+                        dvh_sf[i],
+                        dvh_ef[i])
+        
+    times[2] += time.perf_counter()
+
+    times[3] = -time.perf_counter()
+    for i in range(ne):
+        if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
+            obc_w_cpu.obc_w_dl(
+                    dxr_sf[i],
+                    dxr_ef[i],
+                    lg_sf[i],
+                    lg_ef[i],
+                    ll_sf[i],
+                    ll_ef[i],
+                    mr_sf[i],
+                    mr_ef[i],
+                    dlg_sf[i],
+                    dll_sf[i],
+                    dlg_ef[i],
+                    dll_ef[i])
     times[3] += time.perf_counter()
 
 
     times[4] = -time.perf_counter()
-    dxr_sd = np.ndarray((ne,), dtype=object)
-    dxr_ed = np.ndarray((ne,), dtype=object)
-    dmr_sd = np.ndarray((ne,), dtype=object)
-    dmr_ed = np.ndarray((ne,), dtype=object)
-    dvh_sd = np.ndarray((ne,), dtype=object)
-    dvh_ed = np.ndarray((ne,), dtype=object)
-    for i in range(ne):
-        cond_r[i], cond_l[i], dxr_sd[i], dxr_ed[i], dmr_sd[i], dmr_ed[i], dvh_sd[i], dvh_ed[i] = obc_w_cpu.obc_w_beyn(
-                        pr_vec[i],
-                        vh_vec[i],
-                        bmax,
-                        bmin,
-                        nbc)
-        
-    times[4] += time.perf_counter()
-
-    times[5] = -time.perf_counter()
-    for i in range(ne):
-        cond_r[i], cond_l[i] = obc_w_cpu.obc_w_dl(
-                                pg_vec[i],
-                                pl_vec[i],
-                                pr_vec[i],
-                                vh_vec[i],
-                                mr_vec[i],
-                                lg_vec[i],
-                                ll_vec[i],
-                                dxr_sd[i],
-                                dxr_ed[i],
-                                dmr_sd[i],
-                                dmr_ed[i],
-                                dvh_sd[i],
-                                dvh_ed[i],
-                                bmax,
-                                bmin,
-                                nbc,
-                                cond_l[i],
-                                cond_r[i])
-    times[5] += time.perf_counter()
-
-
-    times[6] = -time.perf_counter()
     # calculate the inversion for every energy point
     for i in range(ne):
         if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
             matrix_inversion_w.rgf(
                 bmax_mm,
                 bmin_mm,
-                vh_vec[i],
+                vh_sparse,
                 mr_vec[i],
                 lg_vec[i],
                 ll_vec[i],
@@ -427,12 +435,20 @@ def p2w_mpi_cpu_alt(
                 wl_upper[i],
                 wr_diag[i],
                 wr_upper[i],
-                xr_diag[i]
+                xr_diag[i],
+                dmr_ef[i,0],
+                dlg_ef[i,0],
+                dll_ef[i,0],
+                dvh_ef[i,0],
+                dmr_sf[i,0],
+                dlg_sf[i,0],
+                dll_sf[i,0],
+                dvh_sf[i,0]
             )
-    times[6] += time.perf_counter()
+    times[4] += time.perf_counter()
     
 
-    times[7] = -time.perf_counter()
+    times[5] = -time.perf_counter()
     # lower blocks from identity
     wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
     wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
@@ -451,15 +467,13 @@ def p2w_mpi_cpu_alt(
                                                     map_lower_mm2m, wr_diag, wr_upper,
                                                     wr_lower, no, ne,
                                                     energy_contiguous=False)
-    times[7] += time.perf_counter()
+    times[5] += time.perf_counter()
 
 
     print("Time symmetrize: ", times[0])
-    print("Time to list: ", times[1])
-    print("Time sr,lg,ll arrays: ", times[2])
-    print("Time scattering obc: ", times[3])
-    print("Time beyn obc: ", times[4])
-    print("Time dl obc: ", times[5])
-    print("Time inversion: ", times[6])
-    print("Time block: ", times[7])
+    print("Time to list + sr,lg,ll arrays + scattering obc: ", times[1])
+    print("Time beyn obc: ", times[2])
+    print("Time dl obc: ", times[3])
+    print("Time inversion: ", times[4])
+    print("Time block: ", times[5])
     return wg, wl, wr
