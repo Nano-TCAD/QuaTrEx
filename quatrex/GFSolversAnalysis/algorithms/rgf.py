@@ -63,17 +63,14 @@ def rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     toc = time.perf_counter() # -----------------------------
 
 
-    if np.allclose(G_diag_left_to_right, G_diag_right_to_left):
+    """ if np.allclose(G_diag_left_to_right, G_diag_right_to_left):
         print("RGF: G_diag_left_to_right and G_diag_right_to_left are close")
 
     if np.allclose(G_upper_1, G_upper_2):
         print("RGF: G_upper_1 and G_upper_2 are close")
 
-    print("G_upper_1", G_upper_1)
-    print("G_upper_2", G_upper_2)
-
     if np.allclose(G_lower_1, G_lower_2):
-        print("RGF: G_lower_1 and G_lower_2 are close")
+        print("RGF: G_lower_1 and G_lower_2 are close") """
 
     print(f"RGF: Inversion took {toc - tic:0.4f} seconds")
     return G_diag_left_to_right, G_upper_1, G_lower_2

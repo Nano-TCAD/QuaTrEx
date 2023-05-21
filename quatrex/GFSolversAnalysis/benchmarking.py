@@ -44,7 +44,7 @@ if __name__ == "__main__":
     A_debug_diag, A_debug_upper, A_debug_lower = gen.denseToBlocksTriDiagStorage(A, blocksize)
 
 
-
+    comm.barrier()
     # ---------------------------------------------------------------------------------------------
     # 1. RGF  
     # ---------------------------------------------------------------------------------------------
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                                                             G_rgf_upper, 
                                                             G_rgf_lower)) 
         
-        print("RGF diag validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
+        """ print("RGF diag validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
                                                                 A_refsol_bloc_upper, 
                                                                 A_refsol_bloc_lower, 
                                                                 G_rgf_diag, 
@@ -78,40 +78,39 @@ if __name__ == "__main__":
                                                                     A_refsol_bloc_lower, 
                                                                     A_refsol_bloc_diag, 
                                                                     A_refsol_bloc_upper, 
-                                                                    G_rgf_lower)) 
-
+                                                                    G_rgf_lower))  """
 
 
         """ print("A_debug_lower", A_debug_lower[-1])
         print("A_debug_upper", A_debug_upper[-1]) """
 
 
-        print("A_refsol_bloc_lower", A_refsol_bloc_lower[-1])
-        print("G_rgf_lower", G_rgf_lower[-1])
+        """ print("A_refsol_bloc_lower", A_refsol_bloc_lower[-1])
+        print("G_rgf_lower", G_rgf_lower[-1]) """
 
         """ print("A_refsol_bloc_upper", A_refsol_bloc_upper[-1])
         print("G_rgf_upper", G_rgf_upper[-1]) """
 
-        viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
-        viz.vizualiseDenseMatrixFromBlocks(G_rgf_diag, G_rgf_upper, G_rgf_lower, "RGF solution")
+        """ viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
+        viz.vizualiseDenseMatrixFromBlocks(G_rgf_diag, G_rgf_upper, G_rgf_lower, "RGF solution") """
 
 
-
+    comm.barrier()
     # ---------------------------------------------------------------------------------------------
     # 2. RGF 2-sided 
     # ---------------------------------------------------------------------------------------------
     # mpiexec -n 2 python benchmarking.py
 
-    """ G_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
+    G_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
 
     if rank == 0: # Results agregated on 1st process and compared to reference solution
         print("RGF 2-sided validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
                                                                       A_refsol_bloc_upper, 
                                                                       A_refsol_bloc_lower, 
-                                                                      G_rgf2sided_diag[0], 
-                                                                      A_refsol_bloc_upper[1], 
-                                                                      A_refsol_bloc_lower[2])) 
+                                                                      G_rgf2sided_diag, 
+                                                                      A_refsol_bloc_upper, 
+                                                                      A_refsol_bloc_lower)) 
 
         viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
-        viz.vizualiseDenseMatrixFromBlocks(G_rgf2sided_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "RGF 2-sided solution") """
+        viz.vizualiseDenseMatrixFromBlocks(G_rgf2sided_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "RGF 2-sided solution")
     
