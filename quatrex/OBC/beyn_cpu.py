@@ -270,6 +270,19 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
     P0 = np.zeros((N, N), dtype=np.complex)
     P1 = np.zeros((N, N), dtype=np.complex)
 
+    # ztmp = z.reshape(-1,1,1)
+    # dz_dthetatmp = dz_dtheta.reshape(-1,1,1)
+    # dthetatmp = dtheta.reshape(-1,1,1)
+    # tmpx = dz_dthetatmp*dthetatmp
+    # tmpy = ztmp*dz_dthetatmp*dthetatmp
+    # if type == 'L':
+    #     T = M00 + 1/ztmp*M01 + ztmp*M10
+    # else:
+    #     T = M00 + ztmp*M01 + 1/ztmp*M10
+    # iT = np.linalg.inv(T)
+    # P0 = np.sum(iT*tmpx, axis = 0)/(2*np.pi*1j)
+    # P1 = np.sum(iT*tmpy, axis = 0)/(2*np.pi*1j)
+
     for I in range(len(z)):
 
         if type == 'L':
@@ -289,12 +302,14 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
     RP1 = Y.T@P1
 
     LV, LS, LW = svd(LP0, full_matrices=False)
-    Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
+    Lind = np.count_nonzero(abs(LS) > eps_lim)
+    # Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
 
     RV, RS, RW = svd(RP0, full_matrices=True)
-    Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
+    Rind = np.count_nonzero(abs(RS) > eps_lim)
+    # Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
 
-    if len(Lind) == 0:
+    if Lind == 0:
 
         cond = np.nan
         ksurf = None
@@ -303,17 +318,17 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
 
     else:
 
-        LV = LV[:, Lind]
-        LS = LS[Lind]
-        LW = np.conj(LW).T[:, Lind]
+        LV = LV[:, :Lind]
+        LS = LS[:Lind]
+        LW = np.conj(LW).T[:, :Lind]
 
         Llambda, Lu = eig(np.conj(LV).T@LP1@LW@np.linalg.inv(np.diag(LS)))
         #Llambda = np.diag(Llambda)
         phiL = LV@Lu
 
-        RV = RV[:, Rind]
-        RS = RS[Rind]
-        RW = np.conj(RW).T[:, Rind]
+        RV = RV[:, :Rind]
+        RS = RS[:Rind]
+        RW = np.conj(RW).T[:, :Rind]
 
         Rlambda, Ru = eig(np.linalg.inv(np.diag(RS))@np.conj(RV).T@RP1@RW)
         #Rlambda = np.diag(Rlambda)

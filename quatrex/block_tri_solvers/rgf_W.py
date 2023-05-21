@@ -969,8 +969,8 @@ def rgf_w_opt(
 
 
     # beyn gave a meaningful result
-    if not np.isnan(cond_l):
-        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc(
+    if not np.isnan(cond_l) and not np.isnan(cond_l):
+        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
                                                 dxr_sd,
                                                 lg_s[0],
                                                 lg_s[1],
@@ -978,17 +978,15 @@ def rgf_w_opt(
                                                 ll_s[1],
                                                 mr_s[2],
                                                 blk="L")
-        if np.isnan(dll).any():
-            cond_l = np.nan
-        else:
-            dlg_sd += dlg
-            dll_sd += dll
+        dlg_sd += dlg
+        dll_sd += dll
+        # if np.isnan(dll).any():
+        #     cond_l = np.nan
+        # else:
+        #     dlg_sd += dlg
+        #     dll_sd += dll
 
-
-
-    # condR = np.nan
-    if not np.isnan(cond_r):
-        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc(
+        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
                                                 dxr_ed,
                                                 lg_e[0],
                                                 lg_e[2],
@@ -996,11 +994,13 @@ def rgf_w_opt(
                                                 ll_e[2],
                                                 mr_e[1],
                                                 blk="R")
-        if np.isnan(dll_ed).any():
-            cond_r = np.nan
-        else:
-            dlg_ed += dlg
-            dll_ed += dll
+        dlg_ed += dlg
+        dll_ed += dll
+        # if np.isnan(dll_ed).any():
+        #     cond_r = np.nan
+        # else:
+        #     dlg_ed += dlg
+        #     dll_ed += dll
 
     min_dEk = np.min((min_dEkL, min_dEkR))
 

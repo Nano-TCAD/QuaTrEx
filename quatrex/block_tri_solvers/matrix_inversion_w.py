@@ -69,7 +69,15 @@ def rgf(
     wl_upper: npt.NDArray[np.complex128],
     wr_diag:  npt.NDArray[np.complex128],
     wr_upper: npt.NDArray[np.complex128],
-    xr_diag:  npt.NDArray[np.complex128]
+    xr_diag:  npt.NDArray[np.complex128],
+    dmr_ed:  npt.NDArray[np.complex128],
+    dlg_ed:  npt.NDArray[np.complex128],
+    dll_ed:  npt.NDArray[np.complex128],
+    dvh_ed:  npt.NDArray[np.complex128],
+    dmr_sd:  npt.NDArray[np.complex128],
+    dlg_sd:  npt.NDArray[np.complex128],
+    dll_sd:  npt.NDArray[np.complex128],
+    dvh_sd:  npt.NDArray[np.complex128]
 ):
     """
     Inversion of the screened interaction using the RGF algorithm.
@@ -89,6 +97,14 @@ def rgf(
         wr_diag (npt.NDArray[np.complex128]): Retarded screened interaction diagonal blocks
         wr_upper (npt.NDArray[np.complex128]): Retarded screened interaction upper diagonal blocks
         xr_diag (npt.NDArray[np.complex128]): Helper variable diagonal blocks
+        dmr_ed (npt.NDArray[np.complex128]): Change of end block of mr through OBC
+        dlg_ed (npt.NDArray[np.complex128]): Change of end block of lg through OBC
+        dll_ed (npt.NDArray[np.complex128]): Change of end block of ll through OBC
+        dvh_ed (npt.NDArray[np.complex128]): Change of end block of vh through OBC
+        dmr_sd (npt.NDArray[np.complex128]): Change of start block of mr through OBC
+        dlg_sd (npt.NDArray[np.complex128]): Change of start block of lg through OBC
+        dll_sd (npt.NDArray[np.complex128]): Change of start block of ll through OBC
+        dvh_sd (npt.NDArray[np.complex128]): Change of start block of vh through OBC
     """
 
 
@@ -131,20 +147,20 @@ def rgf(
     lb_lb = lb_vec_mm[idx_lb]
 
     # x^{r}_E_nn = M_E_nn^{-1}
-    xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray())
-    xr_lb_ct = xr_lb.conjugate().transpose()
+    xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray() + dmr_ed)
+    xr_lb_ct = xr_lb.conjugate().T
     xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
 
     # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
-    wg_lb = xr_lb @ lg[slb_lb, slb_lb] @ xr_lb_ct
+    wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray() + dlg_ed) @ xr_lb_ct
     wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
 
     # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
-    wl_lb = xr_lb @ ll[slb_lb, slb_lb] @ xr_lb_ct
+    wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray() + dll_ed) @ xr_lb_ct
     wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
 
     # wR_E_nn = xR_E_nn * V_nn
-    wr_lb  = xr_lb @ vh[slb_lb, slb_lb]
+    wr_lb  = xr_lb @ (vh[slb_lb, slb_lb].toarray() - dvh_ed)
     wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
 
 
@@ -179,7 +195,11 @@ def rgf(
         ll_c = ll[slb_c,slb_c].toarray()
         ll_d = ll[slb_p,slb_c].toarray()
 
-
+        if idx_ib == 0:
+            lg_c += dlg_sd
+            ll_c += dll_sd
+            vh_c -= dvh_sd
+            mr_c += dmr_sd
         # MxR = M_E_kk+1 * xR_E_k+1k+1
         mr_xr = mr_r @ xr_p
 
@@ -188,14 +208,14 @@ def rgf(
         xr_diag_rgf[idx_ib, :lb_i, :lb_i] = xr_c
 
         # conjugate and transpose
-        mr_r_ct = mr_r.conjugate().transpose()
-        xr_c_ct = xr_c.conjugate().transpose()
+        mr_r_ct = mr_r.conjugate().T
+        xr_c_ct = xr_c.conjugate().T
 
         # A^{\lessgtr} = M_E_kk+1 * xR_E_k+1k+1 * L^{\lessgtr}_E_k+1k
         ag = mr_xr @ lg_d
         al = mr_xr @ ll_d
-        ag_diff = ag - ag.conjugate().transpose()
-        al_diff = al - al.conjugate().transpose()
+        ag_diff = ag - ag.conjugate().T
+        al_diff = al - al.conjugate().T
 
         # w^{\lessgtr}_E_kk = xR_E_kk * (L^{\lessgtr}_E_kk + M_E_kk+1*w^{\lessgtr}_E_k+1k+1*M_E_kk+1.H - (A^{\lessgtr} - A^{\lessgtr}.H)) * xR_E_kk.H
         wg_c = xr_c @ (lg_c + mr_r @ wg_p @ mr_r_ct - ag_diff) @ xr_c_ct
@@ -226,14 +246,14 @@ def rgf(
     ll_r = ll[slb_c,slb_p].toarray()
 
     xr_mr = xr_p @ mr_d
-    xr_mr_ct = xr_mr.conjugate().transpose()
+    xr_mr_ct = xr_mr.conjugate().T
 
     # WR_E_00 = wR_E_00
     wr_diag[0,:lb_f,:lb_f] = wr_diag_rgf[0,:lb_f,:lb_f]
 
     # WR_E_01 = (V_01 - WR_E_00*M_E_10) * xR_E_11
     # todo if vh_r can be used instead of vh[slb_c,slb_p]
-    wr_upper[0,:lb_f,:lb_p] = (vh_r - wr_diag[0,:lb_f,:lb_f] @ mr_d.transpose()) @ xr_p.transpose()
+    wr_upper[0,:lb_f,:lb_p] = (vh_r - wr_diag[0,:lb_f,:lb_f] @ mr_d.T) @ xr_p.T
 
     # XR_E_00 = xR_E_00
     xr_diag[0,:lb_f,:lb_f] = xr_diag_rgf[0,:lb_f,:lb_f]
@@ -243,7 +263,7 @@ def rgf(
     wl_diag[0,:lb_f,:lb_f] = wl_diag_rgf[0,:lb_f,:lb_f]
 
     # W^{\lessgtr}_E_01 = xR_E_00*L^{\lessgtr}_01*_xR_E_11.H - xR_E_00*M_E_01*wL_E_11 - w^{\lessgtr}_E_00*M_E_10.H*xR_E_11.H
-    xr_p_ct = xr_p.conjugate().transpose()
+    xr_p_ct = xr_p.conjugate().T
     wg_upper[0,:lb_f,:lb_p] = xr_c @ lg_r @ xr_p_ct - xr_c @ mr_r @ wg_p - wg_c @ xr_mr_ct
     wl_upper[0,:lb_f,:lb_p] = xr_c @ ll_r @ xr_p_ct - xr_c @ mr_r @ wl_p - wl_c @ xr_mr_ct
 
@@ -298,7 +318,7 @@ def rgf(
 
         # xRM = xR_E_kk * M_E_kk-1
         xr_mr_xr        = xr_mr @ xr_diag_p
-        xr_mr_xr_ct     = xr_mr_xr.conjugate().transpose()
+        xr_mr_xr_ct     = xr_mr_xr.conjugate().T
         xr_mr_xr_mr     = xr_mr_xr @ mr_u
 
         # WR_E_kk = wR_E_kk - xR_E_kk*M_E_kk-1*WR_E_k-1k
@@ -314,14 +334,14 @@ def rgf(
         # A^{\lessgtr} = xR_E_kk * L^{\lessgtr}_E_kk-1 * XR_E_k-1k-1.H * (xR_E_kk * M_E_kk-1).H
         ag = xr_diag_rgf_c @ lg_l @ xr_mr_xr_ct
         al = xr_diag_rgf_c @ ll_l @ xr_mr_xr_ct
-        ag_diff = ag - ag.conjugate().transpose()
-        al_diff = al - al.conjugate().transpose()
+        ag_diff = ag - ag.conjugate().T
+        al_diff = al - al.conjugate().T
 
         # B^{\lessgtr} = xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * w^{\lessgtr}_E_kk
         bg = xr_mr_xr_mr @ wg_diag_rgf_c
         bl = xr_mr_xr_mr @ wl_diag_rgf_c
-        bg_diff = bg - bg.conjugate().transpose()
-        bl_diff = bl - bl.conjugate().transpose()
+        bg_diff = bg - bg.conjugate().T
+        bl_diff = bl - bl.conjugate().T
 
         #W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
         wg_diag_c = wg_diag_rgf_c + xr_mr @ wg_diag_p @ xr_mr_ct - ag_diff + bg_diff
@@ -347,17 +367,17 @@ def rgf(
             xr_diag_rgf_n = xr_diag_rgf[idx_ib+1,:lb_n,:lb_n]
             wg_diag_rgf_n = wg_diag_rgf[idx_ib+1,:lb_n,:lb_n]
             wl_diag_rgf_n = wl_diag_rgf[idx_ib+1,:lb_n,:lb_n]
-            xr_diag_rgf_n_ct = xr_diag_rgf_n.conjugate().transpose()
+            xr_diag_rgf_n_ct = xr_diag_rgf_n.conjugate().T
 
 
             # xRM_next = M_E_k+1k * xR_E_k+1k+1
             xr_mr = xr_diag_rgf_n @ mr_d
-            xr_mr_ct = xr_mr.conjugate().transpose()
+            xr_mr_ct = xr_mr.conjugate().T
 
             # WR_E_kk+1 = (V_k+1k.T - WR_E_kk*M_E_k+1k.T) * xR_E_k+1k+1.T
             # difference between matlab and python silvio todo
             # this line is wrong todo in the second part
-            wr_upper_c = vh_d.transpose() @ xr_diag_rgf_n.transpose() - wr_diag_c @ xr_mr.transpose()
+            wr_upper_c = vh_d.T @ xr_diag_rgf_n.T - wr_diag_c @ xr_mr.T
             wr_upper[idx_ib,:lb_i,:lb_n] = wr_upper_c
 
             # W^{\lessgtr}_E_kk+1 = XR_E_kk*(L^{\lessgtr}_E_kk+1*xR_E_k+1k+1.H - M_E_kk+1*w^{\lessgtr}_E_k+1k+1) - W^{\lessgtr}_E_kk*M_E_k+1k.H*xxR_E_k+1k+1.H
