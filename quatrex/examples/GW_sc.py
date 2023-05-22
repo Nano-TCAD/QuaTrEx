@@ -328,7 +328,7 @@ if __name__ == "__main__":
     mem_w = 0.9
     # max number of iterations
 
-    max_iter = 3
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -360,8 +360,8 @@ if __name__ == "__main__":
         times_transform_list[0] += time.perf_counter()
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        #sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        #ECmin_vec[iter_num+1] = get_band_edge(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
+        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
+        ECmin_vec[iter_num+1] = get_band_edge(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr

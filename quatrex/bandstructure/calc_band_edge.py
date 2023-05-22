@@ -177,16 +177,18 @@ if __name__ == '__main__':
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
     # initialize self energy
-    sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sr_h2g_full = np.loadtxt(solution_path + 'python_testfiles/calc_band_edge/sr_gw.dat').view(complex)
+
+    #sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sr_h2g = sr_h2g_full[disp[1, rank]:disp[1, rank] + count[1, rank], :]
     # transform from 2D format to list/vector of sparse arrays format-----------
     sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
     
-    # Adjusting Fermi Levels of both contacts to the current iteration band minima
     sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-    # ECmin = get_band_edge(ECmin, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
 
-
-    ECmin_MPI = get_band_edge_mpi(ECmin, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
+    ECmin_single = get_band_edge(-3.52400739, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
+    ECmin_MPI = get_band_edge_mpi(-3.52400739, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
 
     if rank == 0:
+        print(ECmin_single)
         print(ECmin_MPI)
