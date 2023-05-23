@@ -18,28 +18,38 @@ def rgf_leftprocess(A_bloc_diag_leftprocess, A_bloc_upper_leftprocess, A_bloc_lo
     blockSize = A_bloc_diag_leftprocess.shape[1]
 
     g_diag_leftprocess = np.zeros((nblocks+1, blockSize, blockSize))
-    G_diag_leftprocess = np.zeros((nblocks+1, blockSize, blockSize))
+    G_diag_leftprocess = np.zeros((nblocks, blockSize, blockSize))
 
     # Initialisation of g
     g_diag_leftprocess[0, ] = np.linalg.inv(A_bloc_diag_leftprocess[0, ])
 
     # Forward substitution
     for i in range(1, nblocks):
+        #print("P0 fwd i:", i)
         g_diag_leftprocess[i, ] = np.linalg.inv(A_bloc_diag_leftprocess[i, ] - A_bloc_lower_leftprocess[i-1, ] @ g_diag_leftprocess[i-1, ] @ A_bloc_upper_leftprocess[i-1, ])
 
     # Communicate the left connected block and receive the right connected block
+    #print("Process 0 own before communication:", g_diag_leftprocess)
     comm.send(g_diag_leftprocess[nblocks-1, ], dest=1, tag=0)
     comm.barrier()
     g_diag_leftprocess[nblocks, ] = comm.recv(source=1, tag=0)
+    #print("Process 0 own after communication:", g_diag_leftprocess)
 
-    # Initialisation of last G
-    G_diag_leftprocess[nblocks, ] = g_diag_leftprocess[nblocks, ]
+    # Connection from both sides of the full G
+    """ print("A_bloc_lower_leftprocess size:", A_bloc_lower_leftprocess.shape)
+    print("A_bloc_upper_leftprocess size:", A_bloc_upper_leftprocess.shape)
+    print("g_diag_leftprocess size:", g_diag_leftprocess.shape)
+    print("nblocks:", nblocks) """
+    G_diag_leftprocess[nblocks-1, ] = np.linalg.inv(A_bloc_diag_leftprocess[nblocks-1, ]\
+                                                    - A_bloc_lower_leftprocess[nblocks-2, ] @ g_diag_leftprocess[nblocks-2, ] @ A_bloc_upper_leftprocess[nblocks-2, ]\
+                                                    - A_bloc_lower_leftprocess[nblocks-1, ] @ g_diag_leftprocess[nblocks, ] @ A_bloc_upper_leftprocess[nblocks-1, ])
 
     # Backward substitution
-    for i in range(nblocks, 0, -1):
+    for i in range(nblocks-2, -1, -1):
+        #print("P0 bwd i:", i)
         G_diag_leftprocess[i-1, ]  =  g_diag_leftprocess[i-1, ] @ (np.identity(blockSize) + A_bloc_upper_leftprocess[i-1, ] @ G_diag_leftprocess[i, ] @ A_bloc_lower_leftprocess[i-1, ] @ g_diag_leftprocess[i-1, ])
 
-    return G_diag_leftprocess[:nblocks, ]
+    return G_diag_leftprocess
 
 
 
@@ -54,28 +64,34 @@ def rgf_rightprocess(A_bloc_diag_rightprocess, A_bloc_upper_rightprocess, A_bloc
     blockSize = A_bloc_diag_rightprocess.shape[1]
 
     g_diag_rightprocess = np.zeros((nblocks+1, blockSize, blockSize))
-    G_diag_rightprocess = np.zeros((nblocks+1, blockSize, blockSize))
+    G_diag_rightprocess = np.zeros((nblocks, blockSize, blockSize))
 
     # Initialisation of g
     g_diag_rightprocess[nblocks, ] = np.linalg.inv(A_bloc_diag_rightprocess[-1, ])
 
     # Forward substitution
     for i in range(nblocks-1, 0, -1):
+        #print("P1 fwd i:", i)
         g_diag_rightprocess[i, ] = np.linalg.inv(A_bloc_diag_rightprocess[i, ] - A_bloc_lower_rightprocess[i, ] @ g_diag_rightprocess[i+1, ] @ A_bloc_upper_rightprocess[i, ])
 
     # Communicate the left connected block and receive the right connected block
+    #print("Process 1 own before communication:", g_diag_rightprocess)
     comm.barrier()
     g_diag_rightprocess[0, ] = comm.recv(source=0, tag=0)
     comm.send(g_diag_rightprocess[1, ], dest=0, tag=0)
+    #print("Process 1 own after communication:", g_diag_rightprocess)
 
     # Initialisation of last G
-    G_diag_rightprocess[0, ] = g_diag_rightprocess[0, ]
+    G_diag_rightprocess[0, ] = np.linalg.inv(A_bloc_diag_rightprocess[0, ]\
+                                             - A_bloc_lower_rightprocess[0, ] @ g_diag_rightprocess[0, ] @ A_bloc_upper_rightprocess[0, ]\
+                                             - A_bloc_lower_rightprocess[1, ] @ g_diag_rightprocess[2, ] @ A_bloc_upper_rightprocess[1, ])
 
     # Backward substitution
-    for i in range(1, nblocks+1):
-        G_diag_rightprocess[i, ]  =  g_diag_rightprocess[i, ] @ (np.identity(blockSize) + A_bloc_upper_rightprocess[i-1, ] @ G_diag_rightprocess[i-1, ] @ A_bloc_lower_rightprocess[i-1, ] @ g_diag_rightprocess[i, ])
+    for i in range(2, nblocks+1):
+        #print("P1 bwd i:", i)
+        G_diag_rightprocess[i-1, ]  =  g_diag_rightprocess[i, ] @ (np.identity(blockSize) + A_bloc_upper_rightprocess[i-1, ] @ G_diag_rightprocess[i-2, ] @ A_bloc_lower_rightprocess[i-1, ] @ g_diag_rightprocess[i, ])
 
-    return G_diag_rightprocess[1:nblocks+1, ]
+    return G_diag_rightprocess
 
 
 
@@ -89,23 +105,19 @@ def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     rank = comm.Get_rank()
 
     nblocks   = A_bloc_diag.shape[0]
-    print("nblocks: ", nblocks)
     nblocks_2 = int(nblocks/2)
-    print("nblocks_2: ", nblocks_2)
     blockSize = A_bloc_diag.shape[1]
 
     G_diag = np.zeros((nblocks, blockSize, blockSize))
 
-    print()
-
     tic = time.perf_counter() # -----------------------------
     if rank == 0:
         G_diag[0:nblocks_2, ] = rgf_leftprocess(A_bloc_diag[0:nblocks_2, ], A_bloc_upper[0:nblocks_2, ], A_bloc_lower[0:nblocks_2, ])
-        #print("Process 0 own: G_diag[:nblocks_2, ]", G_diag)
+        print("Process 0 own: G_diag[:nblocks_2, ]", G_diag)
         comm.barrier()
         G_diag[nblocks_2:, ] = comm.recv(source=1, tag=0)
         #print("Process 0 recv: G_diag[nblocks_2:, ]", G_diag[nblocks_2:, ])
-        #print("Process 0 own: G_diag[:nblocks_2, ]", G_diag)
+        print("Process 0 own: G_diag[:nblocks_2, ]", G_diag)
 
 
     elif rank == 1:

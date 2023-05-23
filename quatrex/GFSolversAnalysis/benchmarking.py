@@ -101,7 +101,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------
     # mpiexec -n 2 python benchmarking.py
 
-    G_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
+"""     G_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
 
     if rank == 0: # Results agregated on 1st process and compared to reference solution
         print("RGF 2-sided validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
@@ -114,3 +114,4 @@ if __name__ == "__main__":
         viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
         viz.vizualiseDenseMatrixFromBlocks(G_rgf2sided_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "RGF 2-sided solution")
     
+ """
