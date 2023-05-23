@@ -17,7 +17,7 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
-    size = 12 
+    size = 12
     blocksize = 2
     density = blocksize**2/size**2
     bandwidth = np.ceil(blocksize/2)
@@ -58,42 +58,6 @@ if __name__ == "__main__":
                                                             G_rgf_diag, 
                                                             G_rgf_upper, 
                                                             G_rgf_lower)) 
-        
-        """ print("RGF diag validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
-                                                                A_refsol_bloc_upper, 
-                                                                A_refsol_bloc_lower, 
-                                                                G_rgf_diag, 
-                                                                A_refsol_bloc_upper, 
-                                                                A_refsol_bloc_lower)) 
-        
-        print("RGF upper validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
-                                                                    A_refsol_bloc_upper, 
-                                                                    A_refsol_bloc_lower, 
-                                                                    A_refsol_bloc_diag, 
-                                                                    G_rgf_upper, 
-                                                                    A_refsol_bloc_lower)) 
-
-        print("RGF lower validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
-                                                                    A_refsol_bloc_upper, 
-                                                                    A_refsol_bloc_lower, 
-                                                                    A_refsol_bloc_diag, 
-                                                                    A_refsol_bloc_upper, 
-                                                                    G_rgf_lower))  """
-
-
-        """ print("A_debug_lower", A_debug_lower[-1])
-        print("A_debug_upper", A_debug_upper[-1]) """
-
-
-        """ print("A_refsol_bloc_lower", A_refsol_bloc_lower[-1])
-        print("G_rgf_lower", G_rgf_lower[-1]) """
-
-        """ print("A_refsol_bloc_upper", A_refsol_bloc_upper[-1])
-        print("G_rgf_upper", G_rgf_upper[-1]) """
-
-        """ viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
-        viz.vizualiseDenseMatrixFromBlocks(G_rgf_diag, G_rgf_upper, G_rgf_lower, "RGF solution") """
-
 
     comm.barrier()
     # ---------------------------------------------------------------------------------------------
