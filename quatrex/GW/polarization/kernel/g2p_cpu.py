@@ -17,7 +17,6 @@ parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
 
 from utils import linalg_cpu
-from utils.linalg import correlate_3D
 
 # create symbol for dace matrix sizes-------------------------------------------
 
@@ -424,23 +423,23 @@ def g2p_dense(
     ep = np.linspace(-(ne-1)*denergy, +(ne-1)*denergy, nep)
 
     # P^<>_ij(E') = -i*denergy/2pi \sum_{E} (G^<>_ij(E) G^><_ji(E-E'))
-    pl = correlate_3D(
+    pl = linalg_cpu.correlate_3D(
         gl, gg, mode="full", b_index="ji", method="fft", n_worker=workers
     )
     assert pl.shape[0] == nep
 
-    pg = correlate_3D(
+    pg = linalg_cpu.correlate_3D(
         gg, gl, mode="full", b_index="ji", method="fft", n_worker=workers
     )
 
     # P^r_ij(E') = -i*denergy/2pi \sum_{E} (G^<_ij(E) G^a_ji(E-E')+G^r_ij(E) G^<_ji(E-E'))
     # G^a=(G^r)^dagger
     ga = np.conjugate(np.einsum("ijk->ikj", gr, optimize="optimal"))
-    pr = correlate_3D(
+    pr = linalg_cpu.correlate_3D(
         gl, ga, mode="full", b_index="ji", method="fft", n_worker=workers
     )
     del ga
-    pr += correlate_3D(
+    pr += linalg_cpu.correlate_3D(
         gr, gl, mode="full", b_index="ji", method="fft", n_worker=workers
     )
     # times factor 2 to match gold solution, changed minus to plus

@@ -28,9 +28,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="cpu_alt",
                         choices=["cpu_pool", "cpu",
-                            "cpu_alt", "gpu"], required=False)
+                            "cpu_alt", "gpu", "gpu_alt"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -219,6 +219,22 @@ if __name__ == "__main__":
     elif args.type == "gpu":
         # todo suboptimal
         wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu(
+                                            hamiltionian_obj,
+                                            ij2ji,
+                                            rows,
+                                            columns,
+                                            pg_gold,
+                                            pl_gold,
+                                            pr_gold,
+                                            vh_gold,
+                                            factor_w,
+                                            map_diag_mm2m,
+                                            map_upper_mm2m,
+                                            map_lower_mm2m
+                                )
+    elif args.type == "gpu_alt":
+        # todo suboptimal
+        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu_alt(
                                             hamiltionian_obj,
                                             ij2ji,
                                             rows,
