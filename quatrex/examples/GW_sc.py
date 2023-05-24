@@ -21,7 +21,7 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
 sys.path.append(parent_path)
 
-from bandstructure.calc_band_edge import get_band_edge
+from bandstructure.calc_band_edge import get_band_edge_mpi
 from GW.polarization.kernel import g2p_cpu
 from GW.selfenergy.kernel import gw2s_cpu
 from GW.gold_solution import read_solution
@@ -324,11 +324,11 @@ if __name__ == "__main__":
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.9
-    mem_g = 0.0
+    mem_g = 0.9
     mem_w = 0.9
     # max number of iterations
 
-    max_iter = 10
+    max_iter = 30
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -361,7 +361,10 @@ if __name__ == "__main__":
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1] = get_band_edge(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
+        ECmin_vec[iter_num+1] = get_band_edge_mpi(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
+
+        energy_fl = ECmin_vec[iter_num+1] + dEfL_EC
+        energy_fr = ECmin_vec[iter_num+1] + dEfR_EC
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr

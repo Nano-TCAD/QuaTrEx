@@ -51,7 +51,7 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
     ## Sending the SigmaR_GW and SigmaR_PHN from the rank with the minimum index to rank 0
     if rank == 0:
         if send_rank == 0:
-            Ek = calc_bandstructure_mpi(S, H, SigmaR_GW[min_ind % (disp[1, rank] + min_ind)], SigmaR_PHN[min_ind % (disp[1, rank] + min_ind)], Bmin, Bmax, side)
+            Ek = calc_bandstructure_mpi(S, H, SigmaR_GW[min_ind - disp[1,rank]], SigmaR_PHN[min_ind - disp[1,rank]], Bmin, Bmax, side)
             ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
             ECmin_int = Ek[ind_ek_plus]
             
@@ -69,9 +69,8 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
 
     else:
         if send_rank == rank:
-            print(min_ind % disp[1, rank])
-            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].toarray()[rows, columns]
-            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].toarray()[rows, columns]
+            sr_gw_buf = SigmaR_GW[min_ind - disp[1,rank]].toarray()[rows, columns]
+            sr_phn_buf = SigmaR_PHN[min_ind - disp[1,rank]].toarray()[rows, columns]
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 0)
             comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 1)
 
@@ -96,7 +95,7 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
     ## Sending the SigmaR_GW and SigmaR_PHN from the rank with the minimum index to rank 0
     if rank == 0:
         if send_rank == 0:
-            Ek = calc_bandstructure_mpi(S, H, SigmaR_GW[min_ind % (disp[1, rank] + min_ind)], SigmaR_PHN[min_ind % (disp[1, rank] + min_ind)], Bmin, Bmax, side)
+            Ek = calc_bandstructure_mpi(S, H, SigmaR_GW[min_ind - disp[1,rank]], SigmaR_PHN[min_ind - disp[1,rank]], Bmin, Bmax, side)
             ind_ek = np.argmin(np.abs(Ek - ECmin_int))
             ECmin = Ek[ind_ek]
             
@@ -114,8 +113,8 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
 
     else:
         if send_rank == rank:
-            sr_gw_buf = SigmaR_GW[min_ind % disp[1, rank]].toarray()[rows, columns]
-            sr_phn_buf = SigmaR_PHN[min_ind % disp[1, rank]].toarray()[rows, columns]
+            sr_gw_buf = SigmaR_GW[min_ind - disp[1,rank]].toarray()[rows, columns]
+            sr_phn_buf = SigmaR_PHN[min_ind - disp[1,rank]].toarray()[rows, columns]
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 0)
             comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest = 0, tag = 1)
 
@@ -186,9 +185,9 @@ if __name__ == '__main__':
     
     sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
 
-    ECmin_single = get_band_edge(-3.52400739, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
+    #ECmin_single = get_band_edge(-3.52400739, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, bmin, bmax, side = 'left')
     ECmin_MPI = get_band_edge_mpi(-3.52400739, energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
 
     if rank == 0:
-        print(ECmin_single)
+        #print(ECmin_single)
         print(ECmin_MPI)
