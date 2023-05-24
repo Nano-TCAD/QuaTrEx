@@ -99,7 +99,7 @@ def p2w_pool_mpi_cpu(
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         executor.map(
-                    rgf_W.rgf_w_opt,
+                    rgf_W.rgf_W,
                     repeat(vh),
                     pg, pl, pr,
                     repeat(bmax), repeat(bmin),

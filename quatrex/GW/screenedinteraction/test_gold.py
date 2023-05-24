@@ -18,6 +18,7 @@ from GW.screenedinteraction.kernel import p2w_cpu
 from GW.screenedinteraction.kernel import p2w_gpu
 from utils import change_format
 from OMEN_structure_matrices import OMENHamClass
+from kernel import calc_W_pool
 
 if __name__ == "__main__":
     # parse the possible arguments
@@ -28,9 +29,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu_alt",
+    parser.add_argument("-t", "--type", default="cpu_pool_old",
                         choices=["cpu_pool", "cpu",
-                            "cpu_alt", "gpu", "gpu_alt"], required=False)
+                                "cpu_pool_old", "cpu_alt",
+                                "gpu", "gpu_alt"], required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -150,6 +152,35 @@ if __name__ == "__main__":
                                                                                 pr_cpu_vec, vh,
                                                                                 dosw,factor_w,
                                                                                 w_mkl_threads, w_worker_threads)
+        # lower diagonal blocks from physics identity
+        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
+        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
+        wr_lower = wr_upper.transpose((0,1,3,2))
+
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wg_diag, wg_upper,
+                                                        wg_lower, no, ne,
+                                                        energy_contiguous=False)
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wl_diag, wl_upper,
+                                                        wl_lower, no, ne,
+                                                        energy_contiguous=False)
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
+                                                        map_lower_mm2m, wr_diag, wr_upper,
+                                                        wr_lower, no, ne,
+                                                        energy_contiguous=False)
+    elif args.type == "cpu_pool_old":
+        # transform from 2D format to list/vector of sparse arrays format
+        pg_cpu_vec = change_format.sparse2vecsparse_v2(pg_gold, rows, columns, nao)
+        pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
+        pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
+        # from data vector to sparse csr format
+        vh = sparse.coo_array((vh_gold, (rows, columns)),
+                            shape=(nao, nao), dtype = np.complex128).tocsr()
+
+        wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper, _, _ = \
+                    calc_W_pool.calc_W_pool(hamiltionian_obj, energy, pg_cpu_vec, pl_cpu_vec, pr_cpu_vec, vh, w_mask, w_mkl_threads, w_worker_threads)
+
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
         wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))

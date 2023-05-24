@@ -173,12 +173,12 @@ def mat_assembly_fullG(G_block, Gnn1_block, Bmin_fi, Bmax_fi, format = 'sparse',
     return G
 
 def initialize_block_G(NE, NB, Bsize):
-    GR_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.cfloat)
-    GRnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.cfloat)
-    GL_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.cfloat)
-    GLnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.cfloat)
-    GG_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.cfloat)
-    GGnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.cfloat)
+    GR_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.complex128)
+    GRnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.complex128)
+    GL_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.complex128)
+    GLnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.complex128)
+    GG_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype = np.complex128)
+    GGnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype = np.complex128)
 
     return(GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
 

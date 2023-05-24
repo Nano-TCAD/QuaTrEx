@@ -1,7 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 import numpy as np
 from scipy import sparse
-from utils.linalg import invert
 from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
 from OBC.beyn_cpu import beyn
 from OBC.sancho import open_boundary_conditions

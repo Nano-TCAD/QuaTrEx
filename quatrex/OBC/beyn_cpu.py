@@ -183,7 +183,7 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
 
     return imag_cond, dEk_dk
 
-@dace.program(auto_optimize=False)
+# @dace.program(auto_optimize=False)
 def check_imgc_dace(
         k: dace.complex128[K],
         kR: dace.complex128[L],
