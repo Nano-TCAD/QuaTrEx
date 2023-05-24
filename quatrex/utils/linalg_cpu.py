@@ -7,6 +7,7 @@ import numpy.typing as npt
 import typing
 import numba
 from numpy import fft
+import scipy
 
 @numba.njit("(c16[:,:],)",
             parallel=True,
@@ -212,16 +213,313 @@ def elementmult_chunk(start: np.int32, end: np.int32, g1: npt.NDArray[np.complex
     out: npt.NDArray[np.complex128] = np.multiply(g1[start: end, :], g2[start: end, :])
     return out
 
-def reversal_transpose_memory(g1: npt.NDArray[np.complex128], ij2ji_reversal: typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32]]) -> npt.NDArray[np.complex128]:
-    """Reverses data in time and transposes in orbital space
-        todo not working great, njit does not compile and np.ix_
-        But not used yet
-    Args:
-        g1 (npt.NDArray[np.complex128]): 2D array: orbital * energy
-        ij2ji_reversal (typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32]]): 2D Mapping to transposed and reversed
+def correlate_3D_einsum(a:np.ndarray, b:np.ndarray, mode="full", b_index="ji"):
+    assert len(a.shape)==3
+    assert len(b.shape)==3
+    assert a.shape[-2]==a.shape[-1]
+    assert a.shape[-2:]==b.shape[-2:]
+    assert mode in ("full", "valid")
+    assert b_index in ("ij", "ji")
 
-    Returns:
-        npt.NDArray[np.complex128]: np.roll(
-            np.flip(g1, axis=1), 1, axis=1)[ij2ji, :]
-    """
-    return g1[ij2ji_reversal]
+    # make sure a is longer equal than b
+    if a.shape[0]<b.shape[0]:
+        a, b = b, a
+        if b_index=="ij":
+            path = "eij,eij->ij"
+        elif b_index=="ji":
+            path = "eji,eij->ij"
+        else:
+            raise ValueError("b_index not found")
+        inverted = True
+    else:
+        if b_index=="ij":
+            path = "eij,eij->ij"
+        elif b_index=="ji":
+            path = "eij,eji->ij"
+        else:
+            raise ValueError("b_index not found")
+        inverted = False
+    
+    n_a = a.shape[0]
+    n_b = b.shape[0]
+    n_orb = a.shape[1]
+
+    if mode=="full":
+        n_left = n_b-1
+        n_right = n_b-1
+        n_c = n_a+n_b-1
+    elif mode=="valid":
+        n_left = 0
+        n_right = 0
+        n_c = n_a-n_b+1
+    else:
+        raise ValueError("mode not found")
+    c = np.zeros((n_c, n_orb, n_orb), dtype=complex)
+
+    i_c = 0
+    # some part of b is on the left of a
+    for i in range(n_left):
+        c[i_c] = np.einsum(path, a[:i+1], b[-(i+1):], optimize="optimal")
+        i_c += 1
+    # b is inside a
+    for i in range(n_a-n_b+1):
+        c[i_c] = np.einsum(path, a[i:i+n_b], b, optimize="optimal")
+        i_c += 1
+    # some part of b is on the right of a
+    for i in range(n_right):
+        c[i_c] = np.einsum(path, a[-(n_b-1-i):], b[:n_b-1-i], optimize="optimal")
+        i_c += 1
+    assert i_c==n_c
+
+    if inverted is True:
+        a, b = b, a
+        c = np.flip(c, axis=0)
+    
+    return c
+
+def correlate_3D_loop(a:np.ndarray, b:np.ndarray, mode="full", b_index="ji"):
+    assert len(a.shape)==3
+    assert len(b.shape)==3
+    assert a.shape[-2]==a.shape[-1]
+    assert a.shape[-2:]==b.shape[-2:]
+    assert mode in ("full", "valid")
+    assert b_index in ("ij", "ji")
+
+    n_a = a.shape[0]
+    n_b = b.shape[0]
+    n_orb = a.shape[1]
+
+    if mode=="full":
+        n_c = n_a+n_b-1
+    elif mode=="valid":
+        n_c = max(n_a, n_b)-min(n_a, n_b)+1
+    else:
+        raise ValueError("mode not found")
+    c = np.zeros((n_c, n_orb, n_orb), dtype=complex)
+
+    b = np.conj(b) # numpy and scipy correlation is a*conj(b)
+    if b_index=="ij":
+        for i in range(n_orb):
+            for j in range(n_orb): 
+                # c[:,i,j]=scipy.signal.correlate(a[:,i,j],b[:,i,j],mode=mode,method="auto")
+                c[:,i,j] = np.correlate(a[:,i,j], b[:,i,j], mode=mode)
+    elif b_index=="ji":
+        for i in range(n_orb):
+            for j in range(n_orb):
+                # c[:,i,j]=scipy.signal.correlate(a[:,i,j],b[:,j,i],mode=mode,method="auto")
+                c[:,i,j] = np.correlate(a[:,i,j], b[:,j,i], mode=mode)
+    else:
+        raise ValueError("b_index not found")
+    b = np.conj(b)
+
+    return c
+
+def correlate_3D_fft(a:np.ndarray, b:np.ndarray, mode="full", b_index="ji", n_worker=16):
+    b = np.flip(b, axis=0)
+    c = convolve_3D_fft(a, b, mode, b_index, n_worker)
+    b = np.flip(b, axis=0)
+    return c
+
+def correlate_3D(
+    a:np.ndarray, b:np.ndarray, mode="full", b_index="ji", method="fft", n_worker=32
+    ):
+    '''
+    c[n] = \sum_{m} f(a[m], b[m-n])
+
+    Args
+        a, b : np.ndarray
+            array of matrices to corrlate
+            shape = (n_a/n_b, n_orb, n_orb)
+        mode : str
+            https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
+            c.shape[0] =
+                "full"  (n_a+n_b-1)
+                "valid" (max(n_a,n_b) - min(n_a,n_b) + 1)
+        b_index : str
+            whether b is transposed
+            "ij" : b        fij=aij*bij
+            "ji" : b.T      fij=aij*bji
+        method : str
+            "loop" uses np.convolve (not fft) and loop over all orbitals
+            "einsum" uses np.einsum for each energy point
+            "fft" uses scipy.signal.convolve
+        n_worker : int
+            number of workers used in scipy.fft
+
+    Returns
+        c : np.ndarray
+            corrlated matrices
+            shape = (n_a+n_b-1, n_orb, n_orb)
+    '''
+    assert method in ("einsum", "loop", "fft")
+    if method=="einsum":
+        return correlate_3D_einsum(a, b, mode, b_index)
+    elif method=="loop":
+        return correlate_3D_loop(a, b, mode, b_index)
+    elif method=="fft":
+        return correlate_3D_fft(a, b, mode, b_index, n_worker)
+    else:
+        raise ValueError("method not found!")
+
+def convolve_3D_einsum(a:np.ndarray, b:np.ndarray, mode="valid", b_index="ij"):
+    assert len(a.shape)==3
+    assert len(b.shape)==3
+    assert a.shape[-2]==a.shape[-1]
+    assert a.shape[-2:]==b.shape[-2:]
+    assert mode in ("full", "valid")
+    assert b_index in ("ij", "ji")
+
+    # make sure a is longer equal than b
+    if a.shape[0]<b.shape[0]:
+        a, b = b, a
+        if b_index=="ij":
+            path = "eij,eij->ij"
+        elif b_index=="ji":
+            path = "eji,eij->ij"
+        else:
+            raise ValueError("b_index not found")
+        inverted = True
+    else:
+        if b_index=="ij":
+            path = "eij,eij->ij"
+        elif b_index=="ji":
+            path = "eij,eji->ij"
+        else:
+            raise ValueError("b_index not found")
+        inverted = False
+    
+    n_a = a.shape[0]
+    n_b = b.shape[0]
+    n_orb = a.shape[1]
+
+    if mode=="full":
+        n_left = n_b-1
+        n_right = n_b-1
+        n_c = n_a+n_b-1
+    elif mode=="valid":
+        n_left = 0
+        n_right = 0
+        n_c = n_a-n_b+1
+    else:
+        raise ValueError("mode not found")
+    c = np.zeros((n_c, n_orb, n_orb), dtype=complex)
+
+    b = np.flip(b, axis=0)
+    i_c = 0
+    # some part of b is on the left of a
+    for i in range(n_left):
+        c[i_c] = np.einsum(path, a[:i+1], b[-(i+1):], optimize="optimal")
+        i_c += 1
+    # b is inside a
+    for i in range(n_a-n_b+1):
+        c[i_c] = np.einsum(path, a[i:i+n_b], b, optimize="optimal")
+        i_c += 1
+    # some part of b is on the right of a
+    for i in range(n_right):
+        c[i_c] = np.einsum(path, a[-(n_b-1-i):], b[:n_b-1-i], optimize="optimal")
+        i_c += 1
+    assert i_c==n_c
+    b = np.flip(b, axis=0)
+
+    if inverted is True:
+        a, b = b, a
+
+    return c
+
+def convolve_3D_loop(a:np.ndarray, b:np.ndarray, mode="valid", b_index="ij"):
+    assert len(a.shape)==3
+    assert len(b.shape)==3
+    assert a.shape[-2]==a.shape[-1]
+    assert a.shape[-2:]==b.shape[-2:]
+    assert mode in ("full", "valid")
+    assert b_index in ("ij", "ji")
+
+
+    n_a = a.shape[0]
+    n_b = b.shape[0]
+    n_orb = a.shape[1]
+
+    if mode=="full":
+        n_c = n_a+n_b-1
+    elif mode=="valid":
+        n_c = max(n_a, n_b)-min(n_a, n_b)+1
+    else:
+        raise ValueError("mode not found")
+    c = np.zeros((n_c, n_orb, n_orb), dtype=complex)
+    
+    if b_index=="ij":
+        for i in range(n_orb):
+            for j in range(n_orb):
+                # c[:,i,j]=scipy.signal.convolve(a[:,i,j],b[:,i,j],mode=mode,method="auto")
+                c[:,i,j] = np.convolve(a[:,i,j], b[:,i,j], mode=mode)
+    elif b_index=="ji":
+        for i in range(n_orb):
+            for j in range(n_orb):
+                # c[:,i,j]=scipy.signal.convolve(a[:,i,j],b[:,i,j],mode=mode,method="auto")
+                c[:,i,j] = np.convolve(a[:,i,j], b[:,j,i], mode=mode)
+    else:
+        raise ValueError("b_index not found")
+
+    return c
+
+def convolve_3D_fft(a:np.ndarray, b:np.ndarray, mode="valid", b_index="ij", n_worker=16): 
+    assert a.ndim==3
+    assert b.ndim==3
+    assert a.shape[-2]==a.shape[-1]
+    assert a.shape[-2:]==b.shape[-2:]
+    assert mode in ("full", "valid")
+    assert b_index in ("ij", "ji")
+    assert isinstance(n_worker, int) and n_worker>0
+
+    if b_index=="ji":
+        b = np.einsum("ijk->ikj", b)
+
+    with scipy.fft.set_workers(n_worker):
+        c = scipy.signal.fftconvolve(a, b, mode=mode, axes=0)
+
+    if b_index=="ji":
+        b = np.einsum("ijk->ikj", b)
+
+    return c
+
+def convolve_3D(
+    a:np.ndarray, b:np.ndarray, mode="valid", b_index="ij", method="fft", n_worker=32
+    ):
+    '''
+    c[n] = \sum_{m} g(a[n-m], b[m]) = \sum_{m} g(a[m], b[n-m])
+    g(a, b) = a*b
+
+    Args
+        a, b : np.ndarray
+            array of matrices to corrlate
+            shape = (n_a/n_b, n_orb, n_orb)
+        mode : str
+            https://numpy.org/doc/stable/reference/generated/numpy.convolve.html
+            c.shape[0] =
+                "full"  (n_a+n_b-1)
+                "valid" (max(n_a,n_b) - min(n_a,n_b) + 1)
+        b_index : str
+            whether b is transposed
+            "ij" : b        fij=aij*bij
+            "ji" : b.T      fij=aij*bji
+        method : str
+            "loop" uses np.convolve (not fft) and loop over all orbitals
+            "einsum" uses np.einsum for each energy point
+            "fft" uses scipy.signal.convolve
+        n_worker : int
+            number of workers used in scipy.fft
+    
+    Returns
+        c : np.ndarray
+            convolved matrices
+            shape = (n_a+n_b-1, n_orb, n_orb)
+    '''
+    assert method in ("einsum", "loop", "fft")
+    if method=="einsum":
+        return convolve_3D_einsum(a, b, mode, b_index)
+    elif method=="loop":
+        return convolve_3D_loop(a, b, mode, b_index)
+    elif method=="fft":
+        return convolve_3D_fft(a, b, mode, b_index, n_worker)
+    else:
+        raise ValueError("method not found!")

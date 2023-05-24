@@ -257,43 +257,25 @@ while (iteration <= max_iteration) and (crit > max_error):
     #            calc_W(DH, E[ne_s:ne_f], pg_vecsparse, pl_vecsparse, pr_vecsparse, vh, w_mask, w_mkl_threads, w_worker_threads)
     WR_3D_E, WRnn1_3D_E, WL_3D_E, WLnn1_3D_E, WG_3D_E, WGnn1_3D_E, nb_mm, lb_max_mm = \
                 calc_W_pool(DH, E[ne_s:ne_f], pg_vecsparse, pl_vecsparse, pr_vecsparse, vh, w_mask, w_mkl_threads, w_worker_threads)
+
     toc_rgf_W = time.perf_counter()
 
     # Transforming the screened interaction to energy contiguous arrays
     tic_trafo_w2s = time.perf_counter()
-    WRn1n_reduced = np.array(list(map(np.transpose, WRnn1_3D_E.reshape(((nb_mm-1)*(ne_f - ne_s), lb_max_mm, lb_max_mm)))))
-    WRn1n_3D_E = WRn1n_reduced.reshape(ne_f - ne_s, nb_mm-1, lb_max_mm, lb_max_mm)
+    WGn1n_3D_E = -WGnn1_3D_E.conjugate().transpose((0,1,3,2))
+    WLn1n_3D_E = -WLnn1_3D_E.conjugate().transpose((0,1,3,2))
+    WRn1n_3D_E = WRnn1_3D_E.transpose((0,1,3,2))
 
-    WLn1n_reduced = np.array(list(map(matrix_creation.negative_hermitian_transpose,
-                                       WLnn1_3D_E.reshape(((nb_mm-1)*(ne_f - ne_s), lb_max_mm, lb_max_mm)))))
-    WLn1n_3D_E = WLn1n_reduced.reshape((ne_f - ne_s, nb_mm-1, lb_max_mm, lb_max_mm))
+    wg_computed = change_format.block2sparse_energy_alt(map_diag_W, map_upper_W,
+                                                    map_lower_W, WG_3D_E, WGnn1_3D_E,
+                                                    WGn1n_3D_E, rows.size, ne_f-ne_s)
+    wl_computed = change_format.block2sparse_energy_alt(map_diag_W, map_upper_W,
+                                                    map_lower_W, WL_3D_E, WLnn1_3D_E,
+                                                    WLn1n_3D_E, rows.size, ne_f-ne_s)
+    wr_computed = change_format.block2sparse_energy_alt(map_diag_W, map_upper_W,
+                                                    map_lower_W, WR_3D_E, WRnn1_3D_E,
+                                                    WRn1n_3D_E, rows.size, ne_f-ne_s)
 
-    WGn1n_reduced = np.array(list(map(matrix_creation.negative_hermitian_transpose,
-                                        WGnn1_3D_E.reshape(((nb_mm-1)*(ne_f - ne_s), lb_max_mm, lb_max_mm)))))
-    WGn1n_3D_E = WGn1n_reduced.reshape((ne_f - ne_s, nb_mm-1, lb_max_mm, lb_max_mm))
-
-    wr_computed = block2sparse_energy_alt(map_diag_W,
-                                         map_upper_W,
-                                         map_lower_W,
-                                         WR_3D_E,
-                                         WRnn1_3D_E,
-                                         WRn1n_3D_E, rows.size, ne_f-ne_s)
-    
-    wl_computed = block2sparse_energy_alt(map_diag_W,
-                                            map_upper_W,
-                                            map_lower_W,
-                                            WL_3D_E,
-                                            WLnn1_3D_E,
-                                            WLn1n_3D_E, rows.size, ne_f-ne_s)
-    
-    wg_computed = block2sparse_energy_alt(map_diag_W,
-                                            map_upper_W,
-                                            map_lower_W,
-                                            WG_3D_E,
-                                            WGnn1_3D_E,
-                                            WGn1n_3D_E, rows.size, ne_f-ne_s)
-    
-    
     toc_trafo_w2s = time.perf_counter()
 
     # Calculating the self-energy
@@ -308,6 +290,23 @@ while (iteration <= max_iteration) and (crit > max_error):
     iteration+=1
 
 # Running the test with the reference solution
+diff_gg = np.linalg.norm(gg_gold - gg_computed)
+diff_gl = np.linalg.norm(gl_gold - gl_computed)
+diff_gr = np.linalg.norm(gr_gold - gr_computed)
+diff_pg = np.linalg.norm(pg_gold - pg_computed)
+diff_pl = np.linalg.norm(pl_gold - pl_computed)
+diff_pr = np.linalg.norm(pr_gold - pr_computed)
+diff_wg = np.linalg.norm(wg_gold - wg_computed)
+diff_wl = np.linalg.norm(wl_gold - wl_computed)
+diff_wr = np.linalg.norm(wr_gold - wr_computed)
+diff_sg = np.linalg.norm(sg_gold - sg_cpu)
+diff_sl = np.linalg.norm(sl_gold - sl_cpu)
+diff_sr = np.linalg.norm(sr_gold - sr_cpu)
+print(f"Green's Function differences to Gold Solution g/l/r:  {diff_gg:.4f}, {diff_gl:.4f}, {diff_gr:.4f}")
+print(f"Polarization differences to Gold Solution g/l/r:  {diff_pg:.4f}, {diff_pl:.4f}, {diff_pr:.4f}")
+print(f"Screened interaction differences to Gold Solution g/l/r:  {diff_wg:.4f}, {diff_wl:.4f}, {diff_wr:.4f}")
+print(f"Screened self-energy differences to Gold Solution g/l/r:  {diff_sg:.4f}, {diff_sl:.4f}, {diff_sr:.4f}")
+
 for i in range(ne_s, ne_f):
     print("Energy: " + "%.2f" % (i) + "  " + "%.2f" % (E[i]) + " [eV]" )
     # filtered_GL = GL[i-ne_s][rows, columns]

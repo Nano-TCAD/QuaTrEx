@@ -381,8 +381,8 @@ def p2w_mpi_cpu_alt(
 
 
     times[2] = -time.perf_counter()
-    cond_l = np.zeros((ne), dtype=np.float64)
-    cond_r = np.zeros((ne), dtype=np.float64)
+    cond_l = np.zeros((ne), dtype=bool)
+    cond_r = np.zeros((ne), dtype=bool)
     for i in range(ne):
         cond_r[i], cond_l[i] = obc_w_cpu.obc_w_beyn(
                         dxr_sf[i],
@@ -400,7 +400,8 @@ def p2w_mpi_cpu_alt(
 
     times[3] = -time.perf_counter()
     for i in range(ne):
-        if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
+        if cond_r[i] and cond_l[i]:
+        # if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
             obc_w_cpu.obc_w_dl(
                     dxr_sf[i],
                     dxr_ef[i],
@@ -420,7 +421,8 @@ def p2w_mpi_cpu_alt(
     times[4] = -time.perf_counter()
     # calculate the inversion for every energy point
     for i in range(ne):
-        if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
+        if cond_r[i] and cond_l[i]:
+        # if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
             matrix_inversion_w.rgf(
                 bmax_mm,
                 bmin_mm,

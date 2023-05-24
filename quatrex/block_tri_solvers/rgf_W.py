@@ -285,7 +285,7 @@ def rgf_W(
     #                                             imag_lim, rr, "L")
     #     if not np.isnan(cond_l):
     #         dvh_sd = mr_sl @ dxr_sd @ vh_su
-    #old wrong version of beyn
+    # old wrong version of beyn
     if not sancho_flag:
         _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn_old(
                                                 mr_sd.toarray(),

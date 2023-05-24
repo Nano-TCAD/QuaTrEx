@@ -203,25 +203,38 @@ def obc_w_beyn(
     # (R only is against the style guide)
     rr = 1e12
 
-    # conditions about convergence or meaningful results from
-    # boundary correction calculations
-    cond_l = 0.0
-    cond_r = 0.0
+    dxr_sd = np.zeros_like(dxr_sf[0])
+    dxr_ed = np.zeros_like(dxr_ef[0])
+    dmr_sd = np.zeros_like(dmr_sf[0])
+    dmr_ed = np.zeros_like(dmr_ef[0])
 
     # old wrong version
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr, _ = beyn_cpu.beyn_old(
-                                                mr_sf[0],
-                                                mr_sf[1],
-                                                mr_sf[2],
-                                                imag_lim, rr, "L")
-        
+        cond_l, _ = beyn_cpu.beyn_old_opt(
+                                mr_sf[0],
+                                mr_sf[1],
+                                mr_sf[2],
+                                dmr_sd,
+                                dxr_sd,
+                                imag_lim, rr, "L")
         dxr_sf[0] = dxr_sd
-        if not np.isnan(cond_l):
-            dmr_sf[0] -= dmr
+        if cond_l:
+            dmr_sf[0] -= dmr_sd
             dvh_sf[0] = mr_sf[2] @ dxr_sd @ vh_sf[0]
+    # # old wrong version
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, _ = beyn_cpu.beyn_old(
+    #                                             mr_sf[0],
+    #                                             mr_sf[1],
+    #                                             mr_sf[2],
+    #                                             imag_lim, rr, "L")
+        
+    #     dxr_sf[0] = dxr_sd
+    #     if not np.isnan(cond_l):
+    #         dmr_sf[0] -= dmr
+    #         dvh_sf[0] = mr_sf[2] @ dxr_sd @ vh_sf[0]
 
-    if np.isnan(cond_l) or sancho_flag:
+    if (not cond_l) or sancho_flag:
         dxr_sd, dmr, dvh_sd, cond_l = sancho.open_boundary_conditions(
                                                 mr_sf[0],
                                                 mr_sf[2],
@@ -230,19 +243,30 @@ def obc_w_beyn(
         dxr_sf[0] = dxr_sd
         dmr_sf[0] -= dmr
         dvh_sf[0] = dvh_sd
-
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr, _ = beyn_cpu.beyn_old(
-                                                mr_ef[0],
-                                                mr_ef[1],
-                                                mr_ef[2],
-                                                imag_lim, rr, "R")
+        cond_r, _ = beyn_cpu.beyn_old_opt(
+                                mr_ef[0],
+                                mr_ef[1],
+                                mr_ef[2],
+                                dmr_ed,
+                                dxr_ed,
+                                imag_lim, rr, "R")
         dxr_ef[0] = dxr_ed
-        if not np.isnan(cond_r):
-            dmr_ef[0] -= dmr
+        if cond_r:
+            dmr_ef[0] -= dmr_ed
             dvh_ef[0] = mr_ef[1] @ dxr_ed @ vh_ef[0]
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, _ = beyn_cpu.beyn_old(
+    #                                             mr_ef[0],
+    #                                             mr_ef[1],
+    #                                             mr_ef[2],
+    #                                             imag_lim, rr, "R")
+    #     dxr_ef[0] = dxr_ed
+    #     if not np.isnan(cond_r):
+    #         dmr_ef[0] -= dmr
+    #         dvh_ef[0] = mr_ef[1] @ dxr_ed @ vh_ef[0]
 
-    if np.isnan(cond_r) or sancho_flag:
+    if (not cond_r) or sancho_flag:
         dxr_ed, dmr, dvh_ed, cond_r = sancho.open_boundary_conditions(
                                                 mr_ef[0],
                                                 mr_ef[1],
