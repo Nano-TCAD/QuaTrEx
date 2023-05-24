@@ -346,6 +346,14 @@ if __name__ == "__main__":
         dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
         dosw = np.zeros(shape=(ne,3), dtype = np.complex128)
 
+        # occupied states/unoccupied states
+        nE = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        nP = np.zeros(shape=(ne,nb), dtype = np.complex128)
+
+        # occupied screening/unoccupied screening
+        nEw = np.zeros(shape=(ne,3), dtype = np.complex128)
+        nPw = np.zeros(shape=(ne,3), dtype = np.complex128)
+
         # current per energy
         ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
         # timing transform
@@ -384,6 +392,9 @@ if __name__ == "__main__":
                                                                 energy_fr,
                                                                 temp,
                                                                 dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 factor_g_loc,
                                                                 gf_mkl_threads,
                                                                 gf_worker_threads
@@ -399,6 +410,9 @@ if __name__ == "__main__":
                                                                 energy_fr,
                                                                 temp,
                                                                 dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 factor_g_loc,
                                                                 gf_mkl_threads,
                                                                 1

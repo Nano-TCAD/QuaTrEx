@@ -18,7 +18,7 @@ from operator import mul
 import copy
 
 
-def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, mkl_threads = 1, worker_num = 1):
+def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_threads = 1, worker_num = 1):
     kB = 1.38e-23
     q = 1.6022e-19
     
@@ -65,7 +65,7 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, mkl_threads = 1, 
         # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
         #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
         executor.map(rgf_GF, rgf_M, SigL, SigG, 
-                                         GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, fL, fR,
+                                         GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, nE, nP, idE, fL, fR,
                                          repeat(Bmin), repeat(Bmax), factor, index_e)
     toc = time.perf_counter()
 
@@ -83,6 +83,9 @@ def calc_GF_pool_mpi(
         Efr,
         Temp,
         DOS,
+        nE,
+        nP,
+        idE,
         factor: npt.NDArray[np.float64],
         mkl_threads: int = 1,
         worker_num: int = 1
@@ -131,7 +134,7 @@ def calc_GF_pool_mpi(
         # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
         #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
         executor.map(rgf_GF, rgf_M, SigL, SigG, 
-                                         GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, fL, fR,
+                                         GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, nE, nP, idE, fL, fR,
                                          repeat(bmin), repeat(bmax), factor, index_e)
     
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E

@@ -141,6 +141,7 @@ def p2w_mpi_gpu(
     ij2ji_gpu = cp.empty_like(ij2ji)
     rows_gpu = cp.empty_like(rows)
     columns_gpu = cp.empty_like(columns)
+<<<<<<< HEAD
     mr_sf_gpu = cp.empty_like(mr_sf)
     mr_ef_gpu = cp.empty_like(mr_ef)
     lg_sf_gpu = cp.empty_like(lg_sf)
@@ -157,6 +158,23 @@ def p2w_mpi_gpu(
     vh_ef_gpu = cp.empty_like(vh_ef)
     dvh_sf_gpu = cp.empty_like(dvh_sf)
     dvh_ef_gpu = cp.empty_like(dvh_ef)
+=======
+    mr_gpu_sf = cp.empty_like(mr_sf)
+    mr_gpu_ef = cp.empty_like(mr_ef)
+    lg_gpu_sf = cp.empty_like(lg_sf)
+    lg_gpu_ef = cp.empty_like(lg_ef)
+    ll_gpu_sf = cp.empty_like(ll_sf)
+    ll_gpu_ef = cp.empty_like(ll_ef)
+    dmr_gpu_sf = cp.empty_like(dmr_sf)
+    dmr_gpu_ef = cp.empty_like(dmr_ef)
+    dlg_gpu_sf = cp.empty_like(dlg_sf)
+    dlg_gpu_ef = cp.empty_like(dlg_ef)
+    dll_gpu_sf = cp.empty_like(dll_sf)
+    dll_gpu_ef = cp.empty_like(dll_ef)
+    vh_gpu_sf = cp.empty_like(vh_sf)
+    vh_gpu_ef = cp.empty_like(vh_ef)
+
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
 
     times[0] = -time.perf_counter()
 
@@ -209,6 +227,7 @@ def p2w_mpi_gpu(
                     pl_s,
                     pr_s,
                     vh_sparse,
+<<<<<<< HEAD
                     mr_sf_gpu[i],
                     mr_ef_gpu[i],
                     lg_sf_gpu[i],
@@ -223,10 +242,27 @@ def p2w_mpi_gpu(
                     dll_ef_gpu[i],
                     vh_sf_gpu[i],
                     vh_ef_gpu[i],
+=======
+                    mr_gpu_sf[i],
+                    mr_gpu_ef[i],
+                    lg_gpu_sf[i],
+                    lg_gpu_ef[i],
+                    ll_gpu_sf[i],
+                    ll_gpu_ef[i],
+                    dmr_gpu_sf[i],
+                    dmr_gpu_ef[i],
+                    dlg_gpu_sf[i],
+                    dlg_gpu_ef[i],
+                    dll_gpu_sf[i],
+                    dll_gpu_ef[i],
+                    vh_gpu_sf[i],
+                    vh_gpu_ef[i],
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
                     bmax,
                     bmin,
                     nbc)
     # unload
+<<<<<<< HEAD
     mr_sf_gpu.get(out=mr_sf)
     mr_ef_gpu.get(out=mr_ef)
     lg_sf_gpu.get(out=lg_sf)
@@ -241,6 +277,22 @@ def p2w_mpi_gpu(
     dll_ef_gpu.get(out=dll_ef)
     vh_sf_gpu.get(out=vh_sf)
     vh_ef_gpu.get(out=vh_ef)
+=======
+    mr_gpu_sf.get(out=mr_sf)
+    mr_gpu_ef.get(out=mr_ef)
+    lg_gpu_sf.get(out=lg_sf)
+    lg_gpu_ef.get(out=lg_ef)
+    ll_gpu_sf.get(out=ll_sf)
+    ll_gpu_ef.get(out=ll_ef)
+    dmr_gpu_sf.get(out=dmr_sf)
+    dmr_gpu_ef.get(out=dmr_ef)
+    dlg_gpu_sf.get(out=dlg_sf)
+    dlg_gpu_ef.get(out=dlg_ef)
+    dll_gpu_sf.get(out=dll_sf)
+    dll_gpu_ef.get(out=dll_ef)
+    vh_gpu_sf.get(out=vh_sf)
+    vh_gpu_ef.get(out=vh_ef)
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
 
     times[1] += time.perf_counter()
 
@@ -283,6 +335,7 @@ def p2w_mpi_gpu(
 
 
     times[4] = -time.perf_counter()
+<<<<<<< HEAD
 
 
     dmr_ef_gpu.set(dmr_ef)
@@ -319,11 +372,40 @@ def p2w_mpi_gpu(
                 dlg_sf_gpu[i,0],
                 dll_sf_gpu[i,0],
                 dvh_sf_gpu[i,0]
+=======
+    # calculate the inversion for every energy point
+    for i in range(ne):
+        if not np.isnan(cond_r[i]) and not np.isnan(cond_l[i]):
+            matrix_inversion_w.rgf(
+                bmax_mm,
+                bmin_mm,
+                vh_sparse.get(),
+                mr_vec[i].get(),
+                lg_vec[i].get(),
+                ll_vec[i].get(),
+                factors[i],
+                wg_diag[i],
+                wg_upper[i],
+                wl_diag[i],
+                wl_upper[i],
+                wr_diag[i],
+                wr_upper[i],
+                xr_diag[i],
+                dmr_ef[i,0],
+                dlg_ef[i,0],
+                dll_ef[i,0],
+                dvh_ef[i,0],
+                dmr_sf[i,0],
+                dlg_sf[i,0],
+                dll_sf[i,0],
+                dvh_sf[i,0]
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
             )
     times[4] += time.perf_counter()
     
 
     times[5] = -time.perf_counter()
+<<<<<<< HEAD
     # unload
     wg_diag_gpu.get(out=wg_diag)
     wg_upper_gpu.get(out=wg_upper)
@@ -332,6 +414,8 @@ def p2w_mpi_gpu(
     wr_diag_gpu.get(out=wr_diag)
     wr_upper_gpu.get(out=wr_upper)
 
+=======
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
     # lower blocks from identity
     wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
     wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
@@ -360,6 +444,7 @@ def p2w_mpi_gpu(
     print("Time inversion: ", times[4])
     print("Time block: ", times[5])
     return wg, wl, wr
+<<<<<<< HEAD
 
 def p2w_mpi_gpu_alt(
     hamiltionian_obj: object,
@@ -692,3 +777,5 @@ def p2w_mpi_gpu_alt(
     print("Time inversion: ", times[4])
     print("Time block: ", times[5])
     return wg, wl, wr
+=======
+>>>>>>> 0fc03db... Merge remote-tracking branch 'origin/almaeder' into sc_iss3
