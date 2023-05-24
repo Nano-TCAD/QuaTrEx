@@ -175,6 +175,8 @@ print(numba.get_num_threads())
 
 # Observables: DOS, Transmission, Current
 DOS = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
+nE = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
+nP = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
 IdE = np.zeros(shape = (E.shape[0],DH.Bmin.shape[0]), dtype = np.cfloat)
 
 # Starting the scGW iterations: Currently only testing one iteration
@@ -192,7 +194,7 @@ while (iteration <= max_iteration) and (crit > max_error):
     # Calculating the Green's function and OBC (Sigmas should not change)
     tic_rgf_G = time.perf_counter()
     GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E = \
-                calc_GF_pool(DH, E[ne_s:ne_f], copy.deepcopy(SigR), copy.deepcopy(SigG), copy.deepcopy(SigG), EfL, EfR, Temp, DOS, gf_mkl_threads, gf_worker_threads)
+                calc_GF_pool(DH, E[ne_s:ne_f], copy.deepcopy(SigR), copy.deepcopy(SigG), copy.deepcopy(SigG), EfL, EfR, Temp, DOS, nE, nP, IdE,  gf_mkl_threads, gf_worker_threads)
     toc_rgf_G = time.perf_counter()
 
     # Transforming the Green's function to energy contiguous arrays
