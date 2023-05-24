@@ -3,7 +3,7 @@ import numpy as np
 from scipy import sparse
 from utils.linalg import invert
 from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
-from OBC.beyn import beyn
+from OBC.beyn_cpu import beyn
 from OBC.sancho import open_boundary_conditions
 
 def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):

@@ -1,221 +1,21 @@
 """
-Functions to calculate the screened interaction on the cpu.
+Functions to calculate the screened interaction on the gpu
 See README.md for more information. 
 """
-import concurrent.futures
-from itertools import repeat
 import numpy as np
+import numpy.typing as npt
+import cupy as cp
+from scipy import sparse
+from cupyx.scipy import sparse as cusparse
 import mkl
 import typing
-import numpy.typing as npt
-from scipy import sparse
-from utils import matrix_creation
 from utils import change_format
-from block_tri_solvers import rgf_W
 from block_tri_solvers import matrix_inversion_w
+from OBC import obc_w_gpu
 from OBC import obc_w_cpu
 import time
 
-def p2w_pool_mpi_cpu(
-    hamiltionian_obj: object,
-    energy: npt.NDArray[np.float64],
-    pg: npt.NDArray[np.complex128],
-    pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
-    dosw: npt.NDArray[np.complex128],
-    factor: npt.NDArray[np.float64],
-    mkl_threads: int = 1,
-    worker_num: int = 1
-) -> typing.Tuple[
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        int,
-        int
-    ]:
-    """Calculates the screened interaction on the cpu.
-    Uses mkl threading and pool threads.
-
-    Args:
-        hamiltionian_obj (object): Class containing the hamiltonian information
-        energy (npt.NDArray[np.float64]): energy points
-        pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
-        pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
-        pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
-        vh (npt.NDArray[np.complex128]): Vh sparse matrix
-        dosw (npt.NDArray[np.complex128]): density of state
-        factor (npt.NDArray[np.float64]): Smoothing factor
-        mkl_threads (int, optional): Number of mkl threads used. Defaults to 1.
-        worker_num(int, optional): Number of pool workers used. Defaults to 1.
-
-    Returns:
-        typing.Tuple[npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    int, int ]:
-    Diagonal/Upper block tensor (#blocks, blocksize, blocksize) of greater, lesser, retarded screened interaction.
-    Number of blocks and block size after matrix multiplication
-    """
-    # number of energy points
-    ne = energy.shape[0]
-
-    # number of blocks
-    nb = hamiltionian_obj.Bmin.shape[0]
-    # start and end index of each block in python indexing
-    bmax = hamiltionian_obj.Bmax - 1
-    bmin = hamiltionian_obj.Bmin - 1
-
-    # fix nbc to 2 for the given solution
-    # todo calculate it
-    nbc = 2
-
-    # block sizes after matrix multiplication
-    bmax_mm = bmax[nbc-1:nb:nbc]
-    bmin_mm = bmin[0:nb:nbc]
-    # number of blocks after matrix multiplication
-    nb_mm = bmax_mm.size
-    # larges block length after matrix multiplication
-    lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
-
-    # create empty buffer for screened interaction
-    # in block format
-    wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
-    xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    # set number of mkl threads
-    mkl.set_num_threads(mkl_threads)
-
-    # todo remove this
-    # not used inside rgf_W
-    index_e = np.arange(ne)
-
-    # Create a process pool with 4 workers
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        executor.map(
-                    rgf_W.rgf_w_opt,
-                    repeat(vh),
-                    pg, pl, pr,
-                    repeat(bmax), repeat(bmin),
-                    wg_diag, wg_upper,
-                    wl_diag, wl_upper,
-                    wr_diag, wr_upper,
-                    xr_diag, dosw, repeat(nbc),
-                    index_e, factor
-                     )
-
-    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
-
-def p2w_mpi_cpu(
-    hamiltionian_obj: object,
-    energy: npt.NDArray[np.float64],
-    pg: npt.NDArray[np.complex128],
-    pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
-    dosw: npt.NDArray[np.complex128],
-    factor: npt.NDArray[np.float64],
-    mkl_threads: int = 1
-) -> typing.Tuple[
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        npt.NDArray[np.complex128],
-        int,
-        int
-    ]:
-    """Calculates the screened interaction on the cpu.
-    Uses only mkl threading.
-
-    Args:
-        hamiltionian_obj (object): Class containing the hamiltonian information
-        energy (npt.NDArray[np.float64]): energy points
-        pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
-        pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
-        pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
-        vh (npt.NDArray[np.complex128]): Vh sparse matrix
-        dosw (npt.NDArray[np.complex128]): density of state
-        factor (npt.NDArray[np.float64]): Smoothing factor
-        mkl_threads (int, optional): Number of mkl threads used. Defaults to 1.
-
-    Returns:
-        typing.Tuple[npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    npt.NDArray[np.complex128],
-                    int, int ]:
-    Diagonal/Upper block tensor (#blocks, blocksize, blocksize) of greater, lesser, retarded screened interaction.
-    Number of blocks and block size after matrix multiplication
-    """
-
-    # create timing vector
-    times = np.zeros((10), dtype=np.float64)
-
-    # number of energy points
-    ne = energy.shape[0]
-
-    # number of blocks
-    nb = hamiltionian_obj.Bmin.shape[0]
-    # start and end index of each block in python indexing
-    bmax = hamiltionian_obj.Bmax - 1
-    bmin = hamiltionian_obj.Bmin - 1
-
-    # fix nbc to 2 for the given solution
-    # todo calculate it
-    nbc = 2
-
-    # block sizes after matrix multiplication
-    bmax_mm = bmax[nbc-1:nb:nbc]
-    bmin_mm = bmin[0:nb:nbc]
-    # number of blocks after matrix multiplication
-    nb_mm = bmax_mm.size
-    # larges block length after matrix multiplication
-    lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
-
-    # create empty buffer for screened interaction
-    # in block format
-    wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
-    xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype = np.complex128)
-    # set number of mkl threads
-    mkl.set_num_threads(mkl_threads)
-
-    # todo remove this
-    # not used inside rgf_W
-    index_e = np.arange(ne)
-
-    for ie in range(ne):
-        times += rgf_W.rgf_w_opt(
-                vh,
-                pg[ie],
-                pl[ie],
-                pr[ie],
-                bmax, bmin,
-                wg_diag[ie], wg_upper[ie],
-                wl_diag[ie], wl_upper[ie],
-                wr_diag[ie], wr_upper[ie],
-                xr_diag[ie], dosw[ie], nbc,
-                index_e[ie], factor[ie]
-        )
-    print("Time symmetrize: ", times[0])
-    print("Time sr,lg,ll arrays: ", times[1])
-    print("Time scattering obc: ", times[2])
-    print("Time beyn obc: ", times[3])
-    print("Time dl obc: ", times[4])
-    print("Time inversion: ", times[5])
-
-    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
-
-def p2w_mpi_cpu_alt(
+def p2w_mpi_gpu(
     hamiltionian_obj: object,
     ij2ji: npt.NDArray[np.int32],
     rows: npt.NDArray[np.int32],
@@ -227,8 +27,7 @@ def p2w_mpi_cpu_alt(
     factors: npt.NDArray[np.float64],
     map_diag_mm2m: npt.NDArray[np.int32],
     map_upper_mm2m: npt.NDArray[np.int32],
-    map_lower_mm2m: npt.NDArray[np.int32],
-    mkl_threads: int = 1
+    map_lower_mm2m: npt.NDArray[np.int32]
 ) -> typing.Tuple[
         npt.NDArray[np.complex128],
         npt.NDArray[np.complex128],
@@ -236,7 +35,7 @@ def p2w_mpi_cpu_alt(
     ]:
     """
     Calculates the screened interaction on the cpu.
-    Uses only mkl threading.
+    Uses the gpu for most of the calculations.
     Splits up the screened interaction calculations into six parts:
     - Symmetrization of the polarization.
     - Change of the format into vectors of sparse matrices
@@ -273,7 +72,6 @@ def p2w_mpi_cpu_alt(
     ne = pg.shape[0]
     no = pg.shape[1]
     nao = np.max(hamiltionian_obj.Bmax)
-
 
     # number of blocks
     nb = hamiltionian_obj.Bmin.shape[0]
@@ -325,58 +123,117 @@ def p2w_mpi_cpu_alt(
     dvh_sf = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
     dvh_ef = np.zeros((ne, 1, nbc*lb[0], nbc*lb[0]), dtype = np.complex128)
 
-    # set number of mkl threads
-    mkl.set_num_threads(mkl_threads)
+    # vh = np.copy(vh)
+    pg = np.copy(pg)
+    pl = np.copy(pl)
+    pr = np.copy(pr)
+    vh_gpu = cp.empty_like(vh)
+    pg_gpu = cp.empty_like(pg)
+    pl_gpu = cp.empty_like(pl)
+    pr_gpu = cp.empty_like(pr)
+    ij2ji_gpu = cp.empty_like(ij2ji)
+    rows_gpu = cp.empty_like(rows)
+    columns_gpu = cp.empty_like(columns)
+    mr_gpu_sf = cp.empty_like(mr_sf)
+    mr_gpu_ef = cp.empty_like(mr_ef)
+    lg_gpu_sf = cp.empty_like(lg_sf)
+    lg_gpu_ef = cp.empty_like(lg_ef)
+    ll_gpu_sf = cp.empty_like(ll_sf)
+    ll_gpu_ef = cp.empty_like(ll_ef)
+    dmr_gpu_sf = cp.empty_like(dmr_sf)
+    dmr_gpu_ef = cp.empty_like(dmr_ef)
+    dlg_gpu_sf = cp.empty_like(dlg_sf)
+    dlg_gpu_ef = cp.empty_like(dlg_ef)
+    dll_gpu_sf = cp.empty_like(dll_sf)
+    dll_gpu_ef = cp.empty_like(dll_ef)
+    vh_gpu_sf = cp.empty_like(vh_sf)
+    vh_gpu_ef = cp.empty_like(vh_ef)
+
 
     times[0] = -time.perf_counter()
+
+    # load data to the gpu
+    vh_gpu.set(vh)
+    pg_gpu.set(pg)
+    pl_gpu.set(pl)
+    pr_gpu.set(pr)
+    ij2ji_gpu.set(ij2ji)
+    rows_gpu.set(rows)
+    columns_gpu.set(columns)
+
     # todo try to not additionally symmetrize
     # Anti-Hermitian symmetrizing of pl and pg
-    pg = 1j * np.imag(pg)
-    pg = (pg - pg[:,ij2ji].conjugate()) / 2
-    pl = 1j * np.imag(pl)
-    pl = (pl - pl[:,ij2ji].conjugate()) / 2
+    pg_gpu = 1j * cp.imag(pg_gpu)
+    pg_gpu = (pg_gpu - pg_gpu[:,ij2ji_gpu].conjugate()) / 2
+    pl_gpu = 1j * cp.imag(pl_gpu)
+    pl_gpu = (pl_gpu - pl_gpu[:,ij2ji_gpu].conjugate()) / 2
     # pr has to be derived from pl and pg and then has to be symmetrized
-    pr = 1j * np.imag(pg - pl) / 2
-    pr = (pr + pr[:,ij2ji]) / 2
+    pr_gpu = 1j * cp.imag(pg_gpu - pl_gpu) / 2
+    pr_gpu = (pr_gpu + pr_gpu[:,ij2ji_gpu]) / 2
+
+    # unload
+    # pg_gpu.get(out=pg)
+    # pl_gpu.get(out=pl)
+    # pr_gpu.get(out=pr)
+
     times[0] += time.perf_counter()
 
     # compute helper arrays
     times[1] = -time.perf_counter()
-    vh_sparse = sparse.csr_array((vh, (rows, columns)),
-                          shape=(nao, nao), dtype = np.complex128)
-    mr_vec = np.ndarray((ne,), dtype=object)
-    lg_vec = np.ndarray((ne,), dtype=object)
-    ll_vec = np.ndarray((ne,), dtype=object)
+    vh_sparse = cusparse.csr_matrix((vh_gpu, (rows_gpu, columns_gpu)),
+                          shape=(nao, nao), dtype = cp.complex128)
+    mr_vec = []
+    lg_vec = []
+    ll_vec = []
     for i in range(ne):
-        pg_s = sparse.csr_array((pg[i,:,], (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128)
-        pl_s = sparse.csr_array((pl[i,:,], (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128)
-        pr_s = sparse.csr_array((pr[i,:,], (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128)
-        mr_vec[i], lg_vec[i], ll_vec[i] = obc_w_cpu.obc_w_sl(vh_sparse, pg_s, pl_s, pr_s, nao)
-        obc_w_cpu.obc_w_sc(
+        pg_s = cusparse.csr_matrix((pg_gpu[i,:,], (rows_gpu, columns_gpu)),
+                            shape=(nao, nao), dtype = cp.complex128)
+        pl_s = cusparse.csr_matrix((pl_gpu[i,:,], (rows_gpu, columns_gpu)),
+                            shape=(nao, nao), dtype = cp.complex128)
+        pr_s = cusparse.csr_matrix((pr_gpu[i,:,], (rows_gpu, columns_gpu)),
+                            shape=(nao, nao), dtype = cp.complex128)
+        mr, lg, ll = obc_w_gpu.obc_w_sl(vh_sparse, pg_s, pl_s, pr_s, nao)
+        mr_vec.append(mr)
+        lg_vec.append(lg)
+        ll_vec.append(ll)
+        obc_w_gpu.obc_w_sc(
                     pg_s,
                     pl_s,
                     pr_s,
                     vh_sparse,
-                    mr_sf[i],
-                    mr_ef[i],
-                    lg_sf[i],
-                    lg_ef[i],
-                    ll_sf[i],
-                    ll_ef[i],
-                    dmr_sf[i],
-                    dmr_ef[i],
-                    dlg_sf[i],
-                    dlg_ef[i],
-                    dll_sf[i],
-                    dll_ef[i],
-                    vh_sf[i],
-                    vh_ef[i],
+                    mr_gpu_sf[i],
+                    mr_gpu_ef[i],
+                    lg_gpu_sf[i],
+                    lg_gpu_ef[i],
+                    ll_gpu_sf[i],
+                    ll_gpu_ef[i],
+                    dmr_gpu_sf[i],
+                    dmr_gpu_ef[i],
+                    dlg_gpu_sf[i],
+                    dlg_gpu_ef[i],
+                    dll_gpu_sf[i],
+                    dll_gpu_ef[i],
+                    vh_gpu_sf[i],
+                    vh_gpu_ef[i],
                     bmax,
                     bmin,
                     nbc)
+    # unload
+    mr_gpu_sf.get(out=mr_sf)
+    mr_gpu_ef.get(out=mr_ef)
+    lg_gpu_sf.get(out=lg_sf)
+    lg_gpu_ef.get(out=lg_ef)
+    ll_gpu_sf.get(out=ll_sf)
+    ll_gpu_ef.get(out=ll_ef)
+    dmr_gpu_sf.get(out=dmr_sf)
+    dmr_gpu_ef.get(out=dmr_ef)
+    dlg_gpu_sf.get(out=dlg_sf)
+    dlg_gpu_ef.get(out=dlg_ef)
+    dll_gpu_sf.get(out=dll_sf)
+    dll_gpu_ef.get(out=dll_ef)
+    vh_gpu_sf.get(out=vh_sf)
+    vh_gpu_ef.get(out=vh_ef)
+
     times[1] += time.perf_counter()
 
 
@@ -424,10 +281,10 @@ def p2w_mpi_cpu_alt(
             matrix_inversion_w.rgf(
                 bmax_mm,
                 bmin_mm,
-                vh_sparse,
-                mr_vec[i],
-                lg_vec[i],
-                ll_vec[i],
+                vh_sparse.get(),
+                mr_vec[i].get(),
+                lg_vec[i].get(),
+                ll_vec[i].get(),
                 factors[i],
                 wg_diag[i],
                 wg_upper[i],

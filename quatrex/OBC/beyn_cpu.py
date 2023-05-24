@@ -212,3 +212,153 @@ def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     ksurf = ksurf[0:Nref]
     Vsurf = Vsurf[:,0:Nref]
     return ksurf, Vsurf, dEk_dk
+
+def beyn_old(M00, M01, M10, imag_lim, R, type):
+    """
+    Old wrong version of beyn function.
+    Used for a wrong reference test.
+
+    Args:
+        M00 (_type_): _description_
+        M01 (_type_): _description_
+        M10 (_type_): _description_
+        imag_lim (_type_): _description_
+        R (_type_): _description_
+        type (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
+    #np.seterr(divide='ignore', invalid='ignore')
+
+    theta_min = 0
+    theta_max = 2*np.pi
+    NT = 51
+    eps_lim = 1e-8
+    ref_iteration = 2                                   
+    cond = 0
+    min_dEk = 1e8
+
+    N = M00.shape[0]
+
+    theta = np.linspace(theta_min, theta_max, NT)
+    dtheta = np.hstack((theta[1]-theta[0], theta[2:]-theta[:-2], theta[-1]-theta[-2]))/2
+
+    c = 0
+    r1 = 3.0
+    r2 = 1/R
+
+    zC1 = c + r1*np.exp(1j*theta)
+    zC2 = c + r2*np.exp(1j*theta)
+    z = np.hstack((zC1, zC2))
+
+    dzC1_dtheta = 1j*r1*np.exp(1j*theta)
+    dzC2_dtheta = 1j*r2*np.exp(1j*theta)
+    dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
+
+    dtheta = np.hstack((dtheta, dtheta))
+
+    if N < 100:
+        NM = round(3*N/4)
+    else:
+        NM = round(N/2)
+
+    Y = np.random.rand(N, NM)
+    #Y = np.loadtxt('CNT_newwannier/' + 'ymatrix.dat')
+
+    P0 = np.zeros((N, N), dtype=np.complex)
+    P1 = np.zeros((N, N), dtype=np.complex)
+
+    # ztmp = z.reshape(-1,1,1)
+    # dz_dthetatmp = dz_dtheta.reshape(-1,1,1)
+    # dthetatmp = dtheta.reshape(-1,1,1)
+    # tmpx = dz_dthetatmp*dthetatmp
+    # tmpy = ztmp*dz_dthetatmp*dthetatmp
+    # if type == 'L':
+    #     T = M00 + 1/ztmp*M01 + ztmp*M10
+    # else:
+    #     T = M00 + ztmp*M01 + 1/ztmp*M10
+    # iT = np.linalg.inv(T)
+    # P0 = np.sum(iT*tmpx, axis = 0)/(2*np.pi*1j)
+    # P1 = np.sum(iT*tmpy, axis = 0)/(2*np.pi*1j)
+
+    for I in range(len(z)):
+
+        if type == 'L':
+            T = M00 + M01/z[I] + M10*z[I]
+        else:
+            T = M00 + M01*z[I] + M10/z[I]
+
+        iT = np.linalg.inv(T)
+
+        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+
+    LP0 = P0@Y
+    LP1 = P1@Y
+
+    RP0 = Y.T@P0
+    RP1 = Y.T@P1
+
+    LV, LS, LW = svd(LP0, full_matrices=False)
+    Lind = np.count_nonzero(abs(LS) > eps_lim)
+    # Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
+
+    RV, RS, RW = svd(RP0, full_matrices=True)
+    Rind = np.count_nonzero(abs(RS) > eps_lim)
+    # Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
+
+    if Lind == 0:
+
+        cond = np.nan
+        ksurf = None
+        Sigma = None
+        gR = None
+
+    else:
+
+        LV = LV[:, :Lind]
+        LS = LS[:Lind]
+        LW = np.conj(LW).T[:, :Lind]
+
+        Llambda, Lu = eig(np.conj(LV).T@LP1@LW@np.linalg.inv(np.diag(LS)))
+        #Llambda = np.diag(Llambda)
+        phiL = LV@Lu
+
+        RV = RV[:, :Rind]
+        RS = RS[:Rind]
+        RW = np.conj(RW).T[:, :Rind]
+
+        Rlambda, Ru = eig(np.linalg.inv(np.diag(RS))@np.conj(RV).T@RP1@RW)
+        #Rlambda = np.diag(Rlambda)
+        phiR = np.linalg.solve(Ru, np.conj(RW).T)
+
+        if type == 'L':
+            kL = 1j * np.log(Llambda)
+            kR = 1j * np.log(Rlambda)
+        else:
+            kL = -1j * np.log(Llambda)
+            kR = -1j * np.log(Rlambda)
+
+        ind_sort_kL = np.argsort(abs(np.imag(kL)))
+        k = kL[ind_sort_kL]
+        phiL = phiL[:, ind_sort_kL]
+
+        if type == 'L':
+            ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
+            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
+            for IC in range(ref_iteration):
+                gR = np.linalg.inv(M00 - M10 @ gR @ M01)
+            Sigma = M10 @ gR @ M01
+        else:
+            ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, -1.0)
+            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
+            for IC in range(ref_iteration):
+                gR = np.linalg.inv(M00 - M01 @ gR @ M10)
+            Sigma = M01 @ gR @ M10
+
+        ind = np.where(abs(dEk_dk))
+        if len(ind[0]) > 0:
+            min_dEk = np.min(abs(dEk_dk[ind]))
+    return ksurf, cond, gR, Sigma, min_dEk
