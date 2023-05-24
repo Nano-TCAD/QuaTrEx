@@ -5,8 +5,12 @@ from scipy.sparse import lil_matrix, csr_matrix
 from scipy.linalg import svd
 from numpy.linalg import eig
 from utils.read_utils import read_file_to_float_ndarray
+import dace
 
 np.random.seed(0)
+
+K, L, N, M = (dace.symbol(s, dtype=dace.int32) for s in ("K", "L", "N", "M"))
+
 
 def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
     
@@ -138,11 +142,12 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
             min_dEk = np.min(abs(dEk_dk[ind]))
     return ksurf, cond, gR, Sigma, min_dEk
 
+
 def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     imag_cond = np.zeros(len(k))
     dEk_dk = np.zeros(len(k), dtype =  np.complex128)
 
-    # ind = np.count_nonzero(np.abs(np.imag(k)) < np.max((0.5, max_imag)))
+    # ind = np.where(np.abs(np.imag(k)) < np.max((0.5, max_imag)))
     # Ikmax = len(ind)
     Ikmax = np.count_nonzero(np.abs(np.imag(k)) < np.max((0.5, max_imag)))
     # if Ikmax % 2 == 1:
@@ -178,6 +183,58 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
 
     return imag_cond, dEk_dk
 
+@dace.program(auto_optimize=False)
+def check_imgc_dace(
+        k: dace.complex128[K],
+        kR: dace.complex128[L],
+        phiR: dace.complex128[L,N],
+        phiL: dace.complex128[K,K],
+        M10: dace.complex128[N,N],
+        M01: dace.complex128[N,N],
+        max_imag: dace.float64
+) -> typing.Tuple[dace.complex128[K], dace.complex128[K]]:
+    imag_cond = np.zeros(len(k))
+    dEk_dk = np.zeros(len(k), dtype =  np.complex128)
+
+    # np.count_nonzero is not supported in DaCe
+    # Ikmax = np.count_nonzero(np.abs(np.imag(k)) < np.max((0.5, max_imag)))
+    
+    max_img = max(0.5, max_imag)
+    Ikmax = 0
+    for i in range(len(k)):
+        if np.abs(np.imag(k[i])) < max_img:
+            Ikmax += 1
+    # if Ikmax % 2 == 1:
+    #     Ikmax += 1
+    Ikmax += Ikmax % 2
+    for Ik in range(Ikmax):
+        ind_kR = np.argmin(np.abs(k[Ik] - kR), axis=0)
+        # ind_kR = np.argmin(np.abs(np.ones(len(kR)) * k[Ik] - kR))
+
+        dEk_dk[Ik] = -(phiR[ind_kR, :] @ (-1j * M10 * np.exp(-1j * k[Ik]) + 1j * M01 * np.exp(1j * k[Ik])) @ phiL[:, Ik]) / \
+            (phiR[ind_kR, :] @ phiL[:, Ik])
+
+    for Ik in range(Ikmax):
+        if not imag_cond[Ik]:
+            ind_neigh = np.argmin(np.abs(dEk_dk + dEk_dk[Ik]), axis=0)
+            # ind_neigh = np.argmin(np.abs(dEk_dk + dEk_dk[Ik] * np.ones(len(k))))
+
+            k1 = k[Ik]
+            k2 = k[ind_neigh]
+            dEk1 = dEk_dk[Ik]
+            dEk2 = dEk_dk[ind_neigh]
+
+            cond1 = np.abs(dEk1 + dEk2) / (np.abs(dEk1) + 1e-10) < 0.25
+            cond2 = np.abs(k1 + k2) / (np.abs(k1) + 1e-10) < 0.25
+            cond3 = (np.abs(np.imag(k1)) + np.abs(np.imag(k2))) / 2.0 < 1.5 * max_imag
+            cond4 = np.sign(np.imag(k1)) == np.sign(np.imag(k2))
+
+            if cond1 and cond2 and (cond3 or (not cond3 and cond4)):
+                if not imag_cond[ind_neigh]:
+                    imag_cond[Ik] = 1
+                    imag_cond[ind_neigh] = 1
+
+    return imag_cond, dEk_dk
 
 
 def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
@@ -187,7 +244,9 @@ def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     ksurf = np.zeros(Nk, dtype = np.complex128)
     Vsurf = np.zeros((NT, Nk), dtype = np.complex128)
 
-    imag_cond, dEk_dk = check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_limit)
+    # imag_cond, dEk_dk = check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_limit)
+    with dace.config.set_temporary('debugprint', value=True):
+        imag_cond, dEk_dk = check_imgc_dace(k, kR, phiR, phiL, M10, M01, imag_limit)
 
     Nref = 0
 
