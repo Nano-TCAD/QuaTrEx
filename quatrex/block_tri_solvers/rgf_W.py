@@ -74,6 +74,8 @@ def rgf_W(
     wr_upper: npt.NDArray[np.complex128],
     xr_diag:  npt.NDArray[np.complex128],
     DOSW:      npt.NDArray[np.complex128],
+    nEW:       npt.NDArray[np.complex128],
+    nPW:       npt.NDArray[np.complex128],
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
@@ -387,7 +389,7 @@ def rgf_W(
     times[5] = -time.perf_counter()
 
     # check if OBC did not fail
-    if not np.isnan(cond_r) and not np.isnan(cond_l):
+    if not np.isnan(cond_r) and not np.isnan(cond_l) and ie:
 
         # create buffer for results
 
@@ -668,6 +670,8 @@ def rgf_W(
             wl_diag[idx_ib, :, :] *= factor
             wr_diag[idx_ib, :, :] *= factor
             DOSW[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
+            nEW[idx_ib] = -1j * np.trace(wl_diag[idx_ib, :, :])
+            nPW[idx_ib] = 1j * np.trace(wg_diag[idx_ib, :, :])
 
             if idx_ib < nb_mm - 1:
                 wr_upper[idx_ib, :, :] *= factor
@@ -707,6 +711,8 @@ def rgf_w_opt(
     wr_upper: npt.NDArray[np.complex128],
     xr_diag:  npt.NDArray[np.complex128],
     dosw:      npt.NDArray[np.complex128],
+    nEw:       npt.NDArray[np.complex128],
+    nPw:       npt.NDArray[np.complex128],
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
@@ -902,21 +908,8 @@ def rgf_w_opt(
     cond_r = 0.0
 
     # correction for first block
-    # if not sancho_flag:
-    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn(
-    #                                             mr_s[0],
-    #                                             mr_s[1],
-    #                                             mr_s[2],
-    #                                             imag_lim, rr, "L")
-        
-        
-    #     if not np.isnan(cond_l):
-    #         dmr_sd -= dmr
-    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
-
-    # old wrong version
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
+        _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn(
                                                 mr_s[0],
                                                 mr_s[1],
                                                 mr_s[2],
@@ -927,6 +920,19 @@ def rgf_w_opt(
             dmr_sd -= dmr
             dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
 
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
+    #                                             mr_s[0],
+    #                                             mr_s[1],
+    #                                             mr_s[2],
+    #                                             imag_lim, rr, "L")
+        
+        
+    #     if not np.isnan(cond_l):
+    #         dmr_sd -= dmr
+    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
+
     if np.isnan(cond_l) or sancho_flag:
         dxr_sd, dmr, dvh_sd, cond_l = sancho.open_boundary_conditions(
                                                 mr_s[0],
@@ -935,18 +941,8 @@ def rgf_w_opt(
                                                 vh_s[0])
         dmr_sd -= dmr
     # correction for last block
-    # if not sancho_flag:
-    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn(
-    #                                             mr_e[0],
-    #                                             mr_e[1],
-    #                                             mr_e[2],
-    #                                             imag_lim, rr, "R")
-    #     if not np.isnan(cond_r):
-    #         dmr_ed -= dmr
-    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
-    # old wrong version
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
+        _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn(
                                                 mr_e[0],
                                                 mr_e[1],
                                                 mr_e[2],
@@ -954,6 +950,16 @@ def rgf_w_opt(
         if not np.isnan(cond_r):
             dmr_ed -= dmr
             dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
+    #                                             mr_e[0],
+    #                                             mr_e[1],
+    #                                             mr_e[2],
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dmr_ed -= dmr
+    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
     if np.isnan(cond_r) or sancho_flag:
         dxr_ed, dmr, dvh_ed, cond_r = sancho.open_boundary_conditions(
                                                 mr_e[0],
@@ -1012,7 +1018,7 @@ def rgf_w_opt(
     times[5] = -time.perf_counter()
 
     # check if OBC did not fail
-    if not np.isnan(cond_r) and not np.isnan(cond_l):
+    if not np.isnan(cond_r) and not np.isnan(cond_l) and ie:
 
         # create buffer for results
 
@@ -1297,7 +1303,8 @@ def rgf_w_opt(
             wl_diag[idx_ib, :, :] *= factor
             wr_diag[idx_ib, :, :] *= factor
             dosw[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
-
+            nEw[idx_ib] = -1j * np.trace(wl_diag[idx_ib, :, :])
+            nPw[idx_ib] = 1j * np.trace(wg_diag[idx_ib, :, :])
             if idx_ib < nb_mm - 1:
                 wr_upper[idx_ib, :, :] *= factor
                 wg_upper[idx_ib, :, :] *= factor
