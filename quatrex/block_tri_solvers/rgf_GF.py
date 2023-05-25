@@ -264,6 +264,8 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL,
             GL[IB, :, :] *= factor
             GG[IB, :, :] *= factor
             DOS[IB] = 1j * np.trace(GR[IB, :, :] - GR[IB, :, :].T.conj())
+            nE[IB] = -1j * np.trace(GL[IB, :, :])
+            nP[IB] = 1j * np.trace(GG[IB, :, :])
 
             if IB < NB-1:
                 GRnn1[IB, :, :] *= factor

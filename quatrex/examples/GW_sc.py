@@ -74,7 +74,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-    energy = np.linspace(-17.5, 7.5, 251, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-17.5, 7.5, 3001, endpoint = True, dtype = float) # Energy Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -328,7 +328,7 @@ if __name__ == "__main__":
     mem_w = 0.9
     # max number of iterations
 
-    max_iter = 30
+    max_iter = 20
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -553,6 +553,7 @@ if __name__ == "__main__":
                                                                                                 hamiltonian_obj, energy_loc,
                                                                                                 pg_p2w_vec, pl_p2w_vec,
                                                                                                 pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],   
                                                                                                 factor_w_loc, w_mkl_threads,
                                                                                                 w_worker_threads)
         else:

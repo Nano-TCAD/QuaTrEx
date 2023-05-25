@@ -32,7 +32,7 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads = 1, worker_num = 1):
     factor = np.ones(NE)
     factor[NE-dNP-1:NE] = (np.cos(np.pi*np.linspace(0, 1, dNP+1)) + 1)/2
     # factor[0:dNP+1] = (np.cos(np.pi*np.linspace(1, 0, dNP+1)) + 1)/2
-    factor[np.where(np.invert(w_mask))[0]] = 0.0
+    #factor[np.where(np.invert(w_mask))[0]] = 0.0
 
     nb = DH.Bmin.shape[0]
     NT = DH.Bmax[-1]
@@ -64,6 +64,8 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads = 1, worker_num = 1):
 
     # dosw not needed, but as a placeholder
     dosw = np.zeros(shape=(NE,nb_mm), dtype = np.complex128)
+    nEw = np.zeros(shape=(NE,nb_mm), dtype = np.complex128)
+    nPw = np.zeros(shape=(NE,nb_mm), dtype = np.complex128)
 
     tic = time.perf_counter()
     # Create a process pool with 4 workers
@@ -80,12 +82,31 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads = 1, worker_num = 1):
                     WG_3D_E, WGnn1_3D_E,
                     WL_3D_E, WLnn1_3D_E,
                     WR_3D_E, WRnn1_3D_E,
-                    XR_3D_E, dosw, repeat(nbc),
+                    XR_3D_E, dosw, nEw, nPw, repeat(nbc),
                     index_e, factor)
     toc = time.perf_counter()
 
     print("Total Time for parallel W section: " + "%.2f" % (toc-tic) + " [s]" )
+
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL 
+    F1 = np.max(np.abs(dosw - (nEw + nPw)) / (np.abs(dosw) + 1e-6), axis=1)
+    F2 = np.max(np.abs(dosw - (nEw + nPw)) / (np.abs(nEw + nPw) + 1e-6), axis=1)
+
+    # Remove individual peaks
+    dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[0:NE-2, :] + 1)), axis=1), [0]))
+    dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[2:NE, :] + 1)), axis=1), [0]))
+
+    # Find indices of elements satisfying the conditions
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
     
+    # Remove the identified peaks and errors
+    for index in ind_zeros:
+        WR_3D_E[index, :, :, :] = 0
+        WRnn1_3D_E[index, :, :, :] = 0
+        WL_3D_E[index, :, :, :] = 0
+        WLnn1_3D_E[index, :, :, :] = 0
+        WG_3D_E[index, :, :, :] = 0
+        WGnn1_3D_E[index, :, :, :] = 0
     
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:    
     #     executor.map(assemble_full_G_smoothing, GR, factor, GR_3D_E, GRnn1_3D_E, repeat(DH.Bmin), repeat(DH.Bmax), repeat('sparse'), repeat('R'))
