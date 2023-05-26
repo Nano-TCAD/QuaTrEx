@@ -710,9 +710,9 @@ def rgf_w_opt(
     wr_diag:  npt.NDArray[np.complex128],
     wr_upper: npt.NDArray[np.complex128],
     xr_diag:  npt.NDArray[np.complex128],
-    dosw:      npt.NDArray[np.complex128],
-    nEw:       npt.NDArray[np.complex128],
-    nPw:       npt.NDArray[np.complex128],
+    dosw:     npt.NDArray[np.complex128],
+    nEw:      npt.NDArray[np.complex128],
+    nPw:      npt.NDArray[np.complex128],
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
@@ -845,6 +845,7 @@ def rgf_w_opt(
     #                                        pr[slb_ed,slb_ed], pr[slb_ed,slb_eo].transpose(),
     #                                        nbc)
 
+    # todo ask Alex, why numba still has strided inputs after these operations
     vh_s1 = np.ascontiguousarray(vh[slb_sd,slb_sd].toarray(order="C"))
     vh_s2 = np.ascontiguousarray(vh[slb_sd,slb_so].toarray(order="C"))
     pg_s1 = np.ascontiguousarray(pg[slb_sd,slb_sd].toarray(order="C"))
@@ -1310,9 +1311,6 @@ def rgf_w_opt(
                 wg_upper[idx_ib, :, :] *= factor
                 wl_upper[idx_ib, :, :] *= factor
 
-        times[5] += time.perf_counter()
-
-
         if ref_flag:
             # reference solution
             # invert m
@@ -1326,4 +1324,5 @@ def rgf_w_opt(
 
             return xr_ref*factor, wg_ref*factor, wl_ref*factor, wr_ref*factor
 
-        return times
+    times[5] += time.perf_counter()
+    return times

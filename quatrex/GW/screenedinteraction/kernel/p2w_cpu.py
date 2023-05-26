@@ -24,8 +24,8 @@ def p2w_pool_mpi_cpu(
     pr: npt.NDArray[np.complex128],
     vh: npt.NDArray[np.complex128],
     dosw: npt.NDArray[np.complex128],
-    nEw: npt.NDArray[np.complex128],
-    nPw: npt.NDArray[np.complex128],
+    new: npt.NDArray[np.complex128],
+    npw: npt.NDArray[np.complex128],
     factor: npt.NDArray[np.float64],
     mkl_threads: int = 1,
     worker_num: int = 1
@@ -50,6 +50,8 @@ def p2w_pool_mpi_cpu(
         pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
         vh (npt.NDArray[np.complex128]): Vh sparse matrix
         dosw (npt.NDArray[np.complex128]): density of state
+        new (npt.NDArray[np.complex128]): density of state
+        npw (npt.NDArray[np.complex128]): density of state
         factor (npt.NDArray[np.float64]): Smoothing factor
         mkl_threads (int, optional): Number of mkl threads used. Defaults to 1.
         worker_num(int, optional): Number of pool workers used. Defaults to 1.
@@ -108,13 +110,13 @@ def p2w_pool_mpi_cpu(
                     wg_diag, wg_upper,
                     wl_diag, wl_upper,
                     wr_diag, wr_upper,
-                    xr_diag, dosw, nEw, nPw, repeat(nbc),
+                    xr_diag, dosw, new, npw, repeat(nbc),
                     index_e, factor
                      )
 
-    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL 
-    F1 = np.max(np.abs(dosw - (nEw + nPw)) / (np.abs(dosw) + 1e-6), axis=1)
-    F2 = np.max(np.abs(dosw - (nEw + nPw)) / (np.abs(nEw + nPw) + 1e-6), axis=1)
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
+    F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
+    F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
     dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
@@ -142,6 +144,8 @@ def p2w_mpi_cpu(
     pr: npt.NDArray[np.complex128],
     vh: npt.NDArray[np.complex128],
     dosw: npt.NDArray[np.complex128],
+    new: npt.NDArray[np.complex128],
+    npw: npt.NDArray[np.complex128],
     factor: npt.NDArray[np.float64],
     mkl_threads: int = 1
 ) -> typing.Tuple[
@@ -165,6 +169,8 @@ def p2w_mpi_cpu(
         pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
         vh (npt.NDArray[np.complex128]): Vh sparse matrix
         dosw (npt.NDArray[np.complex128]): density of state
+        new (npt.NDArray[np.complex128]): todo
+        npw (npt.NDArray[np.complex128]): todo
         factor (npt.NDArray[np.float64]): Smoothing factor
         mkl_threads (int, optional): Number of mkl threads used. Defaults to 1.
 
@@ -216,7 +222,7 @@ def p2w_mpi_cpu(
     index_e = np.arange(ne)
 
     for ie in range(ne):
-        times += rgf_W.rgf_w_opt(
+        out = rgf_W.rgf_w_opt(
                 vh,
                 pg[ie],
                 pl[ie],
@@ -225,9 +231,12 @@ def p2w_mpi_cpu(
                 wg_diag[ie], wg_upper[ie],
                 wl_diag[ie], wl_upper[ie],
                 wr_diag[ie], wr_upper[ie],
-                xr_diag[ie], dosw[ie], nbc,
+                xr_diag[ie],
+                dosw[ie], new[ie], npw[ie],
+                nbc,
                 index_e[ie], factor[ie]
         )
+        times += out
     print("Time symmetrize: ", times[0])
     print("Time sr,lg,ll arrays: ", times[1])
     print("Time scattering obc: ", times[2])

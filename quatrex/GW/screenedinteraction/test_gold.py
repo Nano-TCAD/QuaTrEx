@@ -29,7 +29,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the screened interaction calculation"
     )
-    parser.add_argument("-t", "--type", default="cpu_pool_old",
+    parser.add_argument("-t", "--type", default="cpu",
                         choices=["cpu_pool", "cpu",
                                 "cpu_pool_old", "cpu_alt",
                                 "gpu", "gpu_alt"], required=False)
@@ -102,8 +102,11 @@ if __name__ == "__main__":
     factor_w = np.ones(ne)
     factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     factor_w[np.where(np.invert(w_mask))[0]] = 0.0
-    # initialize the density of states
+
+    # initialize the density of states and other quantities
     dosw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
+    new = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
+    npw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
 
     # sanity checks
     assert np.max(columns) == nao - 1
@@ -150,7 +153,8 @@ if __name__ == "__main__":
                                                                                 hamiltionian_obj, energy,
                                                                                 pg_cpu_vec, pl_cpu_vec,
                                                                                 pr_cpu_vec, vh,
-                                                                                dosw,factor_w,
+                                                                                dosw, new, npw,
+                                                                                factor_w,
                                                                                 w_mkl_threads, w_worker_threads)
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
@@ -212,7 +216,8 @@ if __name__ == "__main__":
                                                                                 hamiltionian_obj, energy,
                                                                                 pg_cpu_vec, pl_cpu_vec,
                                                                                 pr_cpu_vec, vh,
-                                                                                dosw, factor_w,
+                                                                                dosw, new, npw,
+                                                                                factor_w,
                                                                                 mkl_threads=w_mkl_threads)
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
