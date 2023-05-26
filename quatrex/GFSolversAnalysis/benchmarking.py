@@ -12,7 +12,7 @@ from mpi4py import MPI
 
 if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------
-    # Initialization fo the problem and computation of the reference solution
+    # Initialization of the problem and computation of the reference solution
     # ---------------------------------------------------------------------------------------------
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     A_csc = gen.denseToSparseStorage(A)
 
     # Dense and sparse reference solutions (Full inversons)
-    A_refsol_np = inv.fullInversion(A)
+    A_refsol_np  = inv.fullInversion(A)
     A_refsol_csc = inv.fullInversion(A_csc)
 
     if not verif.verifResults(A_refsol_np, A_refsol_csc):
