@@ -328,7 +328,7 @@ if __name__ == "__main__":
     mem_w = 0.9
     # max number of iterations
 
-    max_iter = 30
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -642,7 +642,7 @@ if __name__ == "__main__":
         # calculate the self-energy on every rank-----------------------------------
         # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("gpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu(
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
                                                                 -pre_factor/2,
                                                                 gg_g2p,
                                                                 gl_g2p,
@@ -654,7 +654,7 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
                                                                 -pre_factor/2,
                                                                 gg_g2p,
                                                                 gl_g2p,

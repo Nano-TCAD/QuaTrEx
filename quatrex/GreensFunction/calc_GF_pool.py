@@ -75,11 +75,11 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
     # Remove individual peaks
-    dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[0:NE-2, :] + 1)), axis=1), [0]))
-    dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[2:NE, :] + 1)), axis=1), [0]))
+    # dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[0:NE-2, :] + 1)), axis=1), [0]))
+    # dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[2:NE, :] + 1)), axis=1), [0]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
 
     for index in ind_zeros:
         GR_3D_E[index, :, :, :] = 0
@@ -160,11 +160,11 @@ def calc_GF_pool_mpi(
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
-    dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[0:ne-2, :] + 1)), axis=1), [0]))
-    dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[2:ne, :] + 1)), axis=1), [0]))
+    #dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[0:ne-2, :] + 1)), axis=1), [0]))
+    #dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[2:ne, :] + 1)), axis=1), [0]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
 
     for index in ind_zeros:
         GR_3D_E[index, :, :, :] = 0

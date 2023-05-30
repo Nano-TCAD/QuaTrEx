@@ -1299,13 +1299,15 @@ def get_dl_obc(
         typing.Tuple[np.ndarray, np.ndarray]: greater and lesser correction
     """
     # Number of iterations for the refinement
-    ref_iteration = 5
+    ref_iteration = 1
 
     # length of block
     lb = mr_x.shape[0]
 
     # non zero indexes of mr_x
-    rows, cols = mr_x.nonzero()
+    mr_x_max = np.max(np.abs(mr_x))
+    rows, cols = np.where(np.abs(mr_x) > mr_x_max / 1e8)
+    #rows, cols = mr_x.nonzero()
     if(not rows.size):
         return np.nan, np.nan
     # conjugate transpose of mr/xr
@@ -1437,7 +1439,7 @@ def get_dl_obc_alt(
         typing.Tuple[np.ndarray, np.ndarray]: greater and lesser correction
     """
     # Number of iterations for the refinement
-    ref_iteration = 5
+    ref_iteration = 1
 
     # length of block
     lb = mr_x.shape[0]

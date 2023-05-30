@@ -93,11 +93,11 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads = 1, worker_num = 1):
     F2 = np.max(np.abs(dosw - (nEw + nPw)) / (np.abs(nEw + nPw) + 1e-6), axis=1)
 
     # Remove individual peaks
-    dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[0:NE-2, :] + 1)), axis=1), [0]))
-    dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[2:NE, :] + 1)), axis=1), [0]))
+    # dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[0:NE-2, :] + 1)), axis=1), [0]))
+    # dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:NE-1, :] / (dosw[2:NE, :] + 1)), axis=1), [0]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
     
     # Remove the identified peaks and errors
     for index in ind_zeros:
