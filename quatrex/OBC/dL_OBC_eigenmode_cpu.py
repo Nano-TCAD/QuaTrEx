@@ -1356,7 +1356,7 @@ def get_dl_obc(
 
     ar = xr_d[sl_x,sl_y] @ mr_x[sl_y,sl_x]
     # add imaginary part to stabilize
-    ar = ar + np.identity(ar.shape[0])*1j*1e-4
+    # ar = ar + np.identity(ar.shape[0])*1j*1e-4
 
     # eigen values and eigen vectors
     eival, eivec = np.linalg.eig(ar)
@@ -1445,8 +1445,11 @@ def get_dl_obc_alt(
     lb = mr_x.shape[0]
 
     # non zero indexes of mr_x
-    rows, cols = mr_x.nonzero()
+    #rows, cols = mr_x.nonzero()
 
+    # non zero indexes of mr_x
+    mr_x_max = np.max(np.abs(mr_x))
+    rows, cols = np.where(np.abs(mr_x) > mr_x_max / 1e8)
     # conjugate transpose of mr/xr
     mr_x_ct = mr_x.conjugate().T
     xr_d_ct = xr_d.conjugate().T
@@ -1480,7 +1483,7 @@ def get_dl_obc_alt(
 
     ar = xr_d[sl_x,sl_y] @ mr_x[sl_y,sl_x]
     # add imaginary part to stabilize
-    ar = ar + np.identity(ar.shape[0])*1j*1e-4
+    #ar = ar + np.identity(ar.shape[0])*1j*1e-4
 
     # eigen values and eigen vectors
     eival, eivec = np.linalg.eig(ar)

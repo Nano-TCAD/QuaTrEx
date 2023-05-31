@@ -73,8 +73,9 @@ class Hamiltonian:
             if not self.Sblocks:
                 for ii in range(0,len(self.blocks)):
                     self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix(self.blocks[ii]) 
-                    self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
-                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
+                    #self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
+                    self.NH = self.Hamiltonian[self.keys[ii]].shape[0]
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat, format = 'csr')
             #Otherwise read from file        
             else:        
                 for ii in range(0,len(self.blocks)):
@@ -83,7 +84,7 @@ class Hamiltonian:
                 
                 
                 if np.abs(self.Overlap[self.keys[ii]][0,0] + 1) < 1e-6:
-                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat)
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0], dtype = np.cfloat, format = 'csr')
                 
             #Check that hamiltonian is hermitean
             self.hermitean = self.check_hermitivity(tol = 1e-6)
@@ -318,12 +319,16 @@ class Hamiltonian:
                         add_element = 0
 
                 if add_element:
-                    indI[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.arange(indR,indR+orbA),  np.ones((1, orbB))), (1, orbA*orbB)))
-                    indJ[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.ones((orbA,1)),np.arange(indC,indC+orbB)), (1, orbA*orbB)))
-                    
+                    if(np.max(self.no_orb) == 1):
+                        indI[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.arange(indR,indR+orbA),  np.ones((1, orbB))), (1, orbA*orbB)))
+                        indJ[ind:ind+orbA*orbB] = np.sort(np.reshape(np.outer(np.ones((orbA,1)),np.arange(indC,indC+orbB)), (1, orbA*orbB)))
+                    else:
+                        indI[ind:ind+orbA*orbB] = np.reshape(np.outer(np.arange(indR,indR+orbA),  np.ones((1, orbB))), (1, orbA*orbB))
+                        indJ[ind:ind+orbA*orbB] = np.reshape(np.outer(np.ones((orbA,1)),np.arange(indC,indC+orbB)), (1, orbA*orbB)) 
                     ind += orbA*orbB
-            indI[indA:ind] = np.sort(indI[indA:ind])
-            indJ[indA:ind] = np.sort(indJ[indA:ind])
+            if(np.max(self.no_orb) == 1):
+                indI[indA:ind] = np.sort(indI[indA:ind])
+                indJ[indA:ind] = np.sort(indJ[indA:ind])
             indA = ind
         self.columns = indI[:ind].astype('int32')
         self.rows = indJ[:ind].astype('int32')

@@ -119,12 +119,12 @@ def p2w_pool_mpi_cpu(
     F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
-    # dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
-    # dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
+    dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
-    
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
+    print(ind_zeros)
     # Remove the identified peaks and errors
     for index in ind_zeros:
         wr_diag[index, :, :, :] = 0

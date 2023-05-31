@@ -36,7 +36,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e):
     """
     factor = e/(4*np.pi*eps0*eps_r) * 1e9
     V_atomic = np.zeros((DH.NA, DH.NB+1, DH.TB, DH.TB),dtype = np.cfloat)
-    
+    SF = np.outer(np.arange(1, -0.1, -0.1), np.arange(1, -0.1, -0.1))
     Vmax = float(0.0)
     
     for ia in range(DH.NA):
@@ -59,7 +59,8 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e):
                 if Vact > Vmax:
                     Vmax = Vact
                 
-                V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.cfloat)
+                #V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.cfloat)
+                V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * SF[0:orbA, 0:orbB]
                 
     for ia in range(DH.NA):
         

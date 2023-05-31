@@ -1,5 +1,6 @@
 import numpy as np
 from scipy import sparse
+from scipy.sparse import csr_matrix, lil_matrix, block_diag
 from json import JSONEncoder
 import json
 
@@ -193,3 +194,22 @@ def negative_hermitian_transpose(A : npt.NDArray[np.complex128]) -> npt.NDArray[
    
    """
    return -A.T.conj()
+
+def homogenize_matrix(M00, M01, NB, type):
+    N0 = len(M00)
+
+    max_iteration = np.ceil(np.log2(NB))
+
+    N = N0
+    for I in range(max_iteration):
+        if type == 'R':
+            M00 = block_diag([M00, M01], [M01.conj().T, M00])
+        else:
+            M00 = block_diag([M00, M01], [-M01.T, M00])
+
+        M01 = block_diag([lil_matrix((N, 2 * N), dtype=M00.dtype), M01, lil_matrix((N, N), dtype=M00.dtype)])
+
+        N = 2 * N
+
+    M = M00[:N0 * NB, :N0 * NB]
+    return M

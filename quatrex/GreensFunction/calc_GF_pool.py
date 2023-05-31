@@ -160,11 +160,11 @@ def calc_GF_pool_mpi(
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
-    #dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[0:ne-2, :] + 1)), axis=1), [0]))
-    #dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[2:ne, :] + 1)), axis=1), [0]))
+    dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[0:ne-2, :] + 1)), axis=1), [0]))
+    dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[2:ne, :] + 1)), axis=1), [0]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
 
     for index in ind_zeros:
         GR_3D_E[index, :, :, :] = 0
@@ -187,6 +187,9 @@ def calc_GF_mpi(
         Efr,
         Temp,
         DOS,
+        nE,
+        nP,
+        idE,
         factor: npt.NDArray[np.float64],
         mkl_threads: int = 1,
         worker_num: int = 1
@@ -225,8 +228,27 @@ def calc_GF_mpi(
                           GR_3D_E[ie], GRnn1_3D_E[ie],
                           GL_3D_E[ie], GLnn1_3D_E[ie],
                           GG_3D_E[ie], GGnn1_3D_E[ie],
-                          DOS[ie], fL[ie], fR[ie],
+                          DOS[ie], nE, nP, idE, fL[ie], fR[ie],
                           bmin, bmax, factor[ie], index_e[ie])
+        
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL 
+    F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
+    F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
+
+    # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
+    dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[0:ne-2, :] + 1)), axis=1), [0]))
+    dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:ne-1, :] / (DOS[2:ne, :] + 1)), axis=1), [0]))
+
+    # Find indices of elements satisfying the conditions
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
+
+    for index in ind_zeros:
+        GR_3D_E[index, :, :, :] = 0
+        GRnn1_3D_E[index, :, :, :] = 0
+        GL_3D_E[index, :, :, :] = 0
+        GLnn1_3D_E[index, :, :, :] = 0
+        GG_3D_E[index, :, :, :] = 0
+        GGnn1_3D_E[index, :, :, :] = 0
     
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 

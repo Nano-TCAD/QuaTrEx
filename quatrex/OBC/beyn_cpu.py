@@ -178,7 +178,7 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
 
 def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     Nk = len(k)
-    NT = len(phiL[:,1])
+    NT = len(phiL[:,0])
 
     ksurf = np.zeros(Nk, dtype = np.cfloat)
     Vsurf = np.zeros((NT, Nk), dtype = np.cfloat)
