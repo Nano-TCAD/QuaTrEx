@@ -24,18 +24,22 @@ if utils_gpu.gpu_avail():
 
 if __name__ == "__main__":
     # parse the possible arguments
-    solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
+    # solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
+    solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/IEDM/GNR_pd_unbiased", "data_GPWS_IEDM_GNR_0V.mat")
     parser = argparse.ArgumentParser(
         description="Tests different implementation of the self-energy calculation"
     )
-    parser.add_argument("-t", "--type", default="gpu_mpi_fft",
+    parser.add_argument("-t", "--type", default="gpu_fft_mpi_3part",
                         choices=["gpu_fft", "gpu_fft_mpi", "gpu_fft_mpi_streams",
                                  "gpu_fft_mpi_batched",
-                                 "cpu_fft", "cpu_fft_mpi" ], required=False)
+                                 "cpu_fft", "cpu_fft_mpi",
+                                 "cpu_fft_3part", "cpu_fft_mpi_3part",
+                                 "gpu_fft_3part", "gpu_fft_mpi_3part"
+                                 ], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
-    if args.type in ("gpu_fft", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched"):
+    if args.type in ("gpu_fft", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched", "gpu_fft_3part", "gpu_fft_mpi_3part"):
         if not utils_gpu.gpu_avail():
             print("No gpu available")
             sys.exit(1)
@@ -116,12 +120,51 @@ if __name__ == "__main__":
         sg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sg_gpu)
         sl_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sl_gpu)
         sr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sr_gpu)
+    elif args.type == "gpu_fft_3part":
+        # load data to gpu
+        ij2ji_gpu:   cp.ndarray = cp.asarray(ij2ji)
+        gg_gold_gpu: cp.ndarray = cp.asarray(gg_gold)
+        gl_gold_gpu: cp.ndarray = cp.asarray(gl_gold)
+        gr_gold_gpu: cp.ndarray = cp.asarray(gr_gold)
+        wg_gold_gpu: cp.ndarray = cp.asarray(wg_gold)
+        wl_gold_gpu: cp.ndarray = cp.asarray(wl_gold)
+        wr_gold_gpu: cp.ndarray = cp.asarray(wr_gold)
+
+        sg_gpu, sl_gpu, sr_gpu = gw2s_gpu.gw2s_fft_gpu_3part_sr(
+            pre_factor, ij2ji_gpu,
+            gg_gold_gpu, gl_gold_gpu, gr_gold_gpu,
+            wg_gold_gpu, wl_gold_gpu, wr_gold_gpu)
+
+        # load data to cpu
+        sg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sg_gpu)
+        sl_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sl_gpu)
+        sr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(sr_gpu)
     elif args.type == "cpu_fft":
 
         sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_cpu(
             pre_factor, ij2ji,
             gg_gold, gl_gold, gr_gold,
             wg_gold, wl_gold, wr_gold)
+    elif args.type == "cpu_fft_3part":
+
+        sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_cpu_3part_sr(
+            pre_factor, ij2ji,
+            gg_gold, gl_gold, gr_gold,
+            wg_gold, wl_gold, wr_gold)
+    elif args.type == "gpu_fft_mpi_3part":
+        wg_transposed = wg_gold[ij2ji,:]
+        wl_transposed = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_transposed,
+                                                        wl_transposed
+                                                        )
     elif args.type == "gpu_fft_mpi":
         wg_transposed = wg_gold[ij2ji,:]
         wl_transposed = wl_gold[ij2ji,:]
@@ -211,6 +254,20 @@ if __name__ == "__main__":
         wg_transposed = wg_gold[ij2ji,:]
         wl_transposed = wl_gold[ij2ji,:]
         sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_transposed,
+                                                        wl_transposed
+                                                        )
+    elif args.type == "cpu_fft_mpi_3part":
+        wg_transposed = wg_gold[ij2ji,:]
+        wl_transposed = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
                                                         pre_factor,
                                                         gg_gold,
                                                         gl_gold,
