@@ -28,6 +28,9 @@ def p2w_pool_mpi_cpu(
     npw: npt.NDArray[np.complex128],
     idx_e: npt.NDArray[np.int32],
     factor: npt.NDArray[np.float64],
+    comm,
+    rank,
+    size,
     mkl_threads: int = 1,
     worker_num: int = 1
 ) -> typing.Tuple[
@@ -119,9 +122,38 @@ def p2w_pool_mpi_cpu(
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
     F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
 
+
+    buf_recv_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_recv_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    if size > 1:
+        if rank == 0:
+            buf_send_r[:] = dosw[ne-1,:]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank+1, recvbuf=buf_recv_r, source=rank+1)
+
+        elif rank == size - 1:
+            buf_send_l[:] = dosw[0,:]
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank-1, recvbuf=buf_recv_l, source=rank-1)
+        else:
+            buf_send_r[:] = dosw[ne-1,:]
+            buf_send_l[:] = dosw[0,:]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank+1, recvbuf=buf_recv_r, source=rank+1)
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank-1, recvbuf=buf_recv_l, source=rank-1)
+
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
-    dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
-    dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    if size == 1:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
+        dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    elif rank == 0:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/buf_recv_r))]))
+    elif rank == size - 1:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/buf_recv_l))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    else:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/buf_recv_l))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/buf_recv_r))]))
 
     # Find indices of elements satisfying the conditions
     ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
