@@ -26,6 +26,7 @@ def p2w_pool_mpi_cpu(
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
+    idx_e: npt.NDArray[np.int32],
     factor: npt.NDArray[np.float64],
     mkl_threads: int = 1,
     worker_num: int = 1
@@ -97,7 +98,7 @@ def p2w_pool_mpi_cpu(
 
     # todo remove this
     # not used inside rgf_W
-    index_e = np.arange(ne)
+    #index_e = np.arange(ne)
 
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
@@ -111,7 +112,7 @@ def p2w_pool_mpi_cpu(
                     wl_diag, wl_upper,
                     wr_diag, wr_upper,
                     xr_diag, dosw, new, npw, repeat(nbc),
-                    index_e, factor
+                    idx_e, factor
                      )
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL

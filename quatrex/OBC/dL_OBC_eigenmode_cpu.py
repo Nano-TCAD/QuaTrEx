@@ -1450,6 +1450,10 @@ def get_dl_obc_alt(
     # non zero indexes of mr_x
     mr_x_max = np.max(np.abs(mr_x))
     rows, cols = np.where(np.abs(mr_x) > mr_x_max / 1e8)
+
+    if(not rows.size):
+        return np.nan, np.nan
+
     # conjugate transpose of mr/xr
     mr_x_ct = mr_x.conjugate().T
     xr_d_ct = xr_d.conjugate().T
