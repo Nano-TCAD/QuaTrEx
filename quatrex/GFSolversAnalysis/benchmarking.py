@@ -22,26 +22,26 @@ if __name__ == "__main__":
     density = blocksize**2/size**2
     bandwidth = np.ceil(blocksize/2)
 
-    # Dense and sparse initial matrices
+    # Retarded Green's function initial matrix
     A = gen.generateBandedDiagonalMatrix(size, bandwidth, 63)
     A = gen.makeSymmetric(A)
     A_csc = gen.denseToSparseStorage(A)
 
-    # Dense and sparse reference solutions (Full inversons)
-    A_refsol_np  = inv.fullInversion(A)
-    A_refsol_csc = inv.fullInversion(A_csc)
+    # Retarded Green's function references solutions (Full inversons)
+    GreenRetarded_refsol_np  = inv.fullInversion(A)
+    GreenRetarded_refsol_csc = inv.fullInversion(A_csc)
 
-    if not verif.verifResults(A_refsol_np, A_refsol_csc):
+    if not verif.verifResults(GreenRetarded_refsol_np, GreenRetarded_refsol_csc):
         print("Error: reference solutions are different.")
         exit()
     else:
-        A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower = gen.denseToBlocksTriDiagStorage(A_refsol_np, blocksize)
+        # Extract the blocks from the retarded Green's function reference solution
+        GreenRetarded_refsol_bloc_diag\
+        , GreenRetarded_refsol_bloc_upper\
+        , GreenRetarded_refsol_bloc_lower = gen.denseToBlocksTriDiagStorage(GreenRetarded_refsol_np, blocksize)
 
     A_bloc_diag, A_bloc_upper, A_bloc_lower = gen.denseToBlocksTriDiagStorage(A, blocksize)
 
-
-
-    A_debug_diag, A_debug_upper, A_debug_lower = gen.denseToBlocksTriDiagStorage(A, blocksize)
 
 
     comm.barrier()
@@ -50,14 +50,16 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------
 
     if rank == 0: # Single process algorithm
-        G_rgf_diag, G_rgf_upper, G_rgf_lower = rgf.rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower)
+        GreenRetarded_rgf_diag, GreenRetarded_rgf_upper, GreenRetarded_rgf_lower = rgf.rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower)
 
-        print("RGF validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
-                                                            A_refsol_bloc_upper, 
-                                                            A_refsol_bloc_lower, 
-                                                            G_rgf_diag, 
-                                                            G_rgf_upper, 
-                                                            G_rgf_lower)) 
+        print("RGF validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_bloc_diag, 
+                                                              GreenRetarded_refsol_bloc_upper, 
+                                                              GreenRetarded_refsol_bloc_lower, 
+                                                              GreenRetarded_rgf_diag, 
+                                                              GreenRetarded_rgf_upper, 
+                                                              GreenRetarded_rgf_lower)) 
+
+
 
     comm.barrier()
     # ---------------------------------------------------------------------------------------------
@@ -65,17 +67,20 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------
     # mpiexec -n 2 python benchmarking.py
 
-"""     G_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
+    GreenRetarded_rgf2sided_diag = rgf2sided.rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower)
 
     if rank == 0: # Results agregated on 1st process and compared to reference solution
-        print("RGF 2-sided validation: ", verif.verifResultsBlocksTri(A_refsol_bloc_diag, 
-                                                                      A_refsol_bloc_upper, 
-                                                                      A_refsol_bloc_lower, 
-                                                                      G_rgf2sided_diag, 
-                                                                      A_refsol_bloc_upper, 
-                                                                      A_refsol_bloc_lower)) 
+        print("RGF 2-sided validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_bloc_diag, 
+                                                                      GreenRetarded_refsol_bloc_upper, 
+                                                                      GreenRetarded_refsol_bloc_lower, 
+                                                                      GreenRetarded_rgf2sided_diag, 
+                                                                      GreenRetarded_refsol_bloc_upper, 
+                                                                      GreenRetarded_refsol_bloc_lower)) 
 
-        viz.vizualiseDenseMatrixFromBlocks(A_refsol_bloc_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "Reference solution")
-        viz.vizualiseDenseMatrixFromBlocks(G_rgf2sided_diag, A_refsol_bloc_upper, A_refsol_bloc_lower, "RGF 2-sided solution")
-    
- """
+
+        viz.compareDenseMatrixFromBlocks(GreenRetarded_refsol_bloc_diag, 
+                                         GreenRetarded_refsol_bloc_upper, 
+                                         GreenRetarded_refsol_bloc_lower,
+                                         GreenRetarded_rgf2sided_diag, 
+                                         GreenRetarded_refsol_bloc_upper, 
+                                         GreenRetarded_refsol_bloc_lower, "RGF 2-sided solution")
