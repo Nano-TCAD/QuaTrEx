@@ -13,12 +13,12 @@ def rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
     blockSize = A_bloc_diag.shape[1]
 
     # Storage for the incomplete forward substitution
-    g_diag_blocks  = np.zeros((nblocks, blockSize, blockSize))
+    g_diag_blocks  = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag.dtype)
 
     # Storage for the full backward substitution 
-    G_diag_blocks  = np.zeros((nblocks, blockSize, blockSize))
-    G_upper_blocks = np.zeros((nblocks-1, blockSize, blockSize))
-    G_lower_blocks = np.zeros((nblocks-1, blockSize, blockSize))
+    G_diag_blocks  = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag.dtype)
+    G_upper_blocks = np.zeros((nblocks-1, blockSize, blockSize), dtype=A_bloc_upper.dtype)
+    G_lower_blocks = np.zeros((nblocks-1, blockSize, blockSize), dtype=A_bloc_lower.dtype)
 
 
     tic = time.perf_counter() # -----------------------------

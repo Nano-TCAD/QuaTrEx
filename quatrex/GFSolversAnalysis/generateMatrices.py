@@ -3,7 +3,7 @@ from scipy.sparse import csc_matrix
 from mpi4py import MPI
 
 
-def generateDenseMatrix(size, seed=None):
+def generateDenseMatrix(size, seed=None, isComplex=False):
     """
         Generate a dense matrix of shape: (size x size) filled with random numbers.
     """
@@ -16,13 +16,16 @@ def generateDenseMatrix(size, seed=None):
     if seed is not None:
         np.random.seed(seed)
 
-    return np.random.rand(size, size)
+    if isComplex:
+        return np.random.rand(size, size) + 1j * np.random.rand(size, size)
+    else:
+        return np.random.rand(size, size)
 
 
 
-def generateSparseMatrix(size, density, seed=None):
+def generateSparseMatrix(size, density, seed=None, isComplex=False):
     """
-        Generate a sparse matrix of shape: (size x size), densisty of non-zero elements: density,
+        Generate a sparse matrix of shape: (size x size), density of non-zero elements: density,
         filled with random numbers.
     """
     comm = MPI.COMM_WORLD
@@ -34,13 +37,18 @@ def generateSparseMatrix(size, density, seed=None):
     if seed is not None:
         np.random.seed(seed)
 
-    A = np.random.rand(size, size)
+    if isComplex:
+        A = np.random.rand(size, size) + 1j * np.random.rand(size, size)
+    else:
+        A = np.random.rand(size, size)
+
     A[A < (1-density)] = 0
+
     return A
     
 
 
-def generateBandedDiagonalMatrix(size, bandwidth, seed=None):
+def generateBandedDiagonalMatrix(size, bandwidth, seed=None, isComplex=False):
     """
         Generate a banded diagonal matrix of shape: (size x size), bandwidth: bandwidth,
         filled with random numbers.
@@ -54,17 +62,21 @@ def generateBandedDiagonalMatrix(size, bandwidth, seed=None):
     if seed is not None:
         np.random.seed(seed)
 
-    A = np.random.rand(size, size)
+    if isComplex:
+        A = np.random.rand(size, size) + 1j * np.random.rand(size, size)
+    else:
+        A = np.random.rand(size, size)
     
     for i in range(size):
         for j in range(size):
             if i - j > bandwidth or j - i > bandwidth:
                 A[i, j] = 0
+
     return A
 
 
 
-def denseToSparseStorage(A):
+def denseToCSC(A):
     """
         Convert a numpy dense matrix to a sparse matrix into scipy.csc format.
     """
@@ -79,9 +91,9 @@ def denseToBlocksTriDiagStorage(A, blockSize):
     """
     nBlocks = int(np.ceil(A.shape[0]/blockSize))
 
-    A_bloc_diag = np.zeros((nBlocks, blockSize, blockSize))
-    A_bloc_upper = np.zeros((nBlocks-1, blockSize, blockSize))
-    A_bloc_lower = np.zeros((nBlocks-1, blockSize, blockSize))
+    A_bloc_diag  = np.zeros((nBlocks, blockSize, blockSize), dtype=A.dtype)
+    A_bloc_upper = np.zeros((nBlocks-1, blockSize, blockSize), dtype=A.dtype)
+    A_bloc_lower = np.zeros((nBlocks-1, blockSize, blockSize), dtype=A.dtype)
 
     for i in range(nBlocks):
         A_bloc_diag[i, ] = A[i*blockSize:(i+1)*blockSize, i*blockSize:(i+1)*blockSize]

@@ -17,8 +17,8 @@ def rgf_leftprocess(A_bloc_diag_leftprocess, A_bloc_upper_leftprocess, A_bloc_lo
     nblocks   = A_bloc_diag_leftprocess.shape[0]
     blockSize = A_bloc_diag_leftprocess.shape[1]
 
-    g_diag_leftprocess = np.zeros((nblocks+1, blockSize, blockSize))
-    G_diag_leftprocess = np.zeros((nblocks, blockSize, blockSize))
+    g_diag_leftprocess = np.zeros((nblocks+1, blockSize, blockSize), dtype=A_bloc_diag_leftprocess.dtype)
+    G_diag_leftprocess = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag_leftprocess.dtype)
 
     # Initialisation of g
     g_diag_leftprocess[0, ] = np.linalg.inv(A_bloc_diag_leftprocess[0, ])
@@ -56,7 +56,7 @@ def rgf_leftprocess(A_bloc_diag_leftprocess, A_bloc_upper_leftprocess, A_bloc_lo
     for i in range(nblocks-2, -1, -1):
         G_diag_leftprocess[i, ]  =  g_diag_leftprocess[i, ] @ (np.identity(blockSize) + A_bloc_upper_leftprocess[i, ] @ G_diag_leftprocess[i+1, ] @ A_bloc_lower_leftprocess[i, ] @ g_diag_leftprocess[i, ])
 
-    print("P0 return G_diag_leftprocess:", G_diag_leftprocess)
+    #print("P0 return G_diag_leftprocess:", G_diag_leftprocess)
 
     return G_diag_leftprocess
 
@@ -72,8 +72,8 @@ def rgf_rightprocess(A_bloc_diag_rightprocess, A_bloc_upper_rightprocess, A_bloc
     nblocks   = A_bloc_diag_rightprocess.shape[0]
     blockSize = A_bloc_diag_rightprocess.shape[1]
 
-    g_diag_rightprocess = np.zeros((nblocks+1, blockSize, blockSize))
-    G_diag_rightprocess = np.zeros((nblocks, blockSize, blockSize))
+    g_diag_rightprocess = np.zeros((nblocks+1, blockSize, blockSize), dtype=A_bloc_diag_rightprocess.dtype)
+    G_diag_rightprocess = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag_rightprocess.dtype)
 
     # Initialisation of g
     g_diag_rightprocess[-1, ] = np.linalg.inv(A_bloc_diag_rightprocess[-1, ])
@@ -107,10 +107,10 @@ def rgf_rightprocess(A_bloc_diag_rightprocess, A_bloc_upper_rightprocess, A_bloc
 
     # Backward substitution
     for i in range(1, nblocks):
-        print("P1 bwd i:", i)
+        #print("P1 bwd i:", i)
         G_diag_rightprocess[i, ] = g_diag_rightprocess[i+1, ] @ (np.identity(blockSize) + A_bloc_upper_rightprocess[i, ] @ G_diag_rightprocess[i-1, ] @ A_bloc_lower_rightprocess[i, ] @ g_diag_rightprocess[i+1, ])
 
-    print("P1 return G_diag_rightprocess:", G_diag_rightprocess)
+    #print("P1 return G_diag_rightprocess:", G_diag_rightprocess)
 
     return G_diag_rightprocess
 
@@ -129,7 +129,7 @@ def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     nblocks_2 = int(nblocks/2)
     blockSize = A_bloc_diag.shape[1]
 
-    G_diag = np.zeros((nblocks, blockSize, blockSize))
+    G_diag = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag.dtype)
 
     tic = time.perf_counter() # -----------------------------
     if rank == 0:

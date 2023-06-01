@@ -17,15 +17,19 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 
+    # Problem parameters
     size = 12
     blocksize = 2
     density = blocksize**2/size**2
     bandwidth = np.ceil(blocksize/2)
 
+    seed = 63
+    isComplex = True
+
     # Retarded Green's function initial matrix
-    A = gen.generateBandedDiagonalMatrix(size, bandwidth, 63)
+    A = gen.generateBandedDiagonalMatrix(size, bandwidth, seed, isComplex)
     A = gen.makeSymmetric(A)
-    A_csc = gen.denseToSparseStorage(A)
+    A_csc = gen.denseToCSC(A)
 
     # Retarded Green's function references solutions (Full inversons)
     GreenRetarded_refsol_np  = inv.fullInversion(A)
