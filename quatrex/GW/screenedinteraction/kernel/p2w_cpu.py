@@ -143,21 +143,20 @@ def p2w_pool_mpi_cpu(
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
     if size == 1:
-        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [0]))
-        dDOSp = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
     elif rank == 0:
-        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
-        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/buf_recv_r))]))
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(buf_recv_r + 1)))]))
     elif rank == size - 1:
-        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/buf_recv_l))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
-        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/(buf_recv_l + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
     else:
-        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/buf_recv_l))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/dosw[ne-2,:]))]))
-        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/dosw[1,:]))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/buf_recv_r))]))
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/(buf_recv_l + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(buf_recv_r + 1)))]))
 
     # Find indices of elements satisfying the conditions
     ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
-    print(ind_zeros)
     # Remove the identified peaks and errors
     for index in ind_zeros:
         wr_diag[index, :, :, :] = 0
@@ -180,6 +179,9 @@ def p2w_mpi_cpu(
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
     factor: npt.NDArray[np.float64],
+    comm,
+    rank,
+    size,
     mkl_threads: int = 1
 ) -> typing.Tuple[
         npt.NDArray[np.complex128],
@@ -276,6 +278,57 @@ def p2w_mpi_cpu(
     print("Time beyn obc: ", times[3])
     print("Time dl obc: ", times[4])
     print("Time inversion: ", times[5])
+
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
+    F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
+    F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
+
+
+    buf_recv_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_recv_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    if size > 1:
+        if rank == 0:
+            buf_send_r[:] = dosw[ne-1,:]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank+1, recvbuf=buf_recv_r, source=rank+1)
+
+        elif rank == size - 1:
+            buf_send_l[:] = dosw[0,:]
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank-1, recvbuf=buf_recv_l, source=rank-1)
+        else:
+            buf_send_r[:] = dosw[ne-1,:]
+            buf_send_l[:] = dosw[0,:]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank+1, recvbuf=buf_recv_r, source=rank+1)
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank-1, recvbuf=buf_recv_l, source=rank-1)
+
+    # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
+    if size == 1:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    elif rank == 0:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(buf_recv_r + 1)))]))
+    elif rank == size - 1:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/(buf_recv_l + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    else:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0,:]/(buf_recv_l + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[0:ne-2, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(dosw[ne-2,:] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0,:]/(dosw[1,:] + 1)))], np.max(np.abs(dosw[1:ne-1, :] / (dosw[2:ne, :] + 1)), axis=1), [np.max(np.abs(dosw[ne-1,:]/(buf_recv_r + 1)))]))
+
+    # Find indices of elements satisfying the conditions
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
+
+    # Remove the identified peaks and errors
+    for index in ind_zeros:
+        wr_diag[index, :, :, :] = 0
+        wr_upper[index, :, :, :] = 0
+        wl_diag[index, :, :, :] = 0
+        wl_upper[index, :, :, :] = 0
+        wg_diag[index, :, :, :] = 0
+        wg_upper[index, :, :, :] = 0
+
+
 
     return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
 
