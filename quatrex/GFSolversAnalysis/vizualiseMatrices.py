@@ -31,7 +31,7 @@ def vizualiseDenseMatrixFromBlocks(A_bloc_diag, A_bloc_upper, A_bloc_lower, lege
     nBlocks = A_bloc_diag.shape[0]
     blockSize = A_bloc_diag.shape[1]
 
-    A = np.zeros((nBlocks*blockSize, nBlocks*blockSize))
+    A = np.zeros((nBlocks*blockSize, nBlocks*blockSize), dtype=A_bloc_diag.dtype)
 
     # Modifing the coloration to vizualiase wasted storage
     if wastedStorage:
@@ -68,8 +68,8 @@ def compareDenseMatrixFromBlocks(A_ref_bloc_diag, A_ref_bloc_upper, A_ref_bloc_l
     nBlocksA = A_bloc_diag.shape[0]
     blockSizeA = A_bloc_diag.shape[1]
 
-    A_ref = np.zeros((nBlocksARef*blockSizeARef, nBlocksARef*blockSizeARef))
-    A = np.zeros((nBlocksA*blockSizeA, nBlocksA*blockSizeA))
+    A_ref = np.zeros((nBlocksARef*blockSizeARef, nBlocksARef*blockSizeARef), dtype=A_ref_bloc_diag.dtype)
+    A     = np.zeros((nBlocksA*blockSizeA, nBlocksA*blockSizeA), dtype=A_bloc_diag.dtype)
 
     for i in range(nBlocksARef):
         A_ref[i*blockSizeARef:(i+1)*blockSizeARef, i*blockSizeARef:(i+1)*blockSizeARef] = A_ref_bloc_diag[i, ]

@@ -5,7 +5,7 @@ import time
 from mpi4py import MPI
 
 
-def fullInversion(A):
+def fullInversion(A, label=""):
     """
         Invert a matrix using:
             numpy dense matrix: numpy.linalg.inv
@@ -20,7 +20,7 @@ def fullInversion(A):
         toc = time.perf_counter()
 
         if rank == 0:
-            print(f"Numpy: Full inversion took {toc - tic:0.4f} seconds")
+            print(f"Numpy: {label} Full inversion took {toc - tic:0.4f} seconds")
         
         return A_inv
 
@@ -30,6 +30,6 @@ def fullInversion(A):
         toc = time.perf_counter()
 
         if rank == 0:
-            print(f"Scipy CSC: Full inversion took {toc - tic:0.4f} seconds")
+            print(f"Scipy CSC: {label} Full inversion took {toc - tic:0.4f} seconds")
         
         return A_inv

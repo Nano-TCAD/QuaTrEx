@@ -3,7 +3,23 @@ from scipy.sparse import csc_matrix
 from mpi4py import MPI
 
 
-def generateDenseMatrix(size, seed=None, isComplex=False):
+
+def generateRandomNumpyMat(size, isComplex=False, seed=None):
+    """
+        Generate a dense matrix of shape: (size x size) filled with random numbers.
+            - Complex or real valued
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    if isComplex:
+        return np.random.rand(size, size) + 1j * np.random.rand(size, size)
+    else:
+        return np.random.rand(size, size)
+    
+
+
+def generateDenseMatrix(size, isComplex=False, seed=None):
     """
         Generate a dense matrix of shape: (size x size) filled with random numbers.
     """
@@ -13,17 +29,11 @@ def generateDenseMatrix(size, seed=None, isComplex=False):
     if rank == 0:
         print("Generating dense matrix of size: ", size)
 
-    if seed is not None:
-        np.random.seed(seed)
-
-    if isComplex:
-        return np.random.rand(size, size) + 1j * np.random.rand(size, size)
-    else:
-        return np.random.rand(size, size)
+    return generateRandomNumpyMat(size, seed, isComplex)
 
 
 
-def generateSparseMatrix(size, density, seed=None, isComplex=False):
+def generateSparseMatrix(size, density, isComplex=False, seed=None):
     """
         Generate a sparse matrix of shape: (size x size), density of non-zero elements: density,
         filled with random numbers.
@@ -34,13 +44,7 @@ def generateSparseMatrix(size, density, seed=None, isComplex=False):
     if rank == 0:
         print("Generating sparse matrix of size: ", size, " and density: ", density)
 
-    if seed is not None:
-        np.random.seed(seed)
-
-    if isComplex:
-        A = np.random.rand(size, size) + 1j * np.random.rand(size, size)
-    else:
-        A = np.random.rand(size, size)
+    A = generateRandomNumpyMat(size, seed, isComplex)
 
     A[A < (1-density)] = 0
 
@@ -48,7 +52,7 @@ def generateSparseMatrix(size, density, seed=None, isComplex=False):
     
 
 
-def generateBandedDiagonalMatrix(size, bandwidth, seed=None, isComplex=False):
+def generateBandedDiagonalMatrix(size, bandwidth, isComplex=False, seed=None):
     """
         Generate a banded diagonal matrix of shape: (size x size), bandwidth: bandwidth,
         filled with random numbers.
@@ -58,14 +62,8 @@ def generateBandedDiagonalMatrix(size, bandwidth, seed=None, isComplex=False):
 
     if rank == 0:
         print("Generating banded diagonal matrix of size: ", size, " and bandwidth: ", bandwidth)
-
-    if seed is not None:
-        np.random.seed(seed)
-
-    if isComplex:
-        A = np.random.rand(size, size) + 1j * np.random.rand(size, size)
-    else:
-        A = np.random.rand(size, size)
+    
+    A = generateRandomNumpyMat(size, seed, isComplex)
     
     for i in range(size):
         for j in range(size):

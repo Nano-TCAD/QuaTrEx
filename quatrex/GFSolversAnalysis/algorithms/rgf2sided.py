@@ -116,7 +116,7 @@ def rgf_rightprocess(A_bloc_diag_rightprocess, A_bloc_upper_rightprocess, A_bloc
 
 
 
-def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
+def rgf2sided_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     """
         Block-tridiagonal selected inversion using 2-sided RGF algorithm.
             - Using MPI for multiprocessing
@@ -131,6 +131,7 @@ def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
 
     G_diag = np.zeros((nblocks, blockSize, blockSize), dtype=A_bloc_diag.dtype)
 
+
     tic = time.perf_counter() # -----------------------------
     if rank == 0:
         G_diag[0:nblocks_2, ] = rgf_leftprocess(A_bloc_diag[0:nblocks_2, ], A_bloc_upper[0:nblocks_2, ], A_bloc_lower[0:nblocks_2, ])
@@ -139,8 +140,6 @@ def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
         G_diag[nblocks_2:, ] = comm.recv(source=1, tag=0)
         #print("Process 0 recv: G_diag[nblocks_2:, ]", G_diag[nblocks_2:, ])
         #print("Process 0 own: G_diag[:nblocks_2, ]", G_diag)
-
-
     elif rank == 1:
         G_diag[nblocks_2:, ] = rgf_rightprocess(A_bloc_diag[nblocks_2:, ], A_bloc_upper[nblocks_2-1:, ], A_bloc_lower[nblocks_2-1:, ])
         #print("Process 1 own: G_diag[:nblocks_2, ]", G_diag)
@@ -150,6 +149,7 @@ def rgf2sided(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     
     comm.barrier()
     toc = time.perf_counter() # -----------------------------
+
 
     if rank == 0:
         print(f"RGF 2-Sided: Inversion took {toc - tic:0.4f} seconds")

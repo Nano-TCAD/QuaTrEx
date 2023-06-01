@@ -5,9 +5,9 @@ import time
 
 
 
-def rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
+def rgf_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
     """
-        Block-tridiagonal selected inversion using RGF algorithm.
+        RGF algorithm performing block-tridiagonal inversion of the given matrix.
     """
     nblocks = A_bloc_diag.shape[0]
     blockSize = A_bloc_diag.shape[1]
@@ -59,6 +59,6 @@ def rgf(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
     toc = time.perf_counter() # -----------------------------
 
 
-    print(f"RGF: Inversion took {toc - tic:0.4f} seconds")
+    print(f"RGF Gr: Inversion took {toc - tic:0.4f} seconds")
     return G_diag_blocks, G_upper_blocks, G_lower_blocks
 
