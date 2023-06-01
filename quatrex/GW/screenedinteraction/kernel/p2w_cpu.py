@@ -125,7 +125,7 @@ def p2w_pool_mpi_cpu(
 
     # Find indices of elements satisfying the conditions
     ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm >  5) & (dDOSp > 5)))[0]
-    print(ind_zeros)
+
     # Remove the identified peaks and errors
     for index in ind_zeros:
         wr_diag[index, :, :, :] = 0

@@ -196,9 +196,9 @@ def negative_hermitian_transpose(A : npt.NDArray[np.complex128]) -> npt.NDArray[
    return -A.T.conj()
 
 def homogenize_matrix(M00, M01, NB, type):
-    N0 = len(M00)
+    N0 = M00.shape[0]
 
-    max_iteration = np.ceil(np.log2(NB))
+    max_iteration = np.ceil(np.log2(NB)).astype(int)
 
     N = N0
     for I in range(max_iteration):
