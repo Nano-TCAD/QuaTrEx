@@ -538,7 +538,7 @@ if __name__ == "__main__":
                                                                                                 pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                 nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                 Idx_e_loc,   
-                                                                                                factor_w_loc, w_mkl_threads,
+                                                                                                factor_w_loc, comm, rank, size, w_mkl_threads,
                                                                                                 w_worker_threads)
         else:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
