@@ -5,31 +5,29 @@ import time
 from mpi4py import MPI
 
 
-def fullInversion(A, label=""):
+
+def numpyInversion(A):
     """
-        Invert a matrix using:
-            numpy dense matrix: numpy.linalg.inv
-            scipy CSC matrix: scipy.sparse.linalg.inv
+        Invert a matrix using numpy dense matrix: numpy.linalg.inv
     """
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
+    tic = time.perf_counter()
+    A_inv = np.linalg.inv(A)
+    toc = time.perf_counter()
 
-    if type(A) == np.ndarray:
-        tic = time.perf_counter()
-        A_inv = np.linalg.inv(A)
-        toc = time.perf_counter()
+    timing = toc - tic
 
-        if rank == 0:
-            print(f"Numpy: {label} Full inversion took {toc - tic:0.4f} seconds")
-        
-        return A_inv
+    return A_inv, timing
 
-    elif type(A) == csc_matrix:
-        tic = time.perf_counter()
-        A_inv = inv(A)
-        toc = time.perf_counter()
 
-        if rank == 0:
-            print(f"Scipy CSC: {label} Full inversion took {toc - tic:0.4f} seconds")
-        
-        return A_inv
+
+def scipyCSCInversion(A):
+    """
+        Invert a matrix using scipy CSC matrix: scipy.sparse.linalg.inv
+    """
+    tic = time.perf_counter()
+    A_inv = inv(A)
+    toc = time.perf_counter()
+
+    timing = toc - tic
+
+    return A_inv, timing

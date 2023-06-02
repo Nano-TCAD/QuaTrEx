@@ -150,8 +150,7 @@ def rgf2sided_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower):
     comm.barrier()
     toc = time.perf_counter() # -----------------------------
 
+    timing = toc - tic
 
-    if rank == 0:
-        print(f"RGF 2-Sided: Inversion took {toc - tic:0.4f} seconds")
-    return G_diag
+    return G_diag, timing
 

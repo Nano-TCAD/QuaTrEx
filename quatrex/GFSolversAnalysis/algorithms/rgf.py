@@ -58,7 +58,7 @@ def rgf_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
             G_lower_blocks[i, ] =  G_upper_blocks[i, ].T
     toc = time.perf_counter() # -----------------------------
 
+    timing = toc - tic
 
-    print(f"RGF Gr: Inversion took {toc - tic:0.4f} seconds")
-    return G_diag_blocks, G_upper_blocks, G_lower_blocks
+    return G_diag_blocks, G_upper_blocks, G_lower_blocks, timing
 

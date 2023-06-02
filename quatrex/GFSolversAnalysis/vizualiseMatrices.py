@@ -94,3 +94,23 @@ def compareDenseMatrixFromBlocks(A_ref_bloc_diag, A_ref_bloc_upper, A_ref_bloc_l
     plt.imshow(abs(A), cmap='hot', interpolation='nearest')
 
     plt.show()
+
+
+
+def showBenchmark(greenRetardedBenchtiming, greenLesserBenchtiming, nBlocks, blockSize):
+    plt.subplot(1, 2, 1)
+    plt.bar(range(len(greenRetardedBenchtiming)), list(greenRetardedBenchtiming.values()), align='center')
+    plt.xticks(range(len(greenRetardedBenchtiming)), list(greenRetardedBenchtiming.keys()))
+    plt.title("Retarded Green's function benchmark")
+    plt.ylabel("Time (s)")
+
+    plt.subplot(1, 2, 2)
+    plt.bar(range(len(greenLesserBenchtiming)), list(greenLesserBenchtiming.values()), align='center')
+    plt.xticks(range(len(greenLesserBenchtiming)), list(greenLesserBenchtiming.keys()))
+    plt.title("Lesser Green's function benchmark")
+    plt.ylabel("Time (s)")
+
+    # add a title and axis labels
+    plt.suptitle(f"matrixSize={(int)(nBlocks*blockSize)}, nBlocks={(int)(nBlocks)}, blockSize={blockSize}")
+
+    plt.show()

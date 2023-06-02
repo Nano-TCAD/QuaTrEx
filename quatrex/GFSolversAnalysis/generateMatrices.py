@@ -108,3 +108,22 @@ def makeSymmetric(A):
         Make a matrix symmetric by adding its transpose to itself.
     """
     return A + A.T
+
+
+
+def blocksBandedToDense(A_bloc_diag, A_bloc_upper, A_bloc_lower):
+    """
+        Convert a 3 dimensional numpy array of blocks to a numpy dense matrix.
+    """
+    nBlocks   = A_bloc_diag.shape[0]
+    blockSize = A_bloc_diag.shape[1]
+
+    A = np.zeros((nBlocks*blockSize, nBlocks*blockSize), dtype=A_bloc_diag.dtype)
+
+    for i in range(nBlocks):
+        A[i*blockSize:(i+1)*blockSize, i*blockSize:(i+1)*blockSize] = A_bloc_diag[i, ]
+        if i < nBlocks-1:
+            A[i*blockSize:(i+1)*blockSize, (i+1)*blockSize:(i+2)*blockSize] = A_bloc_upper[i, ]
+            A[(i+1)*blockSize:(i+2)*blockSize, i*blockSize:(i+1)*blockSize] = A_bloc_lower[i, ]
+
+    return A
