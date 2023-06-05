@@ -7,6 +7,9 @@ import json
 import numpy.typing as npt
 import typing
 
+from OMEN_structure_matrices import OMENHamClass
+from utils import change_format
+
 class NumpyArrayEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, np.ndarray):
@@ -213,3 +216,32 @@ def homogenize_matrix(M00, M01, NB, type):
 
     M = M00[:N0 * NB, :N0 * NB]
     return M
+
+if __name__ == '__main__':
+    print('main')
+    import os
+
+    # path to solution
+    solution_path = "/usr/scratch/mont-fort17/dleonard/CNT/"
+    hamiltonian_path = os.path.join(solution_path, "CNT_newwannier")
+
+   # one orbital on C atoms, two same types
+    no_orb = np.array([1, 1])
+    energy = np.linspace(-17.5, 7.5, 251, endpoint = True, dtype = float) # Energy Vector
+    hamiltonian_obj = OMENHamClass.Hamiltonian(hamiltonian_path, no_orb, 0)
+
+    # Extract neighbor indices
+    rows = hamiltonian_obj.rows
+    columns = hamiltonian_obj.columns
+
+    # hamiltonian object has 1-based indexing
+    bmax = hamiltonian_obj.Bmax - 1
+    bmin = hamiltonian_obj.Bmin - 1
+
+    # initialize self energy
+    sr_h2g = np.loadtxt(solution_path + 'python_testfiles/calc_band_edge/sr_gw.dat').view(complex)
+
+    nao:        np.int64                = np.max(bmax) + 1
+
+    # transform from 2D format to list/vector of sparse arrays format-----------
+    sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
