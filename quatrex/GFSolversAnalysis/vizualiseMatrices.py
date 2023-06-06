@@ -1,3 +1,10 @@
+"""
+@author: Vincent Maillou (vmaillou@iis.ee.ethz.ch)
+@date: 2023-05
+
+Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+"""
+
 from matplotlib import pyplot as plt
 import numpy as np
 
@@ -110,7 +117,6 @@ def showBenchmark(greenRetardedBenchtiming, greenLesserBenchtiming, nBlocks, blo
     plt.title("Lesser Green's function benchmark")
     plt.ylabel("Time (s)")
 
-    # add a title and axis labels
     plt.suptitle(f"matrixSize={(int)(nBlocks*blockSize)}, nBlocks={(int)(nBlocks)}, blockSize={blockSize}")
 
     plt.show()

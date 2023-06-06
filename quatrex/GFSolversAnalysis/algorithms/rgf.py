@@ -1,3 +1,12 @@
+"""
+@author: Vincent Maillou (vmaillou@iis.ee.ethz.ch)
+@date: 2023-05
+
+@reference: https://doi.org/10.1063/1.1432117
+
+Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+"""
+
 import numpy as np
 from scipy.sparse import csc_matrix
 from scipy.sparse.linalg import inv
@@ -37,7 +46,7 @@ def rgf_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
         for i in range(1, nblocks):
             G_diag_blocks[i, ]    =  g_diag_blocks[i, ] @ (np.identity(blockSize) + A_bloc_lower[i-1, ] @ G_diag_blocks[i-1, ] @ A_bloc_upper[i-1, ] @ g_diag_blocks[i, ])
             G_lower_blocks[i-1, ] = -g_diag_blocks[i, ] @ A_bloc_lower[i-1, ] @ G_diag_blocks[i-1, ]
-            G_upper_blocks[i-1, ] = G_lower_blocks[i-1, ].T
+            G_upper_blocks[i-1, ] =  G_lower_blocks[i-1, ].T
     else:
         # 1. Initialisation of g
         g_diag_blocks[0, ] = np.linalg.inv(A_bloc_diag[0, ])
@@ -57,6 +66,9 @@ def rgf_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
             G_upper_blocks[i, ] = -g_diag_blocks[i, ] @ A_bloc_upper[i, ] @ G_diag_blocks[i+1, ]
             G_lower_blocks[i, ] =  G_upper_blocks[i, ].T
     toc = time.perf_counter() # -----------------------------
+
+    #print("g_rgf diag blocks: ", g_diag_blocks)
+    print("G_rgf diag blocks: ", G_diag_blocks)
 
     timing = toc - tic
 

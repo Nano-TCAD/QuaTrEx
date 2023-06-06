@@ -1,3 +1,10 @@
+"""
+@author: Vincent Maillou (vmaillou@iis.ee.ethz.ch)
+@date: 2023-05
+
+Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+"""
+
 import generateMatrices as genMat
 import vizualiseMatrices as vizMat
 import verifyResults as verif
@@ -8,7 +15,9 @@ import algorithms.rgf2sided as rgf2sided
 
 import numpy as np
 import time
+
 from mpi4py import MPI
+
 
 
 if __name__ == "__main__":
@@ -146,7 +155,7 @@ if __name__ == "__main__":
     
 
     # ---------------------------------------------------------------------------------------------
-    # 2. Data plotting
+    # X. Data plotting
     # ---------------------------------------------------------------------------------------------
     if rank == 0:
         vizMat.showBenchmark(greenRetardedBenchtiming, greenLesserBenchtiming, size/blocksize, blocksize)
