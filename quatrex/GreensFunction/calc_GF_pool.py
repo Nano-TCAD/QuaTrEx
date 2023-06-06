@@ -149,8 +149,8 @@ def calc_GF_pool_mpi(
         if homogenize:  
             SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
                                         SigR[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'R')
-            SigL[ie] = homogenize_matrix(SigR[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
-                                        SigR[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'L')
+            SigL[ie] = homogenize_matrix(SigL[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        SigL[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'L')
             SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
                                         SigG[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'G')
 
