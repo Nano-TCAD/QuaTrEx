@@ -412,8 +412,9 @@ if __name__ == "__main__":
                                                                 comm,
                                                                 rank,
                                                                 size,
-                                                                gf_mkl_threads,
-                                                                gf_worker_threads
+                                                                homogenize = True,
+                                                                mkl_threads = gf_mkl_threads,
+                                                                worker_num = gf_worker_threads
                                                             )
         else:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_mpi(

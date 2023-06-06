@@ -201,20 +201,23 @@ def negative_hermitian_transpose(A : npt.NDArray[np.complex128]) -> npt.NDArray[
 def homogenize_matrix(M00, M01, NB, type):
     N0 = M00.shape[0]
 
+    M00 = M00.tocoo()
+    M01 = M01.tocoo()
+
     max_iteration = np.ceil(np.log2(NB)).astype(int)
 
     N = N0
     for I in range(max_iteration):
         if type == 'R':
-            M00 = block_diag([M00, M01], [M01.conj().T, M00])
+            M00 = sparse.vstack([sparse.hstack([M00, M01]), sparse.hstack([M01.T, M00])])
         else:
-            M00 = block_diag([M00, M01], [-M01.T, M00])
+            M00 = sparse.vstack([sparse.hstack([M00, M01]), sparse.hstack([-M01.conj().T, M00])])
 
-        M01 = block_diag([lil_matrix((N, 2 * N), dtype=M00.dtype), M01, lil_matrix((N, N), dtype=M00.dtype)])
+        M01 = sparse.vstack([sparse.coo_matrix((N, 2 * N)), sparse.hstack([M01, sparse.coo_matrix((N, N))])], dtype = M00.dtype)
 
         N = 2 * N
 
-    M = M00[:N0 * NB, :N0 * NB]
+    M = M00.tocsr()[:N0 * NB, :N0 * NB]
     return M
 
 if __name__ == '__main__':
@@ -245,3 +248,9 @@ if __name__ == '__main__':
 
     # transform from 2D format to list/vector of sparse arrays format-----------
     sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
+
+    sr_h2g_homogenized = homogenize_matrix(sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[0]:bmax[0] + 1], sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[1]:bmax[1] + 1], len(bmax), 'R')
+
+    assert(np.allclose(sr_h2g_homogenized.toarray(), sr_h2g_vec[0].toarray(), rtol = 1e-4, atol = 1e-4))
+
+    print('Test Passed')

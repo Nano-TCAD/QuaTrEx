@@ -9,7 +9,7 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from utils.matrix_creation import initialize_block_G, mat_assembly_fullG
+from utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
 from GreensFunction.fermi import fermi_function
 from block_tri_solvers.rgf_GF import rgf_GF
 
@@ -108,6 +108,7 @@ def calc_GF_pool_mpi(
         comm,
         rank,
         size,
+        homogenize = True,
         mkl_threads: int = 1,
         worker_num: int = 1
 ):
@@ -133,6 +134,10 @@ def calc_GF_pool_mpi(
 
     mkl.set_num_threads(mkl_threads)
 
+    index_e = np.arange(ne)
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
+
     for ie in range(ne):
         SigL[ie] = 1j * np.imag(SigL[ie])
         SigG[ie] = 1j * np.imag(SigG[ie])  
@@ -141,6 +146,14 @@ def calc_GF_pool_mpi(
         SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
         SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie])/2  
         SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
+        if homogenize:  
+            SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        SigR[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'R')
+            SigL[ie] = homogenize_matrix(SigR[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        SigR[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'L')
+            SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        SigG[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'G')
+
 
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
     
