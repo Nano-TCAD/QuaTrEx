@@ -67,8 +67,6 @@ def rgf_Gr(A_bloc_diag, A_bloc_upper, A_bloc_lower, rightToLeft : bool = False):
             G_lower_blocks[i, ] =  G_upper_blocks[i, ].T
     toc = time.perf_counter() # -----------------------------
 
-    #print("g_rgf diag blocks: ", g_diag_blocks)
-    print("G_rgf diag blocks: ", G_diag_blocks)
 
     timing = toc - tic
 

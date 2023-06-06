@@ -116,7 +116,7 @@ if __name__ == "__main__":
         , GreenRetarded_rgf_lower\
         , greenRetardedBenchtiming["rgf"] = rgf.rgf_Gr(A_block_diag, A_block_upper, A_block_lower)
 
-        print("RGF Gr validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_block_diag, 
+        print("RGF: Gr validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_block_diag, 
                                                                  GreenRetarded_refsol_block_upper, 
                                                                  GreenRetarded_refsol_block_lower, 
                                                                  GreenRetarded_rgf_diag, 
@@ -132,23 +132,25 @@ if __name__ == "__main__":
     # mpiexec -n 2 python benchmarking.py
 
     GreenRetarded_rgf2sided_diag\
+    , GreenRetarded_rgf2sided_upper\
+    , GreenRetarded_rgf2sided_lower\
     , greenRetardedBenchtiming["rgf2sided"] = rgf2sided.rgf2sided_Gr(A_block_diag, A_block_upper, A_block_lower)
 
     if rank == 0: # Results agregated on 1st process and compared to reference solution
-        print("RGF 2-sided validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_block_diag, 
-                                                                      GreenRetarded_refsol_block_upper, 
-                                                                      GreenRetarded_refsol_block_lower, 
-                                                                      GreenRetarded_rgf2sided_diag, 
-                                                                      GreenRetarded_refsol_block_upper, 
-                                                                      GreenRetarded_refsol_block_lower)) 
+        print("RGF 2-sided: Gr validation: ", verif.verifResultsBlocksTri(GreenRetarded_refsol_block_diag, 
+                                                                          GreenRetarded_refsol_block_upper, 
+                                                                          GreenRetarded_refsol_block_lower, 
+                                                                          GreenRetarded_rgf2sided_diag, 
+                                                                          GreenRetarded_rgf2sided_upper, 
+                                                                          GreenRetarded_rgf2sided_lower)) 
 
 
         vizMat.compareDenseMatrixFromBlocks(GreenRetarded_refsol_block_diag, 
-                                         GreenRetarded_refsol_block_upper, 
-                                         GreenRetarded_refsol_block_lower,
-                                         GreenRetarded_rgf2sided_diag, 
-                                         GreenRetarded_refsol_block_upper, 
-                                         GreenRetarded_refsol_block_lower, "RGF 2-sided solution")
+                                            GreenRetarded_refsol_block_upper, 
+                                            GreenRetarded_refsol_block_lower,
+                                            GreenRetarded_rgf2sided_diag, 
+                                            GreenRetarded_rgf2sided_upper, 
+                                            GreenRetarded_rgf2sided_lower, "RGF 2-sided solution")
 
 
 
@@ -157,7 +159,7 @@ if __name__ == "__main__":
     # ---------------------------------------------------------------------------------------------
     # X. Data plotting
     # ---------------------------------------------------------------------------------------------
-    if rank == 0:
-        vizMat.showBenchmark(greenRetardedBenchtiming, greenLesserBenchtiming, size/blocksize, blocksize)
+    #if rank == 0:
+        #vizMat.showBenchmark(greenRetardedBenchtiming, greenLesserBenchtiming, size/blocksize, blocksize)
 
 

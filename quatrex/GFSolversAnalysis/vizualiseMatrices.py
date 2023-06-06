@@ -19,6 +19,7 @@ def vizualiseDenseMatrixFlat(mat, legend=""):
     plt.show()
 
 
+
 def vizualiseCSCMatrixFlat(mat, legend=""):
     """
         Visualise a CSC matrix in a 2D plot. Third dimension is represented by color.
@@ -27,6 +28,7 @@ def vizualiseCSCMatrixFlat(mat, legend=""):
     plt.title('CSC matrix hotmat: '+ legend)
     plt.imshow(abs(mat.toarray()), cmap='hot', interpolation='nearest')
     plt.show()
+
 
 
 def vizualiseDenseMatrixFromBlocks(A_bloc_diag, A_bloc_upper, A_bloc_lower, legend="", wastedStorage=False):
@@ -81,16 +83,16 @@ def compareDenseMatrixFromBlocks(A_ref_bloc_diag, A_ref_bloc_upper, A_ref_bloc_l
     for i in range(nBlocksARef):
         A_ref[i*blockSizeARef:(i+1)*blockSizeARef, i*blockSizeARef:(i+1)*blockSizeARef] = A_ref_bloc_diag[i, ]
 
-    """ for i in range(nBlocksARef-1):
+    for i in range(nBlocksARef-1):
         A_ref[i*blockSizeARef:(i+1)*blockSizeARef, (i+1)*blockSizeARef:(i+2)*blockSizeARef] = A_ref_bloc_upper[i, ]
-        A_ref[(i+1)*blockSizeARef:(i+2)*blockSizeARef, i*blockSizeARef:(i+1)*blockSizeARef] = A_ref_bloc_lower[i, ] """
+        A_ref[(i+1)*blockSizeARef:(i+2)*blockSizeARef, i*blockSizeARef:(i+1)*blockSizeARef] = A_ref_bloc_lower[i, ]
 
     for i in range(nBlocksA):
         A[i*blockSizeA:(i+1)*blockSizeA, i*blockSizeA:(i+1)*blockSizeA] = A_bloc_diag[i, ]
 
-    """ for i in range(nBlocksA-1):
+    for i in range(nBlocksA-1):
         A[i*blockSizeA:(i+1)*blockSizeA, (i+1)*blockSizeA:(i+2)*blockSizeA] = A_bloc_upper[i, ]
-        A[(i+1)*blockSizeA:(i+2)*blockSizeA, i*blockSizeA:(i+1)*blockSizeA] = A_bloc_lower[i, ] """
+        A[(i+1)*blockSizeA:(i+2)*blockSizeA, i*blockSizeA:(i+1)*blockSizeA] = A_bloc_lower[i, ]
 
     plt.subplot(1, 2, 1)
     plt.title('Reference solution')
