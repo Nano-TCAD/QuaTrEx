@@ -51,7 +51,7 @@ class Hamiltonian:
     TB = None
     
     
-    def __init__(self,sim_folder, no_orb, rank = 0):
+    def __init__(self,sim_folder, no_orb, Vappl = 0, rank = 0):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -61,7 +61,7 @@ class Hamiltonian:
             
             self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
             
-            
+            self.Vappl = Vappl
             #self.Hamiltonian = []
             #for p in self.blocks:
             #   self.Hamiltonian.append(read_sparse_matrix(p))
@@ -99,6 +99,8 @@ class Hamiltonian:
             self.prepare_block_properties()
             self.map_neighbor_indices()
             self.map_sparse_indices()
+            self.Vpot = self.get_linear_potential_drop()
+            self.add_potential()
 
     #Helper function to initialise all hamiltonians
     def read_sparse_matrix(self,fname = './H_4.bin'):
@@ -333,6 +335,54 @@ class Hamiltonian:
         self.columns = indI[:ind].astype('int32')
         self.rows = indJ[:ind].astype('int32')
     
+    def get_linear_potential_drop(self,):
+        """
+        This function returns the linear potential drop for the current system.
+        The potential drop is calculated from the difference in the applied bias in the left and right reservoirs.
 
+        Returns
+        -------
+        V : float
+            Linear potential drop in eV.
 
-        
+        """
+        self.NBlock = self.Smin[0]
+        ABmin = self.Smin[1:]
+        self.NA = self.LM.shape[0]
+
+        x = self.LM[:,0].astype(np.float)
+        orb_per_at_loc = self.no_orb[self.LM[:,3].astype(np.int)-1]
+        indL = np.arange(0, ABmin[2]-1)
+        indR = np.arange(ABmin[self.NBlock-2]-1, self.NA)
+        indC = np.arange(ABmin[2]-1, ABmin[self.NBlock-2]-1)
+
+        V = np.zeros(self.NA)
+
+        V[indL] = 0
+        V[indR] = -self.Vappl
+        V[indC] = -self.Vappl * (x[indC] - x[indC[0]]) / (x[indC[-1]] - x[indC[0]])
+
+        Vpot = np.zeros(np.sum(orb_per_at_loc))
+
+        ind = 0
+        for IA in range(self.NA):
+            Vpot[ind:ind+orb_per_at_loc[IA]] = V[IA]
+            ind += orb_per_at_loc[IA]
+
+        return Vpot
+
+    def add_potential(self,):
+        """
+        This function adds the linear potential drop to the Hamiltonian.
+
+        Returns
+        -------
+        None.
+
+        """
+        Vpot = self.Vpot
+
+        indi, indj = np.nonzero(self.Overlap['H_4'])
+
+        for IP in range(len(indi)):
+            self.Hamiltonian['H_4'][indi[IP], indj[IP]] += (Vpot[indi[IP]] + Vpot[indj[IP]]) * self.Overlap['H_4'][indi[IP], indj[IP]] / 2.0

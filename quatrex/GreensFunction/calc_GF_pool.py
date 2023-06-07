@@ -156,7 +156,7 @@ def calc_GF_pool_mpi(
 
 
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
-    
+    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
@@ -167,7 +167,7 @@ def calc_GF_pool_mpi(
         # Use partial function application to bind the constant arguments to inv_matrices
         # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
         #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
-        executor.map(rgf_GF, rgf_M, SigL, SigG, 
+        executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, 
                                          GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, nE, nP, idE, fL, fR,
                                          repeat(bmin), repeat(bmax), factor, index_e)
     
@@ -330,6 +330,10 @@ def calc_GF_mpi(
 def generator_rgf_Hamiltonian(E, DH, SigR):
     for i in range(E.shape[0]):
         yield (E[i] + 1j*1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
+
+def generator_rgf_currentdens_Hamiltonian(E, DH):
+    for i in range(E.shape[0]):
+        yield DH.Hamiltonian['H_4'] - (E[i]) * DH.Overlap['H_4']
 
 
 def assemble_full_G_smoothing(G, factor, G_block, Gnn1_block, Bmin, Bmax, format = 'sparse', type = 'R'):

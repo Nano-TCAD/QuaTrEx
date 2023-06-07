@@ -5,7 +5,7 @@ from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_ass
 from OBC.beyn_cpu import beyn
 from OBC.sancho import open_boundary_conditions
 
-def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):
+def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):
         # rgf_GF(DH, E, EfL, EfR, Temp) This could be the function call considering Leo's code
     '''
     Working!
@@ -268,10 +268,13 @@ def rgf_GF(M, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL,
             nP[IB] = 1j * np.trace(GG[IB, :, :])
 
             if IB < NB-1:
+                idE[IB] = -2 * np.trace(np.real(H[Bmin[IB+1]:Bmax[IB+1]+1, Bmin[IB]:Bmax[IB]+1].toarray() @ GLnn1[IB, 0:NI, 0:NP]))
                 GRnn1[IB, :, :] *= factor
                 GLnn1[IB, :, :] *= factor
                 GGnn1[IB, :, :] *= factor
+
         
+        idE[NB - 1] = idE[NB - 2]
 
 # write if name == __main__:
 if __name__ == '__main__':

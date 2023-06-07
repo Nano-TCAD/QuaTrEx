@@ -47,9 +47,9 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
-    solution_path = os.path.join(scratch_path, "GNR_pd_unbiased")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_0V.mat")
-    solution_path_gw2 = os.path.join(solution_path, "data_GPWS_it2_IEDM_GNR_0V.mat")
+    solution_path = os.path.join(scratch_path, "GNR_pd")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
+    solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_IEDM_GNR_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(
@@ -78,9 +78,10 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
+    Vappl = 0.4
     energy = np.linspace(-8, 12.0, 201, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank = rank)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -93,8 +94,7 @@ if __name__ == "__main__":
     bmin = hamiltonian_obj.Bmin - 1
 
     #reading reference solution
-    energy_in, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x(solution_path_gw, "g")
-    energy_in, rows_2, columns_2, gg_gold_2, gl_gold_2, gr_gold_2 = read_solution.load_x(solution_path_gw2, "g")
+    energy_in, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x(solution_path_gw2, "g")
     energy_in, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x(solution_path_gw2, "p")
     energy_in, rows_w, columns_w, wg_gold, wl_gold, wr_gold = read_solution.load_x(solution_path_gw2, "w")
     energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x(solution_path_gw2, "s")
@@ -157,9 +157,9 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = 0.40
+    energy_fl = 1.0
     # Fermi Level of Right Contact
-    energy_fr = 0.40
+    energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
@@ -366,7 +366,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_sc_0v/'
+    folder = '/results/GNR_biased_sc/'
     for iter_num in range(max_iter):
 
         # initialize observables----------------------------------------------------
@@ -413,7 +413,7 @@ if __name__ == "__main__":
                                                                 comm,
                                                                 rank,
                                                                 size,
-                                                                homogenize = True,
+                                                                homogenize = False,
                                                                 mkl_threads = gf_mkl_threads,
                                                                 worker_num = gf_worker_threads
                                                             )
@@ -686,11 +686,19 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+            comm.Reduce(ide, None, op=MPI.SUM, root=0)
 
-
+        if rank == 0:
+            np.savetxt(parent_path + folder + 'E.dat', energy)
+            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+    if rank == 0:
+        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
     if rank == 0:
         # create buffers at master
         gg_mpi = np.empty_like(gg_gold)
@@ -741,9 +749,9 @@ if __name__ == "__main__":
     if rank == 0:
         # print difference to given solution
         # use Frobenius norm
-        diff_gg = np.linalg.norm(gg_gold_2 - gg_mpi)
-        diff_gl = np.linalg.norm(gl_gold_2 - gl_mpi)
-        diff_gr = np.linalg.norm(gr_gold_2 - gr_mpi)
+        diff_gg = np.linalg.norm(gg_gold - gg_mpi)
+        diff_gl = np.linalg.norm(gl_gold - gl_mpi)
+        diff_gr = np.linalg.norm(gr_gold - gr_mpi)
         diff_pg = np.linalg.norm(pg_gold - pg_mpi)
         diff_pl = np.linalg.norm(pl_gold - pl_mpi)
         diff_pr = np.linalg.norm(pr_gold - pr_mpi)
@@ -761,9 +769,9 @@ if __name__ == "__main__":
         # assert solution close to real solution
         abstol = 1e-2
         reltol = 1e-1
-        assert diff_gg <= abstol + reltol * np.max(np.abs(gg_gold_2))
-        assert diff_gl <= abstol + reltol * np.max(np.abs(gl_gold_2))
-        assert diff_gr <= abstol + reltol * np.max(np.abs(gr_gold_2))
+        assert diff_gg <= abstol + reltol * np.max(np.abs(gg_gold))
+        assert diff_gl <= abstol + reltol * np.max(np.abs(gl_gold))
+        assert diff_gr <= abstol + reltol * np.max(np.abs(gr_gold))
         assert diff_pg <= abstol + reltol * np.max(np.abs(pg_gold))
         assert diff_pl <= abstol + reltol * np.max(np.abs(pl_gold))
         assert diff_pr <= abstol + reltol * np.max(np.abs(pr_gold))
@@ -773,9 +781,9 @@ if __name__ == "__main__":
         assert diff_sg <= abstol + reltol * np.max(np.abs(sg_gold))
         assert diff_sl <= abstol + reltol * np.max(np.abs(sl_gold))
         assert diff_sr <= abstol + reltol * np.max(np.abs(sr_gold))
-        assert np.allclose(gg_gold_2, gg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(gl_gold_2, gl_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(gr_gold_2, gr_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(gg_gold, gg_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(gl_gold, gl_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(gr_gold, gr_mpi, atol=1e-6, rtol=1e-6)
         assert np.allclose(pg_gold, pg_mpi, atol=1e-6, rtol=1e-6)
         assert np.allclose(pl_gold, pl_mpi, atol=1e-6, rtol=1e-6)
         assert np.allclose(pr_gold, pr_mpi, atol=1e-6, rtol=1e-6)
