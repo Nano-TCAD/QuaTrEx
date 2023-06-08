@@ -12,7 +12,7 @@ from scipy import sparse
 from utils import matrix_creation
 from utils import change_format
 from block_tri_solvers import rgf_W
-from block_tri_solvers import matrix_inversion_w
+# from block_tri_solvers import matrix_inversion_w
 from OBC import obc_w_cpu
 import time
 

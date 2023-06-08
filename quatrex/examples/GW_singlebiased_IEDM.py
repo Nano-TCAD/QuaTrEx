@@ -692,13 +692,13 @@ if __name__ == "__main__":
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
 
-        if rank == 0:
-            np.savetxt(parent_path + folder + 'E.dat', energy)
-            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-    if rank == 0:
-        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+        # if rank == 0:
+            # np.savetxt(parent_path + folder + 'E.dat', energy)
+            # np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            # np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+    # if rank == 0:
+        # np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+        # np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
     if rank == 0:
         # create buffers at master
         gg_mpi = np.empty_like(gg_gold)

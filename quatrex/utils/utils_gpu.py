@@ -14,6 +14,7 @@ def gpu_avail() -> bool:
         # throug running nvidia-smi check if a gpu available
         _ = subprocess.run(["nvidia-smi"], stdout=subprocess.PIPE).stdout.decode("utf-8")
         avail = True
+        # avail = False
     except FileNotFoundError:
         avail = False
     return avail

@@ -324,7 +324,7 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 20
+    max_iter = 50
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
