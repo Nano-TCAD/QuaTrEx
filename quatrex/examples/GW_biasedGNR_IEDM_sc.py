@@ -68,7 +68,7 @@ if __name__ == "__main__":
                 type=bool, required=False)
     parser.add_argument('--bsr', action='store_true', help='If True, use bsr format for W')
     parser.add_argument('--no-bsr', dest='bsr', action='store_false')
-    parser.set_defaults(wsr=False)
+    parser.set_defaults(bsr=False)
     parser.add_argument('--validate', action='store_true', help='If True, validate W')
     parser.add_argument('--no-validate', dest='validate', action='store_false')
     parser.set_defaults(validate=False)
@@ -170,7 +170,8 @@ if __name__ == "__main__":
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
     if args.bsr:
-        vh = bsr_matrix(vh.tobsr(blocksize=(hamiltonian_obj.Bmin.shape[0], hamiltonian_obj.Bmin.shape[0])))
+        w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
+        vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
 
      # calculation of data distribution per rank---------------------------------
 
@@ -516,9 +517,9 @@ if __name__ == "__main__":
         if args.bsr:
 
             # transform from 2D format to list/vector of sparse arrays format-----------
-            pg_p2w_vec = change_format.sparse2vecbsr_v2(pg_p2w, rows, columns, nao, hamiltonian_obj.Bmin.shape[0])
-            pl_p2w_vec = change_format.sparse2vecbsr_v2(pl_p2w, rows, columns, nao, hamiltonian_obj.Bmin.shape[0])
-            pr_p2w_vec = change_format.sparse2vecbsr_v2(pr_p2w, rows, columns, nao, hamiltonian_obj.Bmin.shape[0])
+            pg_p2w_vec = change_format.sparse2vecbsr_v2(pg_p2w, rows, columns, nao, w_bsize)
+            pl_p2w_vec = change_format.sparse2vecbsr_v2(pl_p2w, rows, columns, nao, w_bsize)
+            pr_p2w_vec = change_format.sparse2vecbsr_v2(pr_p2w, rows, columns, nao, w_bsize)
 
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
@@ -589,6 +590,8 @@ if __name__ == "__main__":
                 assert np.allclose(wl_upper, wl_upper_bsr)
                 assert np.allclose(wr_diag, wr_diag_bsr)
                 assert np.allclose(wr_upper, wr_upper_bsr)
+                if rank == 0:
+                    print("Validation passed!")
         
         if args.bsr:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper = wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr
