@@ -93,9 +93,9 @@ def map_4D_to_sparse(V_atomic, DH):
         The coulomb Matrix
 
     """
-    indI=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype = np.int)
-    indJ=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype = np.int)
-    NNZ=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype = np.cfloat)
+    indI=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype=int)
+    indJ=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype=int)
+    NNZ=np.zeros((DH.NA*(DH.NB+1)*DH.TB*DH.TB,), dtype=complex)
 
     ind=0
     
@@ -117,16 +117,16 @@ def map_4D_to_sparse(V_atomic, DH):
                 
                     neigh=int(DH.LM[IA,4+IB-1] -1)
                 
-                    indC=DH.orb_per_at[neigh];
-                    orbB=DH.orb_per_at[neigh+1]-DH.orb_per_at[neigh];
+                    indC=DH.orb_per_at[neigh]
+                    orbB=DH.orb_per_at[neigh+1]-DH.orb_per_at[neigh]
                 
                 else:               
-                    add_element=0;
+                    add_element=0
                
             if add_element:
-                indI[ind:ind + orbA*orbB]=np.reshape(np.outer(np.ones((1,orbB)),np.arange(indR,indR+orbA)),(1,orbA*orbB));
-                indJ[ind:ind+orbA*orbB]=np.reshape(np.outer(np.arange(indC,indC+orbB), np.ones((orbA,1))),(1,orbA*orbB));
-                NNZ[ind:ind+orbA*orbB]=np.reshape(np.squeeze(V_atomic[IA,IB,0:orbA,0:orbB]),(1,orbA*orbB));
+                indI[ind:ind + orbA*orbB]=np.reshape(np.outer(np.ones((1,orbB)),np.arange(indR,indR+orbA)),(1,orbA*orbB))
+                indJ[ind:ind+orbA*orbB]=np.reshape(np.outer(np.arange(indC,indC+orbB), np.ones((orbA,1))),(1,orbA*orbB))
+                NNZ[ind:ind+orbA*orbB]=np.reshape(np.squeeze(V_atomic[IA,IB,0:orbA,0:orbB]),(1,orbA*orbB))
                 
                 ind=ind+orbA*orbB;
             
