@@ -49,7 +49,7 @@ if __name__ == "__main__":
     scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
     solution_path = os.path.join(scratch_path, "GNR_pd")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
-    solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
+    solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_IEDM_GNR_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(
@@ -349,9 +349,9 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.0
+    mem_s = 0.75
     mem_g = 0.0
-    mem_w = 0.0
+    mem_w = 0.75
     # max number of iterations
 
     max_iter = 2

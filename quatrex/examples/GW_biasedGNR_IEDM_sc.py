@@ -324,7 +324,7 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 50
+    max_iter = 200
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -665,6 +665,7 @@ if __name__ == "__main__":
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+        np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
 
     # free datatypes------------------------------------------------------------
 
