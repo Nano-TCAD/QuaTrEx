@@ -17,6 +17,8 @@ import numpy.typing as npt
 import typing
 from scipy import sparse
 
+from utils.bsr import bsr_matrix
+
 def dense2block(
     xx: npt.NDArray[np.complex128],
     bmax: npt.NDArray[np.int32],
@@ -205,6 +207,39 @@ def sparse2vecsparse_v2(
         out[i] = sparse.coo_array((inp[i,:], (rows, columns)),
                                   shape=(nao, nao), dtype = np.complex128).tocsr()
     return out
+
+
+def sparse2vecbsr_v2(
+    inp: npt.NDArray[np.complex128],
+    rows: npt.NDArray[np.int32],
+    columns: npt.NDArray[np.int32],
+    nao: np.int64,
+    bsize: np.int64
+) -> np.ndarray:
+    """Convert from the 2D type of (ne,nnz) to a vector 
+        of sparse bsr matrices, where the vector has size ne.
+        v2 means that the input is transposed compared to normal.
+
+    Args:
+        inp (npt.npt.NDArray[np.complex128]): Dense 2D input of size (ne,nnz)
+        rows (npt.NDArray[np.int32]): row indexes of non zeros (nnz)
+        columns (npt.NDArray[np.int32]): column indexes of non zeros (nnz)
+        nao (np.int64): Number of atomic orbitals, size of the hamiltonian (nao,nao)
+        bsize (np.int64): Block size of the bsr matrix
+
+    Returns:
+        np.ndarray: vector containing ne times sparse bsr matrices (nao,nao) with block size (bsize,bsize)
+    """
+    # number of energy points
+    ne = inp.shape[0]
+    # output buffer
+    out = np.ndarray((ne,), dtype=object)
+    for i in range(ne):
+        out[i] = bsr_matrix(sparse.coo_array((inp[i,:], (rows, columns)),
+                                             shape=(nao, nao),
+                                             dtype=np.complex128).tobsr(blocksize=(bsize,bsize)))
+    return out
+
 
 def map_block2sparse(
     rows: npt.NDArray[np.int32],

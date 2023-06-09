@@ -32,6 +32,7 @@ from OMEN_structure_matrices import OMENHamClass
 from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from utils import change_format
 from utils import utils_gpu
+from utils.bsr import bsr_matrix
 
 if utils_gpu.gpu_avail():
     from GW.polarization.kernel import g2p_gpu
@@ -65,6 +66,12 @@ if __name__ == "__main__":
                     type=bool, required=False)
     parser.add_argument("-p", "--pool", default=True,
                 type=bool, required=False)
+    parser.add_argument('--bsr', action='store_true', help='If True, use bsr format for W')
+    parser.add_argument('--no-bsr', dest='bsr', action='store_false')
+    parser.set_defaults(bsr=False)
+    parser.add_argument('--validate', action='store_true', help='If True, validate W')
+    parser.add_argument('--no-validate', dest='validate', action='store_false')
+    parser.set_defaults(validate=False)
     args = parser.parse_args()
     # check if gpu is available
     if args.type in ("gpu"):
@@ -162,6 +169,9 @@ if __name__ == "__main__":
     factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
+    if args.bsr:
+        w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
+        vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
 
      # calculation of data distribution per rank---------------------------------
 
@@ -335,6 +345,9 @@ if __name__ == "__main__":
     folder = '/results/GNR_biased_sc/'
     for iter_num in range(max_iter):
 
+        if rank == 0:
+            iter_time = -time.perf_counter()
+
         # initialize observables----------------------------------------------------
         # density of states
         dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
@@ -498,38 +511,94 @@ if __name__ == "__main__":
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
-        pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
-        pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
+        if rank == 0:
+            w_time = -time.perf_counter()
+
+        if args.bsr:
+
+            # transform from 2D format to list/vector of sparse arrays format-----------
+            pg_p2w_vec = change_format.sparse2vecbsr_v2(pg_p2w, rows, columns, nao, w_bsize)
+            pl_p2w_vec = change_format.sparse2vecbsr_v2(pl_p2w, rows, columns, nao, w_bsize)
+            pr_p2w_vec = change_format.sparse2vecbsr_v2(pr_p2w, rows, columns, nao, w_bsize)
+
+            # calculate the screened interaction on every rank--------------------------
+            if args.pool:
+                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+                                                                                                    hamiltonian_obj, energy_loc,
+                                                                                                    pg_p2w_vec, pl_p2w_vec,
+                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    Idx_e_loc,   
+                                                                                                    factor_w_loc,
+                                                                                                    comm,
+                                                                                                    rank,
+                                                                                                    size,
+                                                                                                    w_mkl_threads,
+                                                                                                    w_worker_threads)
+            else:
+                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
+                                                                                                    hamiltonian_obj, energy_loc,
+                                                                                                    pg_p2w_vec, pl_p2w_vec,
+                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
+                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],    
+                                                                                                    factor_w_loc,
+                                                                                                    comm,
+                                                                                                    rank,
+                                                                                                    size,
+                                                                                                    w_mkl_threads
+                                                                                                    )
+        
+        if not args.bsr or (args.bsr and args.validate):
+
+            # transform from 2D format to list/vector of sparse arrays format-----------
+            pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
+            pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
+            pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
 
 
-        # calculate the screened interaction on every rank--------------------------
-        if args.pool:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                                hamiltonian_obj, energy_loc,
-                                                                                                pg_p2w_vec, pl_p2w_vec,
-                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                Idx_e_loc,   
-                                                                                                factor_w_loc,
-                                                                                                comm,
-                                                                                                rank,
-                                                                                                size,
-                                                                                                w_mkl_threads,
-                                                                                                w_worker_threads)
-        else:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
-                                                                                                hamiltonian_obj, energy_loc,
-                                                                                                pg_p2w_vec, pl_p2w_vec,
-                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
-                                                                                                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],    
-                                                                                                factor_w_loc,
-                                                                                                comm,
-                                                                                                rank,
-                                                                                                size,
-                                                                                                w_mkl_threads
-                                                                                                )
+            # calculate the screened interaction on every rank--------------------------
+            if args.pool:
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+                                                                                                    hamiltonian_obj, energy_loc,
+                                                                                                    pg_p2w_vec, pl_p2w_vec,
+                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    Idx_e_loc,   
+                                                                                                    factor_w_loc,
+                                                                                                    comm,
+                                                                                                    rank,
+                                                                                                    size,
+                                                                                                    w_mkl_threads,
+                                                                                                    w_worker_threads)
+            else:
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
+                                                                                                    hamiltonian_obj, energy_loc,
+                                                                                                    pg_p2w_vec, pl_p2w_vec,
+                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
+                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],    
+                                                                                                    factor_w_loc,
+                                                                                                    comm,
+                                                                                                    rank,
+                                                                                                    size,
+                                                                                                    w_mkl_threads
+                                                                                                    )
+            
+            if args.validate:
+                assert np.allclose(wg_diag, wg_diag_bsr)
+                assert np.allclose(wg_upper, wg_upper_bsr)
+                assert np.allclose(wl_diag, wl_diag_bsr)
+                assert np.allclose(wl_upper, wl_upper_bsr)
+                assert np.allclose(wr_diag, wr_diag_bsr)
+                assert np.allclose(wr_upper, wr_upper_bsr)
+                if rank == 0:
+                    print("Validation passed!")
+        
+        if args.bsr:
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper = wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr
+            
+        if rank == 0:
+            w_time += time.perf_counter()
+            print(f"w time: {w_time:.2f} s")
 
         # transform from block format to 2D format-----------------------------------
         # lower diagonal blocks from physics identity
@@ -657,6 +726,10 @@ if __name__ == "__main__":
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
+        
+        if rank == 0:
+            iter_time += time.perf_counter()
+            print(f"iter time: {iter_time:.2f} s")
 
         if rank == 0:
             np.savetxt(parent_path + folder + 'E.dat', energy)

@@ -46,8 +46,8 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
     Y = np.random.rand(N, NM)
     #Y = np.loadtxt('CNT_newwannier/' + 'ymatrix.dat')
 
-    P0 = np.zeros((N, N), dtype=np.complex)
-    P1 = np.zeros((N, N), dtype=np.complex)
+    P0 = np.zeros((N, N), dtype=np.complex128)
+    P1 = np.zeros((N, N), dtype=np.complex128)
 
     for I in range(len(z)):
 

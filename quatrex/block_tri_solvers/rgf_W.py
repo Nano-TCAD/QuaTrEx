@@ -762,6 +762,10 @@ def rgf_w_opt(
 
     times[0] = -time.perf_counter()
 
+    # TODO: Fix module to import BSR matrix
+    bsr = False
+    if not isinstance(vh, sparse.csr_matrix):
+        bsr = True
 
     # Anti-Hermitian symmetrizing of PL and PG
     pl = 1j * np.imag(pl)
@@ -824,7 +828,10 @@ def rgf_w_opt(
     lg = vh_cp @ pg @ vh_cp_ct
     ll = vh_cp @ pl @ vh_cp_ct
     # calculate M^{r}\left(E\right)
-    mr = sparse.identity(nao, format="csr") - vh_cp @ pr
+    if bsr:
+        mr = sparse.identity(nao, format="csr").tobsr(blocksize=vh_cp.blocksize) - vh_cp @ pr
+    else:
+        mr = sparse.identity(nao, format="csr") - vh_cp @ pr
 
     times[1] += time.perf_counter()
 
@@ -846,14 +853,24 @@ def rgf_w_opt(
     #                                        nbc)
 
     # todo ask Alex, why numba still has strided inputs after these operations
-    vh_s1 = np.ascontiguousarray(vh[slb_sd,slb_sd].toarray(order="C"))
-    vh_s2 = np.ascontiguousarray(vh[slb_sd,slb_so].toarray(order="C"))
-    pg_s1 = np.ascontiguousarray(pg[slb_sd,slb_sd].toarray(order="C"))
-    pg_s2 = np.ascontiguousarray(pg[slb_sd,slb_so].toarray(order="C"))
-    pl_s1 = np.ascontiguousarray(pl[slb_sd,slb_sd].toarray(order="C"))
-    pl_s2 = np.ascontiguousarray(pl[slb_sd,slb_so].toarray(order="C"))
-    pr_s1 = np.ascontiguousarray(pr[slb_sd,slb_sd].toarray(order="C"))
-    pr_s2 = np.ascontiguousarray(pr[slb_sd,slb_so].toarray(order="C"))
+    if bsr:
+        vh_s1 = vh[slb_sd,slb_sd]
+        vh_s2 = vh[slb_sd,slb_so]
+        pg_s1 = pg[slb_sd,slb_sd]
+        pg_s2 = pg[slb_sd,slb_so]
+        pl_s1 = pl[slb_sd,slb_sd]
+        pl_s2 = pl[slb_sd,slb_so]
+        pr_s1 = pr[slb_sd,slb_sd]
+        pr_s2 = pr[slb_sd,slb_so]
+    else:
+        vh_s1 = np.ascontiguousarray(vh[slb_sd,slb_sd].toarray(order="C"))
+        vh_s2 = np.ascontiguousarray(vh[slb_sd,slb_so].toarray(order="C"))
+        pg_s1 = np.ascontiguousarray(pg[slb_sd,slb_sd].toarray(order="C"))
+        pg_s2 = np.ascontiguousarray(pg[slb_sd,slb_so].toarray(order="C"))
+        pl_s1 = np.ascontiguousarray(pl[slb_sd,slb_sd].toarray(order="C"))
+        pl_s2 = np.ascontiguousarray(pl[slb_sd,slb_so].toarray(order="C"))
+        pr_s1 = np.ascontiguousarray(pr[slb_sd,slb_sd].toarray(order="C"))
+        pr_s2 = np.ascontiguousarray(pr[slb_sd,slb_so].toarray(order="C"))
     mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
                 vh_s1, vh_s2,
                 pg_s1, pg_s2,
@@ -861,14 +878,24 @@ def rgf_w_opt(
                 pr_s1, pr_s2,
                 nbc)
     # (diagonal, upper, lower block of the end block at the right)
-    vh_e1 = np.ascontiguousarray(vh[slb_ed,slb_ed].toarray(order="C"))
-    vh_e2 = np.ascontiguousarray(vh[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
-    pg_e1 = np.ascontiguousarray(pg[slb_ed,slb_ed].toarray(order="C"))
-    pg_e2 = np.ascontiguousarray(-pg[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
-    pl_e1 = np.ascontiguousarray(pl[slb_ed,slb_ed].toarray(order="C"))
-    pl_e2 = np.ascontiguousarray(-pl[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
-    pr_e1 = np.ascontiguousarray(pr[slb_ed,slb_ed].toarray(order="C"))
-    pr_e2 = np.ascontiguousarray(pr[slb_ed,slb_eo].transpose().toarray(order="C"))
+    if bsr:
+        vh_e1 = vh[slb_ed,slb_ed]
+        vh_e2 = vh[slb_ed,slb_eo].conjugate().transpose()
+        pg_e1 = pg[slb_ed,slb_ed]
+        pg_e2 = -pg[slb_ed,slb_eo].conjugate().transpose()
+        pl_e1 = pl[slb_ed,slb_ed]
+        pl_e2 = -pl[slb_ed,slb_eo].conjugate().transpose()
+        pr_e1 = pr[slb_ed,slb_ed]
+        pr_e2 = pr[slb_ed,slb_eo].transpose()
+    else:
+        vh_e1 = np.ascontiguousarray(vh[slb_ed,slb_ed].toarray(order="C"))
+        vh_e2 = np.ascontiguousarray(vh[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
+        pg_e1 = np.ascontiguousarray(pg[slb_ed,slb_ed].toarray(order="C"))
+        pg_e2 = np.ascontiguousarray(-pg[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
+        pl_e1 = np.ascontiguousarray(pl[slb_ed,slb_ed].toarray(order="C"))
+        pl_e2 = np.ascontiguousarray(-pl[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"))
+        pr_e1 = np.ascontiguousarray(pr[slb_ed,slb_ed].toarray(order="C"))
+        pr_e2 = np.ascontiguousarray(pr[slb_ed,slb_eo].transpose().toarray(order="C"))
     mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
                 vh_e1, vh_e2,
                 pg_e1, pg_e2,
@@ -1057,21 +1084,38 @@ def rgf_w_opt(
         lb_lb = lb_vec_mm[idx_lb]
 
         # x^{r}_E_nn = M_E_nn^{-1}
-        xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray() + dmr_ed)
-        xr_lb_ct = xr_lb.conjugate().transpose()
-        xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
+        if bsr:
+            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb]+ dmr_ed)
+            xr_lb_ct = xr_lb.conjugate().transpose()
+            xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
 
-        # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
-        wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray() + dlg_ed) @ xr_lb_ct
-        wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
+            # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
+            wg_lb = xr_lb @ (lg[slb_lb, slb_lb] + dlg_ed) @ xr_lb_ct
+            wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
 
-        # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
-        wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray() + dll_ed) @ xr_lb_ct
-        wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
+            # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
+            wl_lb = xr_lb @ (ll[slb_lb, slb_lb] + dll_ed) @ xr_lb_ct
+            wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
 
-        # wR_E_nn = xR_E_nn * V_nn
-        wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb].toarray() - dvh_ed)
-        wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
+            # wR_E_nn = xR_E_nn * V_nn
+            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb] - dvh_ed)
+            wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
+        else:
+            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray() + dmr_ed)
+            xr_lb_ct = xr_lb.conjugate().transpose()
+            xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
+
+            # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
+            wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray() + dlg_ed) @ xr_lb_ct
+            wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
+
+            # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
+            wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray() + dll_ed) @ xr_lb_ct
+            wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
+
+            # wR_E_nn = xR_E_nn * V_nn
+            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb].toarray() - dvh_ed)
+            wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
 
 
         # save the diagonal blocks from the previous step
@@ -1095,15 +1139,26 @@ def rgf_w_opt(
 
 
             # read out blocks needed
-            mr_c = mr[slb_c,slb_c].toarray()
-            mr_r = mr[slb_c,slb_p].toarray()
-            mr_d = mr[slb_p,slb_c].toarray()
-            vh_c = vh_cp[slb_c,slb_c].toarray()
-            vh_d = vh_cp[slb_p,slb_c].toarray()
-            lg_c = lg[slb_c,slb_c].toarray()
-            lg_d = lg[slb_p,slb_c].toarray()
-            ll_c = ll[slb_c,slb_c].toarray()
-            ll_d = ll[slb_p,slb_c].toarray()
+            if bsr:
+                mr_c = mr[slb_c,slb_c]
+                mr_r = mr[slb_c,slb_p]
+                mr_d = mr[slb_p,slb_c]
+                vh_c = vh_cp[slb_c,slb_c]
+                vh_d = vh_cp[slb_p,slb_c]
+                lg_c = lg[slb_c,slb_c]
+                lg_d = lg[slb_p,slb_c]
+                ll_c = ll[slb_c,slb_c]
+                ll_d = ll[slb_p,slb_c]
+            else:
+                mr_c = mr[slb_c,slb_c].toarray()
+                mr_r = mr[slb_c,slb_p].toarray()
+                mr_d = mr[slb_p,slb_c].toarray()
+                vh_c = vh_cp[slb_c,slb_c].toarray()
+                vh_d = vh_cp[slb_p,slb_c].toarray()
+                lg_c = lg[slb_c,slb_c].toarray()
+                lg_d = lg[slb_p,slb_c].toarray()
+                ll_c = ll[slb_c,slb_c].toarray()
+                ll_d = ll[slb_p,slb_c].toarray()
 
             if idx_ib == 0:
                 lg_c += dlg_sd
@@ -1151,9 +1206,14 @@ def rgf_w_opt(
         # WARNING the last read blocks from the above for loop are used
 
         # second step of iteration
-        vh_r = vh_cp[slb_c,slb_p].toarray()
-        lg_r = lg[slb_c,slb_p].toarray()
-        ll_r = ll[slb_c,slb_p].toarray()
+        if bsr:
+            vh_r = vh_cp[slb_c,slb_p]
+            lg_r = lg[slb_c,slb_p]
+            ll_r = ll[slb_c,slb_p]
+        else:
+            vh_r = vh_cp[slb_c,slb_p].toarray()
+            lg_r = lg[slb_c,slb_p].toarray()
+            ll_r = ll[slb_c,slb_p].toarray()
 
         xr_mr = xr_p @ mr_d
         xr_mr_ct = xr_mr.conjugate().transpose()
@@ -1220,10 +1280,16 @@ def rgf_w_opt(
 
 
             # read out blocks needed
-            mr_l = mr[slb_c, slb_p].toarray()
-            mr_u = mr[slb_p, slb_c].toarray()
-            lg_l = lg[slb_c, slb_p].toarray()
-            ll_l = ll[slb_c, slb_p].toarray()
+            if bsr:
+                mr_l = mr[slb_c, slb_p]
+                mr_u = mr[slb_p, slb_c]
+                lg_l = lg[slb_c, slb_p]
+                ll_l = ll[slb_c, slb_p]
+            else:
+                mr_l = mr[slb_c, slb_p].toarray()
+                mr_u = mr[slb_p, slb_c].toarray()
+                lg_l = lg[slb_c, slb_p].toarray()
+                ll_l = ll[slb_c, slb_p].toarray()
 
 
             # xRM = xR_E_kk * M_E_kk-1
@@ -1268,11 +1334,18 @@ def rgf_w_opt(
                 slb_n = slice(bmin_mm[idx_ib+1],bmax_mm[idx_ib+1]+1)
 
                 # read out blocks needed
-                vh_d = vh_cp[slb_n,slb_c].toarray()
-                mr_d = mr[slb_n,slb_c].toarray()
-                mr_r = mr[slb_c,slb_n].toarray()
-                lg_r = lg[slb_c,slb_n].toarray()
-                ll_r = ll[slb_c,slb_n].toarray()
+                if bsr:
+                    vh_d = vh_cp[slb_n,slb_c]
+                    mr_d = mr[slb_n,slb_c]
+                    mr_r = mr[slb_c,slb_n]
+                    lg_r = lg[slb_c,slb_n]
+                    ll_r = ll[slb_c,slb_n]
+                else:
+                    vh_d = vh_cp[slb_n,slb_c].toarray()
+                    mr_d = mr[slb_n,slb_c].toarray()
+                    mr_r = mr[slb_c,slb_n].toarray()
+                    lg_r = lg[slb_c,slb_n].toarray()
+                    ll_r = ll[slb_c,slb_n].toarray()
 
                 xr_diag_rgf_n = xr_diag_rgf[idx_ib+1,:lb_n,:lb_n]
                 wg_diag_rgf_n = wg_diag_rgf[idx_ib+1,:lb_n,:lb_n]

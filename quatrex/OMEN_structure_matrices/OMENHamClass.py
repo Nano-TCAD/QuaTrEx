@@ -18,7 +18,7 @@ from utils.read_utils import *
 def matlab_fread(fid, nelements, dtype):
     """Equivalent to Matlab fread function"""
 
-    if dtype is np.str:
+    if dtype is np.str_:
         dt = np.uint8  # WARNING: assuming 8-bit ASCII for np.str!
     else:
         dt = dtype
@@ -95,7 +95,7 @@ class Hamiltonian:
             self.NB = self.LM.shape[1] - 4 
             self.TB  = np.max(self.no_orb)
             self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
-            self.Smin = self.Smin.reshape((self.Smin.shape[0],)).astype(np.int)
+            self.Smin = self.Smin.reshape((self.Smin.shape[0],)).astype(int)
             self.prepare_block_properties()
             self.map_neighbor_indices()
             self.map_sparse_indices()
@@ -120,10 +120,10 @@ class Hamiltonian:
 
         #Matrix indexes start with zero
         if head[2] == 0:
-            H = sparse.csc_matrix((blob[:,2]+1j*blob[:,3], (blob[:,0], blob[:,1])), shape=(np.int(head[0]),np.int( head[0])))
+            H = sparse.csc_matrix((blob[:,2]+1j*blob[:,3], (blob[:,0], blob[:,1])), shape=(int(head[0]),int( head[0])))
         #Matrix indexes start with one
         else:
-            H = sparse.csc_matrix((blob[:,2]+1j*blob[:,3], (blob[:,0]-1, blob[:,1]-1)), shape=(np.int(head[0]),np.int( head[0])))
+            H = sparse.csc_matrix((blob[:,2]+1j*blob[:,3], (blob[:,0]-1, blob[:,1]-1)), shape=(int(head[0]),int( head[0])))
 
         return H
     
@@ -247,9 +247,9 @@ class Hamiltonian:
 
         """
         NA = self.LM.shape[0]
-        orb = self.no_orb[self.LM[:,3].astype(np.int)-1]
+        orb = self.no_orb[self.LM[:,3].astype(int)-1]
         
-        self.orb_per_at = np.zeros((NA+1,), dtype = np.int) #array with orbital index per atom
+        self.orb_per_at = np.zeros((NA+1,), dtype = int) #array with orbital index per atom
         self.orb_per_at[0] = 1
         
         for i in range(NA):
@@ -257,7 +257,7 @@ class Hamiltonian:
             
         self.NBlock = self.Smin[0]
         self.Bmin = self.orb_per_at[self.Smin[1:-1]-1]
-        self.Bmax = np.append(self.Bmin[1:]-1, np.max(self.orb_per_at)-1).astype(np.int)
+        self.Bmax = np.append(self.Bmin[1:]-1, np.max(self.orb_per_at)-1).astype(int)
         
     def map_neighbor_indices(self,):
         """
@@ -278,12 +278,12 @@ class Hamiltonian:
         for IA in range(self.NA):
             for IB1 in range(self.NB):
                 if self.LM[IA,4+IB1]>0:
-                    neigh=self.LM[IA,4+IB1].astype(int);
+                    neigh=self.LM[IA,4+IB1].astype(int)
                     
                     for IB2 in range(self.NB):
                         
                         if self.LM[neigh-1,4+IB2].astype(int)==IA+1:
-                            self.LM_map[IA,4+IB1]=IB2+1;
+                            self.LM_map[IA,4+IB1]=IB2+1
                             break
   
     
@@ -296,8 +296,8 @@ class Hamiltonian:
         Using these indices, the transformation between sparse, block and energy contigous formats can be done.
         """
         self.NH = self.Bmax[-1]
-        indI = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype = np.int)
-        indJ = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype = np.int)
+        indI = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype =int)
+        indJ = np.zeros((self.NH*(self.NB+1)*self.TB,), dtype =int)
         ind = 0
 
         indA = 0
@@ -350,8 +350,8 @@ class Hamiltonian:
         ABmin = self.Smin[1:]
         self.NA = self.LM.shape[0]
 
-        x = self.LM[:,0].astype(np.float)
-        orb_per_at_loc = self.no_orb[self.LM[:,3].astype(np.int)-1]
+        x = self.LM[:,0].astype(float)
+        orb_per_at_loc = self.no_orb[self.LM[:,3].astype(int)-1]
         indL = np.arange(0, ABmin[2]-1)
         indR = np.arange(ABmin[self.NBlock-2]-1, self.NA)
         indC = np.arange(ABmin[2]-1, ABmin[self.NBlock-2]-1)

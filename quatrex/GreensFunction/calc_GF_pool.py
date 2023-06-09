@@ -264,6 +264,7 @@ def calc_GF_mpi(
     mkl.set_num_threads(mkl_threads)
 
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
+    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
     
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
@@ -271,7 +272,7 @@ def calc_GF_mpi(
 
     # Create a process pool with 4 workers
     for ie in range(ne):
-        rgf_GF(next(rgf_M), SigL[ie], SigG[ie],
+        rgf_GF(next(rgf_M), next(rgf_H), SigL[ie], SigG[ie],
                           GR_3D_E[ie], GRnn1_3D_E[ie],
                           GL_3D_E[ie], GLnn1_3D_E[ie],
                           GG_3D_E[ie], GGnn1_3D_E[ie],
