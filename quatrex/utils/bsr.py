@@ -46,41 +46,79 @@ class bsr_matrix(object):
     @property
     def T(self):
         return bsr_matrix(self._matrix.T)
+    
+    @property
+    def real(self):
+        data = np.real(self.data)
+        indices = self.indices.copy()
+        indptr = self.indptr.copy()
+        return bsr_matrix(sp.bsr_matrix((data, indices, indptr), shape=self.shape, blocksize=self.blocksize))
+    
+    @property
+    def imag(self):
+        data = np.imag(self.data)
+        indices = self.indices.copy()
+        indptr = self.indptr.copy()
+        return bsr_matrix(sp.bsr_matrix((data, indices, indptr), shape=self.shape, blocksize=self.blocksize))
 
     def __getitem__(self, key: Sequence[slice]):
         """ Returns a single block of the matrix. """
 
         frow, lrow = key[0].start or 0, key[0].stop or self.shape[0]
         fcol, lcol = key[1].start or 0, key[1].stop or self.shape[1]
-        assert lrow - frow == self.blocksize[0]
-        assert lcol - fcol == self.blocksize[1]
+        assert frow % self.blocksize[0] == 0
+        assert fcol % self.blocksize[1] == 0
 
-        brow, bcol = frow // self.blocksize[0], fcol // self.blocksize[1]
-        bsize = self.blocksize[0] * self.blocksize[1]
+        rows, cols = lrow - frow, lcol - fcol
+        assert rows % self.blocksize[0] == 0
+        assert cols % self.blocksize[1] == 0
 
-        data_idx = -1
-        for i in range(self.indptr[brow], self.indptr[brow + 1]):
-            if self.indices[i] == bcol:
-                data_idx = i
-                break
-        assert data_idx >= 0
+        if rows == self.blocksize[0] and cols == self.blocksize[1]:
 
-        return self.data[data_idx]
+            # NOTE: Special case of one block: returns a view of the data array.
+
+            brow, bcol = frow // self.blocksize[0], fcol // self.blocksize[1]
+            bsize = self.blocksize[0] * self.blocksize[1]
+
+            data_idx = -1
+            for i in range(self.indptr[brow], self.indptr[brow + 1]):
+                if self.indices[i] == bcol:
+                    data_idx = i
+                    break
+
+            # NOTE: Special case where a block becomes zero after, e.g., a subtraction. 
+            if data_idx < 0:
+                return np.zeros((self.blocksize[0], self.blocksize[1]), dtype=self.dtype)
+
+            return self.data[data_idx]
+        
+        else:
+
+            result = np.zeros((rows, cols), dtype=self.dtype)
+
+            offi, offj = frow // self.blocksize[0], fcol // self.blocksize[1]
+
+            for bi in range(frow // self.blocksize[0], lrow // self.blocksize[0]):
+                for bj in range(fcol // self.blocksize[1], lcol // self.blocksize[1]):
+
+                    data_idx = -1
+                    for i in range(self.indptr[bi], self.indptr[bi + 1]):
+                        if self.indices[i] == bj:
+                            data_idx = i
+                            break
+
+                    if data_idx < 0:
+                        continue
+
+                    block = self.data[data_idx]
+                    out_slice = (slice((bi - offi) * self.blocksize[0], (bi - offi + 1) * self.blocksize[0]),
+                                 slice((bj - offj) * self.blocksize[1], (bj - offj + 1) * self.blocksize[1]))
+                    result[out_slice] = block
+            
+            return result
 
     def copy(self):
         return bsr_matrix(self._matrix.copy())
-
-    def real(self):
-        data = np.real(self.data)
-        indices = self.indices.copy()
-        indptr = self.indptr.copy()
-        return bsr_matrix(sp.bsr_matrix((data, indices, indptr), shape=self.shape, blocksize=self.blocksize))
-
-    def imag(self):
-        data = np.imag(self.data)
-        indices = self.indices.copy()
-        indptr = self.indptr.copy()
-        return bsr_matrix(sp.bsr_matrix((data, indices, indptr), shape=self.shape, blocksize=self.blocksize))
 
     def conj(self):
         return bsr_matrix(self._matrix.conj())
