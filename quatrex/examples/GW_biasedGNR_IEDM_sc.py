@@ -117,7 +117,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-8, 12.0, 101, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-8, 12.0, 4001, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -158,8 +158,8 @@ if __name__ == "__main__":
 
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
-    w_mkl_threads = 1
-    w_worker_threads = 8
+    w_mkl_threads = 2
+    w_worker_threads = 12
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_worker_threads = 8
