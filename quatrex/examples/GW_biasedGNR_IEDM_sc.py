@@ -66,12 +66,21 @@ if __name__ == "__main__":
                     type=bool, required=False)
     parser.add_argument("-p", "--pool", default=True,
                 type=bool, required=False)
+    parser.add_argument('--block-inv', action='store_true', help='If True, use block inversion in Beyn')
+    parser.add_argument('--no-block-inv', dest='block-inv', action='store_false')
+    parser.set_defaults(block_inv=False)
     parser.add_argument('--bsr', action='store_true', help='If True, use bsr format for W')
     parser.add_argument('--no-bsr', dest='bsr', action='store_false')
     parser.set_defaults(bsr=False)
-    parser.add_argument('--validate', action='store_true', help='If True, validate W')
-    parser.add_argument('--no-validate', dest='validate', action='store_false')
-    parser.set_defaults(validate=False)
+    parser.add_argument('--validate-bsr', action='store_true', help='If True, validate W with BSR')
+    parser.add_argument('--no-validate-bsr', dest='validate-bsr', action='store_false')
+    parser.set_defaults(validate_bsr=False)
+    parser.add_argument('--dace', action='store_true', help='If True, use dace for Beyn')
+    parser.add_argument('--no-dace', dest='dace', action='store_false')
+    parser.set_defaults(dace=False)
+    parser.add_argument('--validate-dace', action='store_true', help='If True, validate DaCe')
+    parser.add_argument('--no-validate-dace', dest='validate-dace', action='store_false')
+    parser.set_defaults(validate_dace=False)
     args = parser.parse_args()
     # check if gpu is available
     if args.type in ("gpu"):
@@ -81,12 +90,34 @@ if __name__ == "__main__":
     # print chosen implementation
     print(f"Using {args.type} implementation")
 
+
+    if args.dace:
+        if rank == 0:
+            print("Using dace for Beyn")
+            import dace
+            from OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
+            from dace.transformation.auto.auto_optimize import auto_optimize
+            ci_sdfg = contour_integral_dace.to_sdfg(simplify=True)
+            auto_optimize(ci_sdfg, dace.DeviceType.CPU, thread_safe=True)
+            ci_func = ci_sdfg.compile()
+            ci_block_sdfg = contour_integral_block_dace.to_sdfg(simplify=True)
+            auto_optimize(ci_block_sdfg, dace.DeviceType.CPU, thread_safe=True)
+            ci_block_func = ci_block_sdfg.compile()
+            sk_sdfg = sort_k_dace.to_sdfg(simplify=True)
+            auto_optimize(sk_sdfg, dace.DeviceType.CPU, thread_safe=True)
+            sk_func = sk_sdfg.compile()
+            import OBC.beyn_globals as bg
+            bg.contour_integral = ci_func
+            bg.contour_integral_block = ci_block_func
+            bg.sort_k = sk_func
+        comm.Barrier()
+
    
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-8, 12.0, 4001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-8, 12.0, 101, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -127,8 +158,8 @@ if __name__ == "__main__":
 
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
-    w_mkl_threads = 2
-    w_worker_threads = 12
+    w_mkl_threads = 1
+    w_worker_threads = 8
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_worker_threads = 8
@@ -394,7 +425,10 @@ if __name__ == "__main__":
                                                                 size,
                                                                 homogenize = False,
                                                                 mkl_threads = gf_mkl_threads,
-                                                                worker_num = gf_worker_threads
+                                                                worker_num = gf_worker_threads,
+                                                                block_inv = args.block_inv,
+                                                                use_dace=args.dace,
+                                                                validate_dace=args.validate_dace,
                                                             )
         else:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_mpi(
@@ -415,7 +449,10 @@ if __name__ == "__main__":
                                                                 rank,
                                                                 size,
                                                                 gf_mkl_threads,
-                                                                1
+                                                                1,
+                                                                block_inv = args.block_inv,
+                                                                use_dace=args.dace,
+                                                                validate_dace=args.validate_dace
                                                             )
             
         ECmin_vec[iter_num+1] = get_band_edge_mpi(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
@@ -534,7 +571,10 @@ if __name__ == "__main__":
                                                                                                     rank,
                                                                                                     size,
                                                                                                     w_mkl_threads,
-                                                                                                    w_worker_threads)
+                                                                                                    w_worker_threads,
+                                                                                                    block_inv=args.block_inv,
+                                                                                                    use_dace=args.dace,
+                                                                                                    validate_dace=args.validate_dace)
             else:
                 wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                                                                                                     hamiltonian_obj, energy_loc,
@@ -545,10 +585,12 @@ if __name__ == "__main__":
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
-                                                                                                    w_mkl_threads
-                                                                                                    )
+                                                                                                    w_mkl_threads,
+                                                                                                    block_inv=args.block_inv,
+                                                                                                    use_dace=args.dace,
+                                                                                                    validate_dace=args.validate_dace)
         
-        if not args.bsr or (args.bsr and args.validate):
+        if not args.bsr or (args.bsr and args.validate_bsr):
 
             # transform from 2D format to list/vector of sparse arrays format-----------
             pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
@@ -569,7 +611,10 @@ if __name__ == "__main__":
                                                                                                     rank,
                                                                                                     size,
                                                                                                     w_mkl_threads,
-                                                                                                    w_worker_threads)
+                                                                                                    w_worker_threads,
+                                                                                                    block_inv=args.block_inv,
+                                                                                                    use_dace=args.dace,
+                                                                                                    validate_dace=args.validate_dace)
             else:
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                                                                                                     hamiltonian_obj, energy_loc,
@@ -580,10 +625,12 @@ if __name__ == "__main__":
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
-                                                                                                    w_mkl_threads
-                                                                                                    )
+                                                                                                    w_mkl_threads,
+                                                                                                    block_inv=args.block_inv,
+                                                                                                    use_dace=args.dace,
+                                                                                                    validate_dace=args.validate_dace)
             
-            if args.validate:
+            if args.bsr and args.validate_bsr:
                 assert np.allclose(wg_diag, wg_diag_bsr)
                 assert np.allclose(wg_upper, wg_upper_bsr)
                 assert np.allclose(wl_diag, wl_diag_bsr)

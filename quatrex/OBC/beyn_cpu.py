@@ -1,15 +1,18 @@
 import numpy as np
+import time
 
-from scipy.sparse import lil_matrix, csr_matrix
+from scipy.sparse import lil_matrix, csr_matrix, csc_matrix, linalg
 from scipy.linalg import svd
 from numpy.linalg import eig
 from utils.read_utils import read_file_to_float_ndarray
 
 np.random.seed(0)
 
-def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
+def beyn(M00, M01, M10, imag_lim, R, type, function = 'W', block: bool = False):
     
     #np.seterr(divide='ignore', invalid='ignore')
+
+    # ctime = - time.perf_counter()
 
     theta_min = 0
     theta_max = 2*np.pi
@@ -42,6 +45,11 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
         NM = round(3*N/4)
     else:
         NM = round(N/2)
+    
+    # ctime += time.perf_counter()
+    # print(f'Time for setting up the parameters: {ctime} s')
+
+    # ctime = - time.perf_counter()
 
     Y = np.random.rand(N, NM)
     #Y = np.loadtxt('CNT_newwannier/' + 'ymatrix.dat')
@@ -49,17 +57,51 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
     P0 = np.zeros((N, N), dtype=np.complex128)
     P1 = np.zeros((N, N), dtype=np.complex128)
 
-    for I in range(len(z)):
+    if block:
 
-        if type == 'L':
-            T = M00 + M01/z[I] + M10*z[I]
-        else:
-            T = M00 + M01*z[I] + M10/z[I]
+        A = M00[:N//2, :N//2]
+        B = M00[:N//2, N//2:]
+        C = M00[N//2:, :N//2]
+        D = M00[N//2:, N//2:]
 
-        iT = np.linalg.inv(T)
+        iA = np.linalg.inv(A)
+        iD = np.linalg.inv(D)
 
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        iT = np.empty((N, N), dtype=np.complex128)
+
+        for I in range(len(z)):
+
+            if type == 'L':
+                Bi = B + M10[:N//2, N//2:]*z[I]
+                Ci = C + M01[N//2:, :N//2]/z[I]
+            else:
+                Bi = B + M10[:N//2, N//2:]/z[I]
+                Ci = C + M01[N//2:, :N//2]*z[I]
+
+            T0 = np.linalg.inv(A - Bi@iD@Ci)
+            T1 = np.linalg.inv(D - Ci@iA@Bi)
+
+            iT[:N//2, :N//2] = T0
+            iT[:N//2, N//2:] = -iA@Bi@T1
+            iT[N//2:, :N//2] = -iD@Ci@T0
+            iT[N//2:, N//2:] = T1
+
+            P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+            P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+    
+    else:
+
+        for I in range(len(z)):
+
+            if type == 'L':
+                T = M00 + M01/z[I] + M10*z[I]
+            else:
+                T = M00 + M01*z[I] + M10/z[I]
+
+            iT = np.linalg.inv(T)
+
+            P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+            P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
 
     LP0 = P0@Y
     LP1 = P1@Y
@@ -67,11 +109,19 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
     RP0 = Y.T@P0
     RP1 = Y.T@P1
 
+    # ctime += time.perf_counter()
+    # print(f'Time for contour integral: {ctime} s')
+
+    # ctime = - time.perf_counter()
+
     LV, LS, LW = svd(LP0, full_matrices=False)
     Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
 
     RV, RS, RW = svd(RP0, full_matrices=True)
     Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
+
+    # ctime += time.perf_counter()
+    # print(f'Time for SVD: {ctime} s')
 
     if len(Lind) == 0:
 
@@ -81,6 +131,8 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
         gR = None
 
     else:
+
+        # ctime = - time.perf_counter()
 
         LV = LV[:, Lind]
         LS = LS[Lind]
@@ -109,6 +161,11 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
         k = kL[ind_sort_kL]
         phiL = phiL[:, ind_sort_kL]
 
+        # ctime += time.perf_counter()
+        # print(f'Time for eigenvalue problem: {ctime} s')
+
+        # ctime = - time.perf_counter()
+
         if type == 'L':
             ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
             gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
@@ -131,6 +188,9 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W'):
                     for IC in range(ref_iteration):
                         gR = np.linalg.inv(M00 - M01 @ gR @ M10)
             Sigma = M01 @ gR @ M10
+        
+        # ctime += time.perf_counter()
+        # print(f'Time for Sigma: {ctime} s')
 
         ind = np.where(abs(dEk_dk))
         if len(ind[0]) > 0:
