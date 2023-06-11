@@ -48,6 +48,7 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
+    # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "GNR_pd")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
@@ -64,8 +65,10 @@ if __name__ == "__main__":
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
-    parser.add_argument("-p", "--pool", default=True,
-                type=bool, required=False)
+    # parser.add_argument("-p", "--pool", default=True, type=bool, required=False)
+    parser.add_argument('--pool', action='store_true', help='If True, use thread-pool')
+    parser.add_argument('--no-pool', dest='pool', action='store_false')
+    parser.set_defaults(pool=True)
     parser.add_argument('--block-inv', action='store_true', help='If True, use block inversion in Beyn')
     parser.add_argument('--no-block-inv', dest='block-inv', action='store_false')
     parser.set_defaults(block_inv=False)
@@ -92,27 +95,30 @@ if __name__ == "__main__":
 
 
     if args.dace:
+        import dace
+        from dace.sdfg import utils
         if rank == 0:
             print("Using dace for Beyn")
-            import dace
             from OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
             from dace.transformation.auto.auto_optimize import auto_optimize
             ci_sdfg = contour_integral_dace.to_sdfg(simplify=True)
             auto_optimize(ci_sdfg, dace.DeviceType.CPU, thread_safe=True)
-            ci_func = ci_sdfg.compile()
+            # ci_func = ci_sdfg.compile()
             ci_block_sdfg = contour_integral_block_dace.to_sdfg(simplify=True)
             auto_optimize(ci_block_sdfg, dace.DeviceType.CPU, thread_safe=True)
-            ci_block_func = ci_block_sdfg.compile()
+            # ci_block_func = ci_block_sdfg.compile()
             sk_sdfg = sort_k_dace.to_sdfg(simplify=True)
             auto_optimize(sk_sdfg, dace.DeviceType.CPU, thread_safe=True)
-            sk_func = sk_sdfg.compile()
-            import OBC.beyn_globals as bg
-            bg.contour_integral = ci_func
-            bg.contour_integral_block = ci_block_func
-            bg.sort_k = sk_func
+            # sk_func = sk_sdfg.compile()
+        else:
+            ci_sdfg, ci_block_sdfg, sk_sdfg = None, None, None
+        comm.Barrier()
+        import OBC.beyn_globals as bg
+        bg.contour_integral = utils.distributed_compile(ci_sdfg, comm)
+        bg.contour_integral_block = utils.distributed_compile(ci_block_sdfg, comm)
+        bg.sort_k = utils.distributed_compile(sk_sdfg, comm)
         comm.Barrier()
 
-   
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
@@ -365,10 +371,55 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 50
+    max_iter = 5
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
+
+    # Communication buffers
+    # G2P
+    gg_g2p = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    gl_g2p = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    gr_g2p = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    # P2W
+    pg_p2w = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    pl_p2w = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    pr_p2w = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    # GW2S
+    # wg_gw2s = np.empty((count[0, rank], data_shape[1]),
+    #                 dtype=np.complex128, order="C")
+    # wl_gw2s = np.empty((count[0, rank], data_shape[1]),
+    #                 dtype=np.complex128, order="C")
+    # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
+    #                 dtype=np.complex128, order="C")
+    # wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+    #                 dtype=np.complex128, order="C")
+    wg_gw2s = gg_g2p
+    wl_gw2s = gl_g2p
+    wr_gw2s = gr_g2p
+    wg_transposed_gw2s = gl_transposed_g2p
+    wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    # H2G
+    # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+    #                 dtype=np.complex128, order="C")
+    # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+    #                 dtype=np.complex128, order="C")
+    # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+    #                 dtype=np.complex128, order="C")
+    sg_h2g_buf = pg_p2w
+    sl_h2g_buf = pl_p2w
+    sr_h2g_buf = pr_p2w
+
+    comm.Barrier()
 
     if rank == 0:
         time_start = -time.perf_counter()
@@ -376,8 +427,12 @@ if __name__ == "__main__":
     folder = '/results/GNR_biased_sc/'
     for iter_num in range(max_iter):
 
+        comm.Barrier()
+
         if rank == 0:
             iter_time = -time.perf_counter()
+            pre_gf_time = -time.perf_counter()
+            print(f"Iteration {iter_num+1} of {max_iter}:", flush=True)
 
         # initialize observables----------------------------------------------------
         # density of states
@@ -403,6 +458,13 @@ if __name__ == "__main__":
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
+
+        comm.Barrier()
+
+        if rank == 0:
+            pre_gf_time += time.perf_counter()
+            print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
+            gf_time = -time.perf_counter()
 
         # calculate the green's function at every rank------------------------------
         if args.pool:
@@ -454,6 +516,13 @@ if __name__ == "__main__":
                                                                 use_dace=args.dace,
                                                                 validate_dace=args.validate_dace
                                                             )
+        
+        comm.Barrier()
+
+        if rank == 0:
+            gf_time += time.perf_counter()
+            print(f"    GF time: {gf_time:.3f} s", flush=True)
+            pre_comm0_time = -time.perf_counter()
             
         ECmin_vec[iter_num+1] = get_band_edge_mpi(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
 
@@ -495,21 +564,35 @@ if __name__ == "__main__":
                                                             energy_contiguous=False) + mem_g * gr_h2g
         # calculate the transposed
         gl_transposed_h2g = np.copy(gl_h2g[:,ij2ji], order="C")
-        # create local buffers
-        gg_g2p = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        gl_g2p = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        gr_g2p = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
+        # # create local buffers
+        # gg_g2p = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # gl_g2p = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # gr_g2p = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        
+        comm.Barrier()
+
+        if rank == 0:
+            pre_comm0_time += time.perf_counter()
+            print(f"    Pre-Comm-0 time: {pre_comm0_time:.3f} s", flush=True)
+            comm0_time = -time.perf_counter()
 
         # use of all to all w since not divisible
         alltoall_g2p(gg_h2g, gg_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gl_h2g, gl_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gl_transposed_h2g, gl_transposed_g2p, transpose_net=args.net_transpose)
+
+        comm.Barrier()
+
+        if rank == 0:
+            comm0_time += time.perf_counter()
+            print(f"    Comm-0 time: {comm0_time:.3f} s", flush=True)
+            g2p_time = -time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("gpu"):
@@ -529,27 +612,41 @@ if __name__ == "__main__":
         else:
             raise ValueError("Argument error, input type not possible")
 
+        comm.Barrier()
 
+        if rank == 0:
+            g2p_time += time.perf_counter()
+            print(f"    G2P time: {g2p_time:.3f} s", flush=True)
+            pre_comm1_time = -time.perf_counter()
 
         # distribute polarization function according to p2w step--------------------
 
-        # create local buffers
-        pg_p2w = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
-        pl_p2w = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
-        pr_p2w = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
+        # # create local buffers
+        # pg_p2w = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
+        # pl_p2w = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
+        # pr_p2w = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
 
+        comm.Barrier()
 
+        if rank == 0:
+            pre_comm1_time += time.perf_counter()
+            print(f"    Pre-Comm-1 time: {pre_comm1_time:.3f} s", flush=True)
+            comm1_time = -time.perf_counter()
 
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
+        comm.Barrier()
+
         if rank == 0:
-            w_time = -time.perf_counter()
+            comm1_time += time.perf_counter()
+            print(f"    Comm-1 time: {comm1_time:.3f} s", flush=True)
+            p2w_time = -time.perf_counter()
 
         if args.bsr:
 
@@ -643,9 +740,12 @@ if __name__ == "__main__":
         if args.bsr:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper = wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr
             
+        comm.Barrier()
+
         if rank == 0:
-            w_time += time.perf_counter()
-            print(f"w time: {w_time:.2f} s")
+            p2w_time += time.perf_counter()
+            print(f"    P2W time: {p2w_time:.3f} s", flush=True)
+            pre_comm2_time = -time.perf_counter()
 
         # transform from block format to 2D format-----------------------------------
         # lower diagonal blocks from physics identity
@@ -687,17 +787,24 @@ if __name__ == "__main__":
         wg_transposed_p2w = np.copy(wg_p2w[:,ij2ji], order="C")
         wl_transposed_p2w = np.copy(wl_p2w[:,ij2ji], order="C")
 
-        # create local buffers
-        wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
-        wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                        dtype=np.complex128, order="C")
+        # # create local buffers
+        # wg_gw2s = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # wl_gw2s = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        # wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+        #                 dtype=np.complex128, order="C")
+        
+        comm.Barrier()
+
+        if rank == 0:
+            pre_comm2_time += time.perf_counter()
+            print(f"    Pre-Comm-2 time: {pre_comm2_time:.3f} s", flush=True)
+            comm2_time = -time.perf_counter()
         
 
         # use of all to all w since not divisible
@@ -706,6 +813,13 @@ if __name__ == "__main__":
         alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose)
+    
+        comm.Barrier()
+
+        if rank == 0:
+            comm2_time += time.perf_counter()
+            print(f"    Comm-2 time: {comm2_time:.3f} s", flush=True)
+            gw2s_time = -time.perf_counter()
 
     # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("gpu"):
@@ -734,20 +848,41 @@ if __name__ == "__main__":
                                                                 )
         else:
             raise ValueError("Argument error, input type not possible")
+        
+        comm.Barrier()
+
+        if rank == 0:
+            gw2s_time += time.perf_counter()
+            print(f"    GW2S time: {gw2s_time:.3f} s", flush=True)
+            pre_comm3_time = -time.perf_counter()
 
         # distribute screened interaction according to h2g step---------------------
-        # create local buffers
-        sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
-        sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
-        sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                        dtype=np.complex128, order="C")
+        # # create local buffers
+        # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
+        # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
+        # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+        #                 dtype=np.complex128, order="C")
+        
+        comm.Barrier()
+
+        if rank == 0:
+            pre_comm3_time += time.perf_counter()
+            print(f"    Pre-comm-3 time: {pre_comm3_time:.3f} s", flush=True)
+            comm3_time = -time.perf_counter()
 
         # use of all to all w since not divisible
         alltoall_p2g(sg_gw2s, sg_h2g_buf, transpose_net=args.net_transpose)
         alltoall_p2g(sl_gw2s, sl_h2g_buf, transpose_net=args.net_transpose)
         alltoall_p2g(sr_gw2s, sr_h2g_buf, transpose_net=args.net_transpose)
+
+        comm.Barrier()
+
+        if rank == 0:
+            comm3_time += time.perf_counter()
+            print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
+            wrapping_up_time = -time.perf_counter()
 
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
@@ -775,8 +910,11 @@ if __name__ == "__main__":
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
         
         if rank == 0:
+            wrapping_up_time += time.perf_counter()
+            print(f"    Wrapping-up time: {wrapping_up_time:.3f} s", flush=True)
             iter_time += time.perf_counter()
-            print(f"iter time: {iter_time:.2f} s")
+            print(f"Iteration time: {iter_time:.3f} s", flush=True)
+            print()
 
         if rank == 0:
             np.savetxt(parent_path + folder + 'E.dat', energy)
