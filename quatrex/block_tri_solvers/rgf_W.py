@@ -54,6 +54,8 @@ from scipy import sparse
 import time
 import typing
 
+
+from functools import partial
 from OBC import beyn_cpu
 from OBC import sancho
 from OBC import dL_OBC_eigenmode_cpu
@@ -716,8 +718,11 @@ def rgf_w_opt(
     nbc:      np.int64,
     ie:       np.int32,
     factor:   np.float64 = 1.0,
+    block_inv: bool = False,
+    use_dace: bool = False,
+    validate_dace: bool = False,
     ref_flag: bool = False,
-    sancho_flag: bool = False
+    sancho_flag: bool = False,
 ) -> typing.Tuple[npt.NDArray[np.complex128],
                   npt.NDArray[np.complex128],
                   npt.NDArray[np.complex128],
@@ -755,6 +760,14 @@ def rgf_w_opt(
                   npt.NDArray[np.complex128]     wr from inv
                 ] warning all dense arrays, only returned if ref_flag is True
     """
+    beyn = beyn_cpu.beyn
+    if use_dace:
+        # from OBC.beyn_dace import beyn, contour_integral_dace, sort_k_dace
+        # contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
+        # sortk, _ = sort_k_dace.load_precompiled_sdfg(f'.dacecache/{sort_k_dace.name}')
+        # beyn = partial(beyn, contour_integral=contour_integral, sortk=sortk)
+        from OBC.beyn_dace import beyn as beyn_dace
+        beyn = partial(beyn_dace, validate=validate_dace)
 
     
     times = np.zeros((10), dtype=np.float64)
@@ -937,11 +950,12 @@ def rgf_w_opt(
 
     # correction for first block
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn(
+        _, cond_l, dxr_sd, dmr, min_dEkL = beyn(
                                                 mr_s[0],
                                                 mr_s[1],
                                                 mr_s[2],
-                                                imag_lim, rr, "L")
+                                                imag_lim, rr, "L",
+                                                block=block_inv)
         
         
         if not np.isnan(cond_l):
@@ -970,11 +984,12 @@ def rgf_w_opt(
         dmr_sd -= dmr
     # correction for last block
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn(
+        _, cond_r, dxr_ed, dmr, min_dEkR = beyn(
                                                 mr_e[0],
                                                 mr_e[1],
                                                 mr_e[2],
-                                                imag_lim, rr, "R")
+                                                imag_lim, rr, "R",
+                                                block=block_inv)
         if not np.isnan(cond_r):
             dmr_ed -= dmr
             dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]

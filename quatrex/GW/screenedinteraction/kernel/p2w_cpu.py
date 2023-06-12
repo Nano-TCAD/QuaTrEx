@@ -32,7 +32,10 @@ def p2w_pool_mpi_cpu(
     rank,
     size,
     mkl_threads: int = 1,
-    worker_num: int = 1
+    worker_num: int = 1,
+    block_inv: bool = False,
+    use_dace: bool = False,
+    validate_dace: bool = False
 ) -> typing.Tuple[
         npt.NDArray[np.complex128],
         npt.NDArray[np.complex128],
@@ -106,7 +109,7 @@ def p2w_pool_mpi_cpu(
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        executor.map(
+        results = executor.map(
                     rgf_W.rgf_w_opt,
                     repeat(vh),
                     pg, pl, pr,
@@ -115,8 +118,12 @@ def p2w_pool_mpi_cpu(
                     wl_diag, wl_upper,
                     wr_diag, wr_upper,
                     xr_diag, dosw, new, npw, repeat(nbc),
-                    idx_e, factor
-                     )
+                    idx_e, factor,
+                    repeat(block_inv),
+                    repeat(use_dace),
+                    repeat(validate_dace))
+        for res in results:
+            assert isinstance(res, np.ndarray)
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
@@ -183,7 +190,10 @@ def p2w_mpi_cpu(
     comm,
     rank,
     size,
-    mkl_threads: int = 1
+    mkl_threads: int = 1,
+    block_inv: bool = False,
+    use_dace: bool = False,
+    validate_dace: bool = False
 ) -> typing.Tuple[
         npt.NDArray[np.complex128],
         npt.NDArray[np.complex128],
@@ -270,7 +280,10 @@ def p2w_mpi_cpu(
                 xr_diag[ie],
                 dosw[ie], new[ie], npw[ie],
                 nbc,
-                index_e[ie], factor[ie]
+                index_e[ie], factor[ie],
+                block_inv=block_inv,
+                use_dace=use_dace,
+                validate_dace=validate_dace
         )
         times += out
     print("Time symmetrize: ", times[0])

@@ -4,13 +4,21 @@ from scipy import sparse
 from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
 from OBC.beyn_cpu import beyn
 from OBC.sancho import open_boundary_conditions
+from functools import partial
 
-def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0, sancho = False, min_dEk = 1e8):
+def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, fL, fR, Bmin_fi, Bmax_fi, factor = 1.0, index_E = 0,
+           block_inv = False, use_dace = False, validate_dace = False, sancho = False, min_dEk = 1e8):
         # rgf_GF(DH, E, EfL, EfR, Temp) This could be the function call considering Leo's code
     '''
     Working!
     
     '''
+
+    beyn_func = beyn
+    if use_dace:
+        from OBC import beyn_dace
+        beyn_func = partial(beyn_dace.beyn, validate=validate_dace)
+
     imag_lim = 5e-4
     R = 1000
 
@@ -45,7 +53,7 @@ def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, 
     #_, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
-        _, condL, _, SigRBL, min_dEkL  = beyn(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), imag_lim, R, 'L', function = 'G')
+        _, condL, _, SigRBL, min_dEkL  = beyn_func(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), imag_lim, R, 'L', function = 'G', block=block_inv)
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
@@ -64,7 +72,7 @@ def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, 
     
     #GR/GL/GG OBC right
     if not sancho:
-        _, condR, _, SigRBR, min_dEkR  = beyn(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  imag_lim, R, 'R', function = 'G')
+        _, condR, _, SigRBR, min_dEkR  = beyn_func(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  imag_lim, R, 'R', function = 'G', block=block_inv)
 
     if np.isnan(condR) or sancho:
         _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
@@ -275,6 +283,8 @@ def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, 
 
         
         idE[NB - 1] = idE[NB - 2]
+    
+    return 0
 
 # write if name == __main__:
 if __name__ == '__main__':
