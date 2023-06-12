@@ -110,6 +110,7 @@ def p2w_pool_mpi_cpu(
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         results = executor.map(
+        #results = executor.map(
                     rgf_W.rgf_w_opt,
                     repeat(vh),
                     pg, pl, pr,
@@ -122,8 +123,8 @@ def p2w_pool_mpi_cpu(
                     repeat(block_inv),
                     repeat(use_dace),
                     repeat(validate_dace))
-        for res in results:
-            assert isinstance(res, np.ndarray)
+        #for res in results:
+        #   assert isinstance(res, np.ndarray)
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)

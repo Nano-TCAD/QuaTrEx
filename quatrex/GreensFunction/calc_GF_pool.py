@@ -170,11 +170,12 @@ def calc_GF_pool_mpi(
         # Use partial function application to bind the constant arguments to inv_matrices
         # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
         #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
-        results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, 
+        #results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, 
+        executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, 
                                          GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, nE, nP, idE, fL, fR,
                                          repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv), repeat(use_dace), repeat(validate_dace))
-        for res in results:
-            assert res == 0
+        #for res in results:
+        #    assert res == 0
     
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL 
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)

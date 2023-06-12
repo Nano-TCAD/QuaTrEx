@@ -424,7 +424,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_SC/'
+    folder = '/results/GNR_biased_SC_dace/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
