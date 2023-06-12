@@ -406,8 +406,8 @@ if __name__ == "__main__":
     # wl_gw2s = gl_g2p
     # wr_gw2s = gr_g2p
     # wg_transposed_gw2s = gl_transposed_g2p
-    # wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
+    wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
     # H2G
     # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
     #                 dtype=np.complex128, order="C")
