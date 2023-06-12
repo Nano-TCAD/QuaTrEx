@@ -7,6 +7,7 @@ import numpy.typing as npt
 import typing
 import sys
 import os
+import numba
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
@@ -247,7 +248,7 @@ def gw2s_fft_mpi_cpu(
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
     sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gg_t, wr_t)
 
-    # time reverse 
+    # time reverse
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
@@ -274,6 +275,12 @@ def gw2s_fft_mpi_cpu(
 
     return (sg, sl, sr)
 
+
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
 def gw2s_fft_mpi_cpu_3part_sr(
     pre_factor: np.complex128,
     gg: npt.NDArray[np.complex128],
@@ -328,36 +335,36 @@ def gw2s_fft_mpi_cpu_3part_sr(
     wl_transposed_t = linalg_cpu.fft_numba(wl_transposed, ne2, no)
 
     # fft of energy reversed
-    rgg_t =  linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
-    rgl_t =  linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
-    rgr_t =  linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
+    rgg_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gg), ne2, no)
+    rgl_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gl), ne2, no)
+    rgr_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gr), ne2, no)
 
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
     #sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gg_t, wr_t)
     sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
-    # time reverse 
-    wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
+    # time reverse
+    wr_t_mod = linalg_cpu.reversal(wr_t)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_transposed_t - np.repeat(wl_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_transposed_t - np.repeat(wg_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
+    sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(wl_transposed_t,wl_transposed[:,0]))
+    sl_t_2 = linalg_cpu.elementmul(rgl_t,  linalg_cpu.substract_special(wg_transposed_t,wg_transposed[:,0]))
     #sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
     #          linalg_cpu.elementmul(rgr_t, wg_transposed_t - np.repeat(wg[:,0].reshape(-1,1), 2*ne, axis=1)))
-    sr_t_2 = (linalg_cpu.elementmul(rgl_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              linalg_cpu.elementmul(rgr_t, wg_transposed_t - np.repeat(wg_transposed[:,0].reshape(-1,1), 2*ne, axis=1)) + 
-                linalg_cpu.elementmul(rgr_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))))
+    sr_t_2 = (linalg_cpu.elementmul(rgl_t, np.conjugate( linalg_cpu.substract_special(wr_t_mod,wr[:,0]))) +
+              linalg_cpu.elementmul(rgr_t,  linalg_cpu.substract_special(wg_transposed_t,wg_transposed[:,0])) +
+                linalg_cpu.elementmul(rgr_t, np.conjugate(linalg_cpu.substract_special(wr_t_mod,wr[:,0]))))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
     sl_1 = linalg_cpu.scalarmul_ifft_cutoff(sl_t_1, pre_factor, ne, no)
     sr_1 = linalg_cpu.scalarmul_ifft_cutoff(sr_t_1, pre_factor, ne, no)
 
-    sg_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no), axis=1)
-    sl_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no), axis=1)
-    sr_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no), axis=1)
+    sg_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no))
+    sl_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no))
+    sr_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no))
 
 
     sg = sg_1 + sg_2
