@@ -319,8 +319,10 @@ def obc_w_dl(
                                             blk="L")
     dlg_sf[0] += dlg
     dll_sf[0] += dll
-    # if np.isnan(dll).any():
-    #     cond_l = np.nan
+    if np.isnan(dll).any():
+        cond_l = np.nan
+    if np.isnan(dlg).any():
+        cond_l = np.nan
     # else:
     #     dlg_sd += dlg
     #     dll_sd += dll
@@ -336,8 +338,10 @@ def obc_w_dl(
                                             blk="R")
     dlg_ef[0] += dlg
     dll_ef[0] += dll
-    # if np.isnan(dll_ed).any():
-    #     cond_r = np.nan
+    if np.isnan(dll).any():
+        cond_r = np.nan
+    if np.isnan(dlg).any():
+        cond_r = np.nan
     # else:
     #     dlg_ed += dlg
     #     dll_ed += dll
