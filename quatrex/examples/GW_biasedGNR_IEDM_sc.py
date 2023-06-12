@@ -409,15 +409,15 @@ if __name__ == "__main__":
     wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
                     dtype=np.complex128, order="C")
     # H2G
-    # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    sg_h2g_buf = pg_p2w
-    sl_h2g_buf = pl_p2w
-    sr_h2g_buf = pr_p2w
+    sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    # sg_h2g_buf = pg_p2w
+    # sl_h2g_buf = pl_p2w
+    # sr_h2g_buf = pr_p2w
 
     comm.Barrier()
 
