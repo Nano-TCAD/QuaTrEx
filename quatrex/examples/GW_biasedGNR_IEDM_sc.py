@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-8, 12.0, 4001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-8, 12.0, 12001, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -371,7 +371,7 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 5
+    max_iter = 200
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_sc/'
+    folder = '/results/GNR_biased_SC/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -923,6 +923,7 @@ if __name__ == "__main__":
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+        np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
 
     # free datatypes------------------------------------------------------------
 

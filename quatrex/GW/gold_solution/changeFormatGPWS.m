@@ -160,5 +160,5 @@ function changeFormatGPWS(path)
     formatted.imgsr = imgsr;
 
     % save to file
-    save("data_GPWS_IEDM_GNR_0V.mat", "formatted","-v7.3","-nocompression");
+    save("data_GPWS_IEDM_memory3_GNR_04V.mat", "formatted","-v7.3","-nocompression");
 end

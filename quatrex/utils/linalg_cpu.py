@@ -34,6 +34,35 @@ def reversal(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
             out[i, j] = g1[i, -j]
     return out
 
+@numba.njit("(c16[:,:],)",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def flip(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+    out: npt.NDArray[np.complex128] = np.empty_like(g1)
+    no:  np.int32                   = np.shape(g1)[0]
+    ne:  np.int32                   = np.shape(g1)[1]
+    for i in numba.prange(no):
+        for j in range(ne):
+            out[i, j] = g1[i, ne-j-1]
+    return out
+
+@numba.njit("(c16[:,:],c16[:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def substract_special(g1: npt.NDArray[np.complex128], g2: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
+    out: npt.NDArray[np.complex128] = np.empty_like(g1)
+    no:  np.int32                   = np.shape(g1)[0]
+    ne:  np.int32                   = np.shape(g1)[1]
+    for i in numba.prange(no):
+        for j in range(ne):
+            out[i, j] = g1[i, j] - g2[i]
+    return out
+
+
 @numba.njit("(c16[:,:], i4[:])",
             parallel=True,
             cache=True,
