@@ -394,30 +394,30 @@ if __name__ == "__main__":
     pr_p2w = np.empty((count[1, rank], data_shape[0]),
                     dtype=np.complex128, order="C")
     # GW2S
-    # wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    # wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    # wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    wg_gw2s = gg_g2p
-    wl_gw2s = gl_g2p
-    wr_gw2s = gr_g2p
-    wg_transposed_gw2s = gl_transposed_g2p
+    wg_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    wl_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    wr_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
+                    dtype=np.complex128, order="C")
+    # wg_gw2s = gg_g2p
+    # wl_gw2s = gl_g2p
+    # wr_gw2s = gr_g2p
+    # wg_transposed_gw2s = gl_transposed_g2p
     wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
                     dtype=np.complex128, order="C")
     # H2G
-    # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-    #                 dtype=np.complex128, order="C")
-    sg_h2g_buf = pg_p2w
-    sl_h2g_buf = pl_p2w
-    sr_h2g_buf = pr_p2w
+    sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
+                    dtype=np.complex128, order="C")
+    # sg_h2g_buf = pg_p2w
+    # sl_h2g_buf = pl_p2w
+    # sr_h2g_buf = pr_p2w
 
     comm.Barrier()
 
