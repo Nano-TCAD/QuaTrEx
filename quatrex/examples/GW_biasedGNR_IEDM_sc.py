@@ -164,11 +164,11 @@ if __name__ == "__main__":
 
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
-    w_mkl_threads = 2
-    w_worker_threads = 12
+    w_mkl_threads = 1
+    w_worker_threads = 7
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 8
+    gf_worker_threads = 7
 
     # physical parameter -----------
 
