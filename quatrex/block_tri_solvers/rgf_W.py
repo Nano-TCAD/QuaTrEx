@@ -801,7 +801,8 @@ def rgf_w_opt(
     imag_lim = 1e-4
     # todo find out what rr/R is
     # (R only is against the style guide)
-    rr = 1e12
+    #todo, compare with matlab
+    rr = 1e6
     # copy vh to overwrite it
     vh_cp = vh.copy()
 

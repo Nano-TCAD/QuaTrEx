@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-8, 12.0, 12001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-18, 22.0, 40001, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -165,10 +165,10 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 7
+    w_worker_threads = 6
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 7
+    gf_worker_threads = 6
 
     # physical parameter -----------
 
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_SC_dace/'
+    folder = '/results/GNR_biased_sc_dacebig/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
