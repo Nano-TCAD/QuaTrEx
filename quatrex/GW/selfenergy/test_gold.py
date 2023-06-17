@@ -25,15 +25,16 @@ if __name__ == "__main__":
     # parse the possible arguments
     # solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
     solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/IEDM/GNR_pd_unbiased", "data_GPWS_IEDM_GNR_0V.mat")
-    parser = argparse.ArgumentParser(description="Tests different implementation of the self-energy calculation")
-    parser.add_argument("-t",
-                        "--type",
-                        default="gpu_fft_mpi_3part",
-                        choices=[
-                            "gpu_fft", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched", "cpu_fft",
-                            "cpu_fft_mpi", "cpu_fft_3part", "cpu_fft_mpi_3part", "gpu_fft_3part", "gpu_fft_mpi_3part"
-                        ],
-                        required=False)
+    parser = argparse.ArgumentParser(
+        description="Tests different implementation of the self-energy calculation"
+    )
+    parser.add_argument("-t", "--type", default="gpu_fft_mpi_3part",
+                        choices=["gpu_fft", "gpu_fft_mpi", "gpu_fft_mpi_streams",
+                                 "gpu_fft_mpi_batched",
+                                 "cpu_fft", "cpu_fft_mpi",
+                                 "cpu_fft_3part", "cpu_fft_mpi_3part", "cpu_fft_mpi_3part2",
+                                 "gpu_fft_3part", "gpu_fft_mpi_3part"
+                                 ], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
@@ -202,10 +203,52 @@ if __name__ == "__main__":
         sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu(pre_factor, gg_gold, gl_gold, gr_gold, wg_gold, wl_gold,
                                                            wr_gold, wg_transposed, wl_transposed)
     elif args.type == "cpu_fft_mpi_3part":
-        wg_transposed = wg_gold[ij2ji, :]
-        wl_transposed = wl_gold[ij2ji, :]
-        sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(pre_factor, gg_gold, gl_gold, gr_gold, wg_gold,
-                                                                    wl_gold, wr_gold, wg_transposed, wl_transposed)
+        wg_transposed = wg_gold[ij2ji,:]
+        wl_transposed = wl_gold[ij2ji,:]
+        sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
+                                                        pre_factor,
+                                                        gg_gold,
+                                                        gl_gold,
+                                                        gr_gold,
+                                                        wg_gold,
+                                                        wl_gold,
+                                                        wr_gold,
+                                                        wg_transposed,
+                                                        wl_transposed
+                                                        )
+    elif args.type == "cpu_fft_mpi_3part2":
+        # sg_cpu, sl_cpu, sr_cpu = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr2(
+        #                                                 pre_factor,
+        #                                                 gg_gold,
+        #                                                 gl_gold,
+        #                                                 gr_gold,
+        #                                                 wg_gold,
+        #                                                 wl_gold,
+        #                                                 wr_gold
+        #                                                 )
+
+        # shows how ever ij element is independent
+        sg_cpu1, sl_cpu1, sr_cpu1 = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr2(
+                                                        pre_factor,
+                                                        gg_gold[:5,:],
+                                                        gl_gold[:5,:],
+                                                        gr_gold[:5,:],
+                                                        wg_gold[:5,:],
+                                                        wl_gold[:5,:],
+                                                        wr_gold[:5,:]
+                                                        )
+        sg_cpu2, sl_cpu2, sr_cpu2 = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr2(
+                                                        pre_factor,
+                                                        gg_gold[5:,:],
+                                                        gl_gold[5:,:],
+                                                        gr_gold[5:,:],
+                                                        wg_gold[5:,:],
+                                                        wl_gold[5:,:],
+                                                        wr_gold[5:,:]
+                                                        )
+        sg_cpu = np.vstack((sg_cpu1, sg_cpu2))
+        sl_cpu = np.vstack((sl_cpu1, sl_cpu2))
+        sr_cpu = np.vstack((sr_cpu1, sr_cpu2))
     else:
         raise ValueError("Argument error, type input not possible")
 

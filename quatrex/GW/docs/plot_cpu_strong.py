@@ -9,20 +9,35 @@ import argparse
 main_path = os.path.abspath(os.path.dirname(__file__))
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Strong scaling benchmark plot")
-    parser.add_argument("-t",
-                        "--type",
-                        default="p_cpu_fft",
-                        choices=["p_cpu_fft_inlined", "p_cpu_fft", "p_cpu_conv", "s_cpu_fft"],
-                        required=False)
+    parser = argparse.ArgumentParser(
+        description="Strong scaling benchmark plot"
+    )
+    parser.add_argument(
+                    "-t", "--type",
+                    default="p_mpi_cpu_fft_inlined",
+                    choices=["p_cpu_fft_inlined",
+                             "p_mpi_cpu_fft_inlined",
+                             "s_mpi_cpu_fft_3",
+                             "p_cpu_fft",
+                             "p_cpu_conv",
+                             "s_cpu_fft"],
+                    required=False)
+
 
     args = parser.parse_args()
     print("Format: ", args.type)
 
-    font_type = ""
-    font_size = "14"
+    if args.type in ["p_cpu_fft_inlined", "p_mpi_cpu_fft_inlined", "p_cpu_fft", "p_cpu_conv"]:
+        calctype = "Polarizations"
+    else:
+        calctype = "Self-Energies"
 
-    load_path = os.path.join(main_path, "strong_" + args.type + ".npy")
+
+    tmp = "_20000_40000"
+    font_type = ""
+    # font_size = "14"
+    plt.rcParams["font.size"] = 20
+    load_path = os.path.join(main_path, "strong_" + args.type + tmp +".npy")
     data: npt.NDArray[np.double] = np.load(load_path)
 
     num_run = (data.shape[0] - 2) // 2
@@ -35,8 +50,7 @@ if __name__ == "__main__":
     no = data[2 * num_run + 2, 0]
     ne = data[2 * num_run + 2, 1]
 
-    fig, ax = plt.subplots()
-
+    fig, ax = plt.subplots(figsize=(8, 6))
     ax.errorbar(threads, speed_up_mean, yerr=speed_up_std, fmt="_k", capsize=5)
 
     # add line segment
@@ -45,19 +59,13 @@ if __name__ == "__main__":
     # add ideal scaling
     ax.plot(threads, threads)
 
-    ax.set_xlabel("Number of Threads", fontsize=font_size)
-    ax.set_ylabel("Speedup", fontsize=font_size)
-    ax.set_title("Strong Scaling Plot of CPU " + args.type + " Implementation", fontsize=font_size)
+    ax.set_xlabel("Number of Threads")
+    ax.set_ylabel("Speed-up")
+    ax.set_title("Strong Scaling of the Self-Energies Calculation")
 
-    ax.text(1,
-            num_threads - 8,
-            f"Single Runtime: {np.mean(data[1:num_run+1,0]):.2f} s" + "\n" +
-            f"Final Runtime: {np.mean(data[1:num_run+1,num_threads-1]):.2f} s" + "\n" +
-            f"Matrix Size: {np.int32(no)} x {np.int32(ne)}" + "\n" + f"Number of Runs per Point {num_run}",
-            fontsize=font_size)
+    ax.text(1,num_threads - 8, f"Initial Runtime: {np.mean(data[1:num_run+1,0]):.2f} s" +
+            "\n" + f"Final Runtime: {np.mean(data[1:num_run+1,num_threads-1]):.2f} s" +
+            "\n" + f"Matrix Size: {np.int32(no)} x {np.int32(ne)}")
 
-    ax.tick_params(axis="x", labelsize=font_size)
-    ax.tick_params(axis="y", labelsize=font_size)
-
-    save_path = os.path.join(main_path, args.type + "_strong_" + str(np.int32(no)) + "_" + str(np.int32(ne)) + ".png")
+    save_path = os.path.join(main_path, args.type + "_strong_" + tmp + ".pdf")
     plt.savefig(save_path, dpi=600)

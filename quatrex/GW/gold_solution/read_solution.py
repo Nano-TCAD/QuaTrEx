@@ -113,6 +113,90 @@ def load_B(path: str) -> typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int3
     bmin: npt.NDArray[np.int32] = np.squeeze(bmin)
     return (bmax, bmin)
 
+def save_all(
+    energy: npt.NDArray[np.float64],
+    rows: npt.NDArray[np.int32],
+    columns: npt.NDArray[np.int32],
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128],
+    pg: npt.NDArray[np.complex128],
+    pl: npt.NDArray[np.complex128],
+    pr: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128],
+    wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128],
+    sg: npt.NDArray[np.complex128],
+    sl: npt.NDArray[np.complex128],
+    sr: npt.NDArray[np.complex128],
+    vh: npt.NDArray[np.complex128],
+    bmax: npt.NDArray[np.int32],
+    bmin: npt.NDArray[np.int32],
+    path: str
+):
+    """
+    Saves all the data to a file in the format of changeFormatGPWS.m
+
+    Args:
+        energy (npt.NDArray[np.float64]): Energy
+        rows (npt.NDArray[np.int32]): Non-zero row elements
+        columns (npt.NDArray[np.int32]): Non-zero column elements
+        gg (npt.NDArray[np.complex128]): 2D energy contiguous greater green's function
+        gl (npt.NDArray[np.complex128]): 2D energy contiguous lesser green's function
+        gr (npt.NDArray[np.complex128]): 2D energy contiguous retarded green's function
+        pg (npt.NDArray[np.complex128]): 2D energy contiguous greater polarization
+        pl (npt.NDArray[np.complex128]): 2D energy contiguous lesser polarization
+        pr (npt.NDArray[np.complex128]): 2D energy contiguous retarded polarization
+        wg (npt.NDArray[np.complex128]): 2D energy contiguous greater screened interaction
+        wl (npt.NDArray[np.complex128]): 2D energy contiguous lesser screened interaction
+        wr (npt.NDArray[np.complex128]): 2D energy contiguous retarded screened interaction
+        sg (npt.NDArray[np.complex128]): 2D energy contiguous greater self energy
+        sl (npt.NDArray[np.complex128]): 2D energy contiguous lesser self energy
+        sr (npt.NDArray[np.complex128]): 2D energy contiguous retarded self energy
+        vh (npt.NDArray[np.complex128]): 2D energy contiguous effective screening
+        bmax (npt.NDArray[np.int32]): End indices of blocks
+        bmin (npt.NDArray[np.int32]): Start indices of blocks
+        path (str): Path+filename where to save
+    """
+
+    # create the file
+    hdf5 = h5py.File(path, "w")
+    group = hdf5.create_group("formatted")
+
+    # write the entries
+    # +1 to go from python to matlab (legacy on how the file is read)
+    group.create_dataset("rows", data=rows+1)
+    group.create_dataset("columns", data=columns+1)
+    group.create_dataset("E", data=energy)
+    group.create_dataset("realvh", data=np.real(vh))
+    group.create_dataset("imgvh", data=np.imag(vh))
+    group.create_dataset("realgg", data=np.real(gg))
+    group.create_dataset("imggg", data=np.imag(gg))
+    group.create_dataset("realgl", data=np.real(gl))
+    group.create_dataset("imggl", data=np.imag(gl))
+    group.create_dataset("realgr", data=np.real(gr))
+    group.create_dataset("imggr", data=np.imag(gr))
+    group.create_dataset("realpg", data=np.real(pg))
+    group.create_dataset("imgpg", data=np.imag(pg))
+    group.create_dataset("realpl", data=np.real(pl))
+    group.create_dataset("imgpl", data=np.imag(pl))
+    group.create_dataset("realpr", data=np.real(pr))
+    group.create_dataset("imgpr", data=np.imag(pr))
+    group.create_dataset("realwg", data=np.real(wg))
+    group.create_dataset("imgwg", data=np.imag(wg))
+    group.create_dataset("realwl", data=np.real(wl))
+    group.create_dataset("imgwl", data=np.imag(wl))
+    group.create_dataset("realwr", data=np.real(wr))
+    group.create_dataset("imgwr", data=np.imag(wr))
+    group.create_dataset("realsg", data=np.real(sg))
+    group.create_dataset("imgsg", data=np.imag(sg))
+    group.create_dataset("realsl", data=np.real(sl))
+    group.create_dataset("imgsl", data=np.imag(sl))
+    group.create_dataset("realsr", data=np.real(sr))
+    group.create_dataset("imgsr", data=np.imag(sr))
+    group.create_dataset("Bmax", data=bmax+1)
+    group.create_dataset("Bmin", data=bmin+1)
+
 
 def load_pg(
     path: str
