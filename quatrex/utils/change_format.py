@@ -494,10 +494,133 @@ def map_block2sparse_alt(
 
     return map_diag, map_upper, map_lower
 
+def map_block2splitsparse(
+    rows: npt.NDArray[np.int32],
+    columns: npt.NDArray[np.int32],
+    bmax: npt.NDArray[np.int32],
+    bmin: npt.NDArray[np.int32]
+) -> typing.Tuple[
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32],
+    npt.NDArray[np.int32]
+]:
+    assert columns.size == rows.size
+    assert bmax.size == bmin.size
+    assert rows[rows.size-1] == bmax[bmax.size-1]
+    # number of blocks
+    nb = bmin.size
+    # map buffers for the tridiagonal blocks
+    #a priori the length is unknown
+    map_diag  = np.empty((4,0), dtype=np.int32)
+    map_diag_upper  = np.empty((4,0), dtype=np.int32)
+    map_diag_lower  = np.empty((4,0), dtype=np.int32)
+    map_upper = np.empty((4,0), dtype=np.int32)
+    map_lower = np.empty((4,0), dtype=np.int32)
 
-def block2sparse_alt(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
-                     x_diag: npt.NDArray[np.complex128], x_upper: npt.NDArray[np.complex128],
-                     x_lower: npt.NDArray[np.complex128], no: np.int64) -> npt.NDArray[np.complex128]:
+    no = 0
+
+    # iterate over diagonal
+    for i in range(nb):
+        # start index and end index
+        idx_start = bmin[i]
+        idx_end = bmax[i]
+
+        # mask if the elements are in the block and upper half
+        mask_diag = (rows >= idx_start) & (rows <= idx_end) & (columns >= idx_start) & (columns <= idx_end) & (columns == rows)
+        mask_diag_upper = (rows >= idx_start) & (rows <= idx_end) & (columns >= idx_start) & (columns <= idx_end) & (columns > rows)
+        mask_diag_lower = (rows >= idx_start) & (rows <= idx_end) & (columns >= idx_start) & (columns <= idx_end) & (columns < rows)
+        # number of to read out elements in the block
+        nelements_diag       = mask_diag.sum()
+        nelements_diag_upper = mask_diag_upper.sum()
+        nelements_diag_lower = mask_diag_lower.sum()
+
+        no += nelements_diag
+        no += nelements_diag_upper
+        no += nelements_diag_lower
+
+        # local block mapping to one vector data
+        map_loc_diag = np.empty((4,nelements_diag), dtype=np.int32)
+        map_loc_diag_upper = np.empty((4,nelements_diag_upper), dtype=np.int32)
+        map_loc_diag_lower = np.empty((4,nelements_diag_lower), dtype=np.int32)
+
+        # sparse elements in the block
+        map_loc_diag[0,:] = i
+        map_loc_diag[1,:] = rows[mask_diag]       - idx_start
+        map_loc_diag[2,:] = columns[mask_diag]    - idx_start
+        map_loc_diag_upper[0,:] = i
+        map_loc_diag_upper[1,:] = rows[mask_diag_upper]       - idx_start
+        map_loc_diag_upper[2,:] = columns[mask_diag_upper]    - idx_start
+        map_loc_diag_lower[0,:] = i
+        map_loc_diag_lower[1,:] = rows[mask_diag_lower]       - idx_start
+        map_loc_diag_lower[2,:] = columns[mask_diag_lower]    - idx_start
+
+        # location in data vector
+        assert np.array_equal(np.where(mask_diag_upper)[0],mask_diag_upper.nonzero()[0])
+        assert np.array_equal(np.where(mask_diag_lower)[0],mask_diag_lower.nonzero()[0])
+        assert (mask_diag_upper & mask_diag_lower).nonzero()[0].size == 0
+        map_loc_diag[3,:] = np.where(mask_diag)[0]
+        map_loc_diag_upper[3,:] = np.where(mask_diag_upper)[0]
+        map_loc_diag_lower[3,:] = np.where(mask_diag_lower)[0]
+        # concat to buffer
+        map_diag = np.concatenate((map_diag, map_loc_diag), axis=1)
+        map_diag_upper = np.concatenate((map_diag_upper, map_loc_diag_upper), axis=1)
+        map_diag_lower = np.concatenate((map_diag_lower, map_loc_diag_lower), axis=1)
+
+    # iterate over upper/lower diagonal
+    for i in range(nb-1):
+        # start index and end index
+        idx1_start  = bmin[i]
+        idx1_end    = bmax[i]
+        idx2_start  = bmin[i+1]
+        idx2_end    = bmax[i+1]
+         # mask if the elements are in the upper/lower block
+        mask_upper = (rows >= idx1_start) & (rows <= idx1_end) & (columns >= idx2_start) & (columns <= idx2_end) & (columns > rows)
+        mask_lower = (rows >= idx2_start) & (rows <= idx2_end) & (columns >= idx1_start) & (columns <= idx1_end) & (columns < rows)
+        # number of to read out elements in the block
+        nelements_upper = mask_upper.sum()
+        nelements_lower = mask_lower.sum()
+        # add to number nonzero
+        no += nelements_upper
+        no += nelements_lower
+
+        assert np.array_equal(np.where(mask_upper)[0],mask_upper.nonzero()[0])
+        assert np.array_equal(np.where(mask_lower)[0],mask_lower.nonzero()[0])
+        assert (mask_upper & mask_lower).nonzero()[0].size == 0
+        # local block mapping to one vector data
+        map_loc_upper = np.empty((4,nelements_upper), dtype=np.int32)
+        map_loc_lower = np.empty((4,nelements_lower), dtype=np.int32)
+
+        # sparse elements in the upper/lower block
+        map_loc_upper[0,:] = i
+        map_loc_lower[0,:] = i
+        map_loc_upper[1,:] = rows[mask_upper] - idx1_start
+        map_loc_upper[2,:] = columns[mask_upper] - idx2_start
+        map_loc_lower[1,:] = rows[mask_lower] - idx2_start
+        map_loc_lower[2,:] = columns[mask_lower] - idx1_start
+
+        # location in data vector
+        map_loc_upper[3,:] = np.where(mask_upper)[0]
+        map_loc_lower[3,:] = np.where(mask_lower)[0]
+
+        # concat to buffer
+        map_upper = np.concatenate((map_upper, map_loc_upper), axis=1)
+        map_lower = np.concatenate((map_lower, map_loc_lower), axis=1)
+
+    assert no == rows.size
+    return map_diag, map_diag_upper, map_diag_lower, map_upper, map_lower
+
+
+def block2sparse_alt(
+    map_diag: np.ndarray,
+    map_upper: np.ndarray,
+    map_lower: np.ndarray,
+    x_diag: npt.NDArray[np.complex128],
+    x_upper: npt.NDArray[np.complex128],
+    x_lower: npt.NDArray[np.complex128],
+    no: np.int64
+) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Alternative map created by map_block2sparse_alt
 

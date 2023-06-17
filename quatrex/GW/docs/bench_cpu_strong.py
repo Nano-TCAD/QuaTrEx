@@ -37,19 +37,19 @@ if __name__ == "__main__":
     # number of energy points
     ne = 20000
     # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
-    nnz = 60000
+    nnz = 1000
 
     # choose number of orbitals and energy points
     parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
     parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
     parser.add_argument("-th", "--threads", default=28, required=False, type=int)
-    parser.add_argument("-r", "--runs", default=5, required=False, type=int)
+    parser.add_argument("-r", "--runs", default=10, required=False, type=int)
     args = parser.parse_args()
     print("Format: ", args.type)
 
     # number of repeats
     num_run = args.runs
-    num_warm = 1
+    num_warm = 2
     # 28 thread cluster node
     num_threads = args.threads
 
@@ -85,14 +85,14 @@ if __name__ == "__main__":
         size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
     data_1ne_4 = rng.uniform(
         size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-    data_1ne_5 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-    data_1ne_6 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-    data_1ne_7 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-    data_1ne_8 = rng.uniform(
-        size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+    # data_1ne_5 = rng.uniform(
+    #     size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+    # data_1ne_6 = rng.uniform(
+    #     size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+    # data_1ne_7 = rng.uniform(
+    #     size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+    # data_1ne_8 = rng.uniform(
+    #     size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
 
     size_sparse = data_1ne_1.nbytes / (1024**3)
     print(f"Size of one sparse greens function in GB: {size_sparse:.2f} GB")

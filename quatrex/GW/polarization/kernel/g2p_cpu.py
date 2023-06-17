@@ -285,8 +285,84 @@ def g2p_fft_mpi_cpu_inlined(
 
     return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
 
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def g2p_fft_mpi_cpu_inlined2(
+    pre_factor: np.complex128,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
+                  npt.NDArray[np.complex128]]:
+    """Calculates the polarization with fft on the cpu(see file description). 
+        The transposed Green's Functions derived from identities
 
-@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+        gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ] 
+    """
+    # number of energy points and nnz
+    ne = gg.shape[1]
+    no = gg.shape[0]
+    ne2 = 2 * ne
+
+    # fft
+    gg_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
+    gl_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
+    gr_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
+    # multiply elementwise
+    pg_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    pr_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    # ifft, cutoff and multiply with pre factor
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+
+    for i in numba.prange(no):
+        gg_t[i,:] = fft.fft(gg[i,:], n=ne2)
+        gl_t[i,:] = fft.fft(gl[i,:], n=ne2)
+        gr_t[i,:] = fft.fft(gr[i,:], n=ne2)
+
+    for i in numba.prange(no):
+        for j in numba.prange(ne2):
+            pg_t[i,j] = -gg_t[i,j] * gl_t[i,j].conjugate()
+            pr_t[i,j] = -gr_t[i,j] * gl_t[i,j].conjugate() + gl_t[i,j] * gr_t[i,j].conjugate()
+
+    for i in numba.prange(no):
+        pg[i,:] = fft.ifft(pg_t[i,:])
+        pr[i,:] = fft.ifft(pr_t[i,:])
+
+    for i in numba.prange(no):
+        for j in numba.prange(ne2):
+            pg[i, j] = pg[i, j] * pre_factor
+            pr[i, j] = pr[i, j] * pre_factor
+
+    # lesser polarization from identity
+    for i in numba.prange(no):
+        for j in range(ne2):
+            pl[i, j] = -np.conjugate(pg[i, -j])
+
+    return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
+
+
+
+@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
 def g2p_conv_cpu(
     pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
     gl: npt.NDArray[np.complex128], gr: npt.NDArray[np.complex128]

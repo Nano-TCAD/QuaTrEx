@@ -20,29 +20,36 @@ from GW.polarization.initialization import gf_init
 
 if __name__ == "__main__":
     # parse input arguments
-    parser = argparse.ArgumentParser(description="Strong scaling benchmarks")
-    parser.add_argument("-t",
-                        "--type",
-                        default="p_cpu_fft",
-                        choices=["p_cpu_fft_inlined", "p_cpu_fft", "p_cpu_conv", "s_cpu_fft"],
-                        required=False)
-
+    parser = argparse.ArgumentParser(
+        description="Strong scaling benchmarks"
+    )
+    parser.add_argument(
+                    "-t", "--type",
+                    default="s_mpi_cpu_fft_3",
+                    choices=["p_cpu_fft_inlined",
+                             "p_mpi_cpu_fft_inlined",
+                             "s_mpi_cpu_fft_3",
+                             "p_cpu_fft",
+                             "p_cpu_conv",
+                             "s_cpu_fft"],
+                    required=False)
+    
     # number of energy points
-    ne = 400
+    ne = 5000
     # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
-    nnz = 2500
+    nnz = 3500
     # choose number of orbitals and energy points
     parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
     parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
     parser.add_argument("-th", "--threads", default=28, required=False, type=int)
     parser.add_argument("-d", "--dimension", default="nnz", choices=["energy", "nnz"], required=False)
-    parser.add_argument("-r", "--runs", default=20, required=False, type=int)
+    parser.add_argument("-r", "--runs", default=30, required=False, type=int)
     args = parser.parse_args()
     print("Format: ", args.type)
 
     # number of repeats
     num_run = args.runs
-    num_warm = 5
+    num_warm = 2
     # 28 thread cluster node
     num_threads = args.threads
 
@@ -78,9 +85,9 @@ if __name__ == "__main__":
         # calculate new size
         if args.dimension == "energy":
             # different scaling depending on fft (NlogN) or conv(N^2)
-            if args.type in ("p_cpu_fft", "p_cpu_fft_inlined", "s_cpu_fft"):
+            if args.type in ("p_cpu_fft","p_cpu_fft_inlined","s_cpu_fft", "p_mpi_cpu_fft_inlined", "s_mpi_cpu_fft_3"):
                 # newtons method it is:
-                num_iteration = 10
+                num_iteration = 20
                 fac = 1.0
 
                 def fs(xn: np.double) -> np.double:
@@ -105,19 +112,30 @@ if __name__ == "__main__":
             raise ValueError("Argument error, impossible input")
 
         # generate data in the loop
-        energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
-        ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
-        denergy: np.double = energy[1] - energy[0]
-        ne: np.int32 = energy.shape[0]
-        no: np.int32 = gg.shape[0]
-        pre_factor: np.complex128 = -1.0j * denergy / (np.pi)
+        energy, rows, columns, gg, gl, gr   = gf_init.init_sparse(ne, nao, seed)
+        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
+        denergy:    np.double               = energy[1] - energy[0]
+        ne:         np.int32                = energy.shape[0]
+        no:         np.int32                = gg.shape[0]
+        pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
 
-        data_1ne_1 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_2 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_3 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_4 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_5 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_6 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+
+        data_1ne_1 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_2 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_3 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_4 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_5 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_6 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_7 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_8 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         size_sparse = data_1ne_1.nbytes / (1024**3)
 
         print("Number of nnz: ", no)
@@ -140,9 +158,31 @@ if __name__ == "__main__":
                 lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
                 number=num_warm) / num_warm
             time = timeit.repeat(
-                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
-                number=1,
-                repeat=num_run)
+                stmt=lambda: g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, data_1ne_1,
+                                                         data_1ne_2, data_1ne_3),
+                number=1, repeat=num_run)
+        elif args.type == "p_mpi_cpu_fft_inlined":
+            time_warm = timeit.timeit(
+                lambda: g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, data_1ne_1,
+                                             data_1ne_2, data_1ne_3, data_1ne_4),
+                number=num_warm) / num_warm
+            time = timeit.repeat(
+                stmt=lambda: g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, data_1ne_1,
+                                                  data_1ne_2, data_1ne_3, data_1ne_4),
+                number=1, repeat=num_run)
+        elif args.type == "s_mpi_cpu_fft_3":
+            time_warm = timeit.timeit(
+                lambda: gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(pre_factor, data_1ne_1,
+                                             data_1ne_2, data_1ne_3, data_1ne_4,
+                                             data_1ne_5, data_1ne_6, data_1ne_7,
+                                             data_1ne_8),
+                number=num_warm) / num_warm
+            time = timeit.repeat(
+                stmt=lambda: gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(pre_factor, data_1ne_1,
+                                             data_1ne_2, data_1ne_3, data_1ne_4,
+                                             data_1ne_5, data_1ne_6, data_1ne_7,
+                                             data_1ne_8),
+                number=1, repeat=num_run)
         elif args.type == "p_cpu_conv":
             time_warm = timeit.timeit(
                 lambda: g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, data_1ne_1, data_1ne_2, data_1ne_3),
@@ -175,5 +215,5 @@ if __name__ == "__main__":
     output[2 * num_run + 2, :] = nnz_sizes
     output[2 * num_run + 3, :] = gb_sizes
 
-    save_path = os.path.join(main_path, "weak_" + args.type + "_" + args.dimension + ".npy")
+    save_path = os.path.join(main_path, "weak_" + args.type + "_" + args.dimension + "_"+ str(nnz) + "_" + str(ne) + ".npy")
     np.save(save_path, output)

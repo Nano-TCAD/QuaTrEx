@@ -8,6 +8,7 @@ import cupy as cp
 from cupyx.profiler import benchmark
 import os
 import argparse
+import time
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
@@ -16,30 +17,33 @@ sys.path.append(parent_path)
 from GW.polarization.initialization import gf_init
 from utils import change_format
 from GW.polarization.kernel import g2p_gpu
+from utils import linalg_gpu
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Strong scaling benchmarks")
+    parser = argparse.ArgumentParser(
+        description="GPU scaling benchmarks"
+    )
     # number of energy points
-    ne = 400
+    ne = 20000
     # number of orbitals -> around 0.0394*nao*nao are the nonzero amount of nnz
-    nnz = 2500
-    parser.add_argument("-t",
-                        "--type",
-                        default="gpu_fft",
-                        choices=["gpu_fft", "gpu_conv", "gpu_mpi_fft", "gpu_mpi_fft_streams"],
-                        required=False)
-    parser.add_argument("-d", "--dimension", default="nnz", choices=["energy", "nnz"], required=False)
-    parser.add_argument("-r", "--runs", default=20, required=False, type=int)
+    nnz = 1000
+    parser.add_argument("-t", "--type", default="p_gpu_mpi_fft_batched",
+                    choices=["p_gpu_fft", "p_gpu_conv",
+                             "p_gpu_mpi_fft_batched",
+                             "p_gpu_mpi_fft", "p_gpu_mpi_fft_streams"], required=False)
+    parser.add_argument("-d", "--dimension", default="nnz",
+                    choices=["energy", "nnz"], required=False)
+    parser.add_argument("-r", "--runs", default=10, required=False, type=int)
     parser.add_argument("-ne", "--num_energy", default=ne, required=False, type=int)
     parser.add_argument("-nnz", "--num_nonzero", default=nnz, required=False, type=int)
-    parser.add_argument("-m", "--mem_sizes", default=20, required=False, type=int)
+    parser.add_argument("-m", "--mem_sizes", default=1, required=False, type=int)
     args = parser.parse_args()
     print("Format: ", args.type)
     print("Scaling over Energy/nnz: ", args.dimension)
 
     # number of repeats
     num_run = args.runs
-    num_warm = 5
+    num_warm = 2
     # test for 32 memory sizes on the gpu
     num_mems = args.mem_sizes
     # number of energy points
@@ -79,17 +83,42 @@ if __name__ == "__main__":
 
         # generate data in the loop
         energy, rows, columns, gg, gl, gr = gf_init.init_sparse(ne, nao, seed)
-        ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
-        denergy: np.double = energy[1] - energy[0]
-        ne: np.int32 = energy.shape[0]
-        no: np.int32 = gg.shape[0]
-        prefactor: np.double = -1.0j * denergy / (np.pi)
+        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
+        denergy:    np.double               = energy[1] - energy[0]
+        ne:         np.int32                = energy.shape[0]
+        no:         np.int32                = gg.shape[0]
+        prefactor:  np.double               = -1.0j * denergy / (np.pi)
 
-        data_1ne_1 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_2 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_3 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
-        data_1ne_4 = rng.uniform(size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+
+        data_1ne_1 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_2 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_3 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_4 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_5 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_6 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
+        data_1ne_7 = rng.uniform(
+            size=(no, ne)) + 1j * rng.uniform(size=(no, ne))
         size_sparse = data_1ne_1.nbytes / (1024**3)
+
+
+
+        # start gpu streams
+        streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
+        # allocate pinned memory
+        data_1ne_1_pinned = linalg_gpu.aloc_pinned_filled(data_1ne_1)
+        data_1ne_2_pinned = linalg_gpu.aloc_pinned_filled(data_1ne_2)
+        data_1ne_3_pinned = linalg_gpu.aloc_pinned_filled(data_1ne_3)
+        data_1ne_4_pinned = linalg_gpu.aloc_pinned_filled(data_1ne_4)
+        data_1ne_5_pinned = linalg_gpu.aloc_pinned_empty_like(data_1ne_5)
+        data_1ne_6_pinned = linalg_gpu.aloc_pinned_empty_like(data_1ne_6)
+        data_1ne_7_pinned = linalg_gpu.aloc_pinned_empty_like(data_1ne_7)
+        batch_size = no // 2
 
         print("Number of nnz: ", no)
         print("Number of energy points: ", ne)
@@ -104,20 +133,23 @@ if __name__ == "__main__":
         data_1ne_2_gpu = cp.asarray(data_1ne_2)
         data_1ne_3_gpu = cp.asarray(data_1ne_3)
 
-        if args.type == "gpu_fft":
-            result = benchmark(g2p_gpu.g2p_fft_gpu,
-                               (prefactor, ij2ji_gpu, data_1ne_1_gpu, data_1ne_2_gpu, data_1ne_3_gpu),
-                               n_repeat=num_run,
-                               n_warmup=num_warm)
-        elif args.type == "gpu_mpi_fft":
-            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu, (prefactor, data_1ne_1, data_1ne_2, data_1ne_3, data_1ne_4),
-                               n_repeat=num_run,
-                               n_warmup=num_warm)
-        elif args.type == "gpu_mpi_fft_streams":
-            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu_streams,
-                               (prefactor, data_1ne_1, data_1ne_2, data_1ne_3, data_1ne_4),
-                               n_repeat=num_run,
-                               n_warmup=num_warm)
+        if args.type == "p_gpu_fft":
+            result = benchmark(g2p_gpu.g2p_fft_gpu, (prefactor, ij2ji_gpu,
+                data_1ne_1_gpu, data_1ne_2_gpu, data_1ne_3_gpu), n_repeat=num_run, n_warmup=num_warm)
+        elif args.type ==  "p_gpu_mpi_fft":
+            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu, (prefactor, data_1ne_1,
+                data_1ne_2, data_1ne_3, data_1ne_4), n_repeat=num_run, n_warmup=num_warm)
+        elif args.type ==  "p_gpu_mpi_fft_streams":
+            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu_streams, (prefactor, data_1ne_1_pinned,
+                data_1ne_1_pinned, data_1ne_1_pinned, data_1ne_1_pinned,
+                data_1ne_1_pinned, data_1ne_1_pinned ,data_1ne_1_pinned,
+                streams), n_repeat=num_run, n_warmup=num_warm)
+        elif args.type ==  "p_gpu_mpi_fft_batched":
+            result = benchmark(g2p_gpu.g2p_fft_mpi_gpu_batched, (prefactor, data_1ne_1_pinned,
+                data_1ne_1_pinned, data_1ne_1_pinned, data_1ne_1_pinned,
+                data_1ne_1_pinned, data_1ne_1_pinned ,data_1ne_1_pinned,
+                streams, batch_size), n_repeat=num_run, n_warmup=num_warm)
+            
         elif args.type == "gpu_conv":
             # output buffers
             pg_gpu: cp.ndarray = cp.empty_like(data_1ne_1_gpu, dtype=cp.complex128, order="C")
@@ -154,5 +186,5 @@ if __name__ == "__main__":
     output[num_run + 2, :] = nnz_sizes
     output[num_run + 3, :] = gb_sizes
 
-    save_path = os.path.join(main_path, args.type + "_" + args.dimension + ".npy")
+    save_path = os.path.join(main_path, args.type + "_" + args.dimension + "_"+ str(nnz) + "_" + str(ne) +".npy")
     np.save(save_path, output)

@@ -27,16 +27,17 @@ if utils_gpu.gpu_avail():
 if __name__ == "__main__":
     # parse the possible arguments
     solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
-    parser = argparse.ArgumentParser(description="Tests different implementation of the polarization calculation")
-    parser.add_argument("-t",
-                        "--type",
-                        default="cpu_fft",
-                        choices=[
-                            "gpu_fft", "gpu_conv", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched",
-                            "cpu_fft_inlined", "cpu_fft", "cpu_fft_mpi", "cpu_fft_mpi_inlined", "cpu_conv",
-                            "cpu_conv_dace", "cpu_dense"
-                        ],
-                        required=False)
+    parser = argparse.ArgumentParser(
+        description="Tests different implementation of the polarization calculation"
+    )
+    parser.add_argument("-t", "--type", default="cpu_fft",
+                        choices=["gpu_fft", "gpu_conv", "gpu_fft_mpi",
+                                 "gpu_fft_mpi_streams", "gpu_fft_mpi_batched",
+                                 "cpu_fft_inlined", "cpu_fft",
+                                 "cpu_fft_mpi", "cpu_fft_mpi_inlined",
+                                 "cpu_fft_mpi_inlined2",
+                                 "cpu_conv", "cpu_conv_dace",
+                                 "cpu_dense"], required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
@@ -168,10 +169,21 @@ if __name__ == "__main__":
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
         elif args.type == "cpu_fft_mpi_inlined":
 
-            gl_gold_transposed = gl_gold[ij2ji, :]
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, gg_gold, gl_gold, gr_gold,
-                                                                     gl_gold_transposed)
+            gl_gold_transposed = gl_gold[ij2ji,:]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+        elif args.type == "cpu_fft_mpi_inlined2":
 
+            # pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined2(
+            #     pre_factor, gg_gold, gl_gold, gr_gold)
+            pg_cpu1, pl_cpu1, pr_cpu1 = g2p_cpu.g2p_fft_mpi_cpu_inlined2(
+                pre_factor, gg_gold[:5,:], gl_gold[:5,:], gr_gold[:5,:])
+            pg_cpu2, pl_cpu2, pr_cpu2 = g2p_cpu.g2p_fft_mpi_cpu_inlined2(
+                pre_factor, gg_gold[5:,:], gl_gold[5:,:], gr_gold[5:,:])
+            pg_cpu = np.vstack((pg_cpu1, pg_cpu2))
+            pl_cpu = np.vstack((pl_cpu1, pl_cpu2))
+            pr_cpu = np.vstack((pr_cpu1, pr_cpu2))
+    
         elif args.type == "cpu_conv":
 
             pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)

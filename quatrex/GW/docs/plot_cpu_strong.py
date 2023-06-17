@@ -14,7 +14,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
                     "-t", "--type",
-                    default="p_mpi_cpu_fft_inlined",
+                    default="s_mpi_cpu_fft_3",
                     choices=["p_cpu_fft_inlined",
                              "p_mpi_cpu_fft_inlined",
                              "s_mpi_cpu_fft_3",
@@ -33,7 +33,7 @@ if __name__ == "__main__":
         calctype = "Self-Energies"
 
 
-    tmp = "_20000_40000"
+    tmp = "_20000_20000"
     font_type = ""
     # font_size = "14"
     plt.rcParams["font.size"] = 20
