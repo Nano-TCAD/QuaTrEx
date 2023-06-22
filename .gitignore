@@ -131,6 +131,7 @@ dmypy.json
 #output files
 *.dat
 *.gif 
+*.png
 
 quatrex/results/CNT_single/DOS_.dat
 quatrex/results/CNT_single/E.dat
