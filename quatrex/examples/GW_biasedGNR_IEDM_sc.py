@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-38, 42.0, 80001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-30, 60.0, 20001, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -197,13 +197,13 @@ if __name__ == "__main__":
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
-    factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
+    #factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # create factor for the Green's Function
     factor_g = np.ones(ne)
-    factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
-    factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
+    #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
+    #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
     if args.bsr:
@@ -424,7 +424,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_sc_dacehuge/'
+    folder = '/results/GNR_biased_sc_dacerange_f2/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -657,7 +657,7 @@ if __name__ == "__main__":
 
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
-                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                     hamiltonian_obj, energy_loc,
                                                                                                     pg_p2w_vec, pl_p2w_vec,
                                                                                                     pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
@@ -697,7 +697,7 @@ if __name__ == "__main__":
 
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                     hamiltonian_obj, energy_loc,
                                                                                                     pg_p2w_vec, pl_p2w_vec,
                                                                                                     pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
@@ -713,7 +713,7 @@ if __name__ == "__main__":
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
             else:
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_mpi_cpu(
                                                                                                     hamiltonian_obj, energy_loc,
                                                                                                     pg_p2w_vec, pl_p2w_vec,
                                                                                                     pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
@@ -747,6 +747,9 @@ if __name__ == "__main__":
             print(f"    P2W time: {p2w_time:.3f} s", flush=True)
             pre_comm2_time = -time.perf_counter()
 
+        memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
+        memory_mask[ind_zeros] = False
+
         # transform from block format to 2D format-----------------------------------
         # lower diagonal blocks from physics identity
         wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
@@ -767,18 +770,18 @@ if __name__ == "__main__":
         #                                                     energy_contiguous=False)
         # else:
         # add new contribution to the Screened interaction
-        wg_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wg_diag, wg_upper,
                                                         wg_lower, no, count[1,rank],
-                                                        energy_contiguous=False) + mem_w * wg_p2w
-        wl_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
+        wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wl_diag, wl_upper,
                                                         wl_lower, no, count[1,rank],
-                                                        energy_contiguous=False) + mem_w * wl_p2w
-        wr_p2w = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
+        wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                         map_lower_mm, wr_diag, wr_upper,
                                                         wr_lower, no, count[1,rank],
-                                                        energy_contiguous=False) + mem_w * wr_p2w
+                                                        energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
 
 
         # distribute screened interaction according to gw2s step--------------------
@@ -835,7 +838,7 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
                                                                 -pre_factor/2,
                                                                 gg_g2p,
                                                                 gl_g2p,

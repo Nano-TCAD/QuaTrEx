@@ -175,7 +175,7 @@ def p2w_pool_mpi_cpu(
         wg_diag[index, :, :, :] = 0
         wg_upper[index, :, :, :] = 0
         
-    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
+    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros
 
 def p2w_mpi_cpu(
     hamiltionian_obj: object,
