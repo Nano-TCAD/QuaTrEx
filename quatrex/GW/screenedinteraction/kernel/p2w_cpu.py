@@ -11,6 +11,7 @@ import numpy.typing as npt
 from scipy import sparse
 from utils import matrix_creation
 from utils import change_format
+from utils.matrix_creation import homogenize_matrix
 from block_tri_solvers import rgf_W
 # from block_tri_solvers import matrix_inversion_w
 from OBC import obc_w_cpu
@@ -31,6 +32,8 @@ def p2w_pool_mpi_cpu(
     comm,
     rank,
     size,
+    nbc,
+    homogenize: bool = False,
     mkl_threads: int = 1,
     worker_num: int = 1,
     block_inv: bool = False,
@@ -85,7 +88,7 @@ def p2w_pool_mpi_cpu(
 
     # fix nbc to 2 for the given solution
     # todo calculate it
-    nbc = 2
+    #nbc = 2
 
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc-1:nb:nbc]
@@ -102,9 +105,24 @@ def p2w_pool_mpi_cpu(
     # set number of mkl threads
     mkl.set_num_threads(mkl_threads)
 
-    # todo remove this
-    # not used inside rgf_W
-    #index_e = np.arange(ne)
+    for ie in range(ne):
+        # Anti-Hermitian symmetrizing of PL and PG
+        pl[ie] = 1j * np.imag(pl[ie])
+        pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
+
+        pg[ie] = 1j * np.imag(pg[ie])
+        pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
+
+        # PR has to be derived from PL and PG and then has to be symmetrized
+        pr[ie] = 1j * np.imag(pg[ie] - pl[ie]) / 2
+        pr[ie] = (pr[ie] + pr[ie].T) / 2
+        if homogenize:
+            pr[ie] = homogenize_matrix(pr[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        pr[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'R')
+            pl[ie] = homogenize_matrix(pl[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        pl[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'L')
+            pg[ie] = homogenize_matrix(pg[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
+                                        pg[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'G')
 
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
@@ -191,6 +209,7 @@ def p2w_mpi_cpu(
     comm,
     rank,
     size,
+    nbc,
     mkl_threads: int = 1,
     block_inv: bool = False,
     use_dace: bool = False,
@@ -247,7 +266,7 @@ def p2w_mpi_cpu(
 
     # fix nbc to 2 for the given solution
     # todo calculate it
-    nbc = 2
+    #nbc = 2
 
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc-1:nb:nbc]

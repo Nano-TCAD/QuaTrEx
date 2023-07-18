@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import sparse
-from scipy.sparse import csr_matrix, lil_matrix, block_diag
+from scipy.sparse import csr_matrix, lil_matrix, block_diag, find
 from json import JSONEncoder
 import json
 
@@ -219,6 +219,31 @@ def homogenize_matrix(M00, M01, NB, type):
 
     M = M00.tocsr()[:N0 * NB, :N0 * NB]
     return M
+
+def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
+    N = Bmax[0] - Bmin[0] + 1
+    sparse_vector = np.ones(rows.shape[0], dtype  = np.float)
+    sparse_matrix = sparse.csc_matrix((sparse_vector, (rows, columns)), shape = (nao, nao))
+    S01 = sparse_matrix[0:N, N:2 * N]
+    # find sparse indices of S01
+    _, J, _ = find(S01)
+
+    # find number of connected blocks
+    if(J.shape[0]):
+        Bsize_mm = 3 * np.max(J)
+
+        if Bsize_mm <=N:
+            nbc = 1
+        else:
+            if Bsize_mm <= 2 * N:
+                nbc = 2
+            else:
+                nbc = 3 
+    else:
+        nbc = 1
+    return nbc
+
+
 
 if __name__ == '__main__':
     print('main')
