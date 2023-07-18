@@ -133,6 +133,12 @@ if __name__ == "__main__":
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
 
+    # Only keep diagonals of P and Sigma
+    rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+
+    
+
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
     bmin = hamiltonian_obj.Bmin - 1
@@ -205,7 +211,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -366,12 +372,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.75
+    mem_s = 0.80
     mem_g = 0.0
-    mem_w = 0.75
+    mem_w = 0.80
     # max number of iterations
 
-    max_iter = 200
+    max_iter = 500
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -838,7 +844,7 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
                                                                 -pre_factor/2,
                                                                 gg_g2p,
                                                                 gl_g2p,

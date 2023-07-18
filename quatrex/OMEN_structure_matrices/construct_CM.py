@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse
 from utils.read_utils import *
 
-def construct_coulomb_matrix(DH, eps_r, eps0, e):
+def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False):
     """
     This function computes a placeholder for the 2-index Coulomb matrix. It
     assumes that the atomic orbitals are point charges and computes their 
@@ -65,6 +65,8 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e):
     for ia in range(DH.NA):
         
         orbA = DH.orb_per_at[ia+1] - DH.orb_per_at[ia]
+        if(diag):
+            V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
         #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
     
     
