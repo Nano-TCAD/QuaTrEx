@@ -88,6 +88,7 @@ class Hamiltonian:
                 
             #Check that hamiltonian is hermitean
             self.hermitean = self.check_hermitivity(tol = 1e-6)
+            #self.hermitean = True
             
             #Read Block Properties
             self.LM = read_file_to_float_ndarray(sim_folder + '/Layer_Matrix.dat')
@@ -366,7 +367,7 @@ class Hamiltonian:
 
         ind = 0
         for IA in range(self.NA):
-            Vpot[ind:ind+orb_per_at_loc[IA]] = V[IA]
+            Vpot[ind:ind+orb_per_at_loc[IA]] = V[self.Vappl,IA]
             ind += orb_per_at_loc[IA]
 
         return Vpot

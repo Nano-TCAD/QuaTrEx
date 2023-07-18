@@ -121,6 +121,7 @@ def get_band_edge_mpi(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, rows, columns, 
     # Broadcasting the band edge
     if rank == 0:
         comm.Bcast(ECmin, root = 0)
+        print("new band edge: " + str(ECmin))
     else:
         ECmin = np.empty(1, dtype = np.float64)
         comm.Bcast(ECmin, root = 0)
