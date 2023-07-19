@@ -51,6 +51,7 @@ if __name__ == "__main__":
     #scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
 
     scratch_path = "/usr/scratch2/tortin12/chexia/"
+    
 
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path = os.path.join(scratch_path, "GNR_pd")
