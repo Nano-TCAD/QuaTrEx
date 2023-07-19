@@ -367,7 +367,7 @@ class Hamiltonian:
 
         ind = 0
         for IA in range(self.NA):
-            Vpot[ind:ind+orb_per_at_loc[IA]] = V[self.Vappl,IA]
+            Vpot[ind:ind+orb_per_at_loc[IA]] = V[IA]
             ind += orb_per_at_loc[IA]
 
         return Vpot

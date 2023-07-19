@@ -33,6 +33,7 @@ from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from utils import change_format
 from utils import utils_gpu
 from utils.bsr import bsr_matrix
+from utils.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
     from GW.polarization.kernel import g2p_gpu
@@ -139,6 +140,10 @@ if __name__ == "__main__":
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
 
+    # Only keep diagonals of P and Sigma
+    rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
     bmin = hamiltonian_obj.Bmin - 1
@@ -157,7 +162,7 @@ if __name__ == "__main__":
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
-    nbc = 2
+    nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -214,7 +219,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -676,8 +681,9 @@ if __name__ == "__main__":
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
-                                                                                                    w_mkl_threads,
-                                                                                                    w_worker_threads,
+                                                                                                    nbc,
+                                                                                                    mkl_threads = w_mkl_threads,
+                                                                                                    worker_threads = w_worker_threads,
                                                                                                     block_inv=args.block_inv,
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
