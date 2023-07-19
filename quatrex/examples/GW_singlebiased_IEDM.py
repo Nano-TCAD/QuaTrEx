@@ -32,6 +32,7 @@ from OMEN_structure_matrices import OMENHamClass
 from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from utils import change_format
 from utils import utils_gpu
+from utils.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
     from GW.polarization.kernel import g2p_gpu
@@ -125,7 +126,7 @@ if __name__ == "__main__":
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
-    nbc = 2
+    nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -550,8 +551,10 @@ if __name__ == "__main__":
                                                                                                 comm,
                                                                                                 rank,
                                                                                                 size,
-                                                                                                w_mkl_threads,
-                                                                                                w_worker_threads)
+                                                                                                nbc,
+                                                                                                homogenize = False,
+                                                                                                mkl_threads = w_mkl_threads,
+                                                                                                worker_num = w_worker_threads)
         else:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_mpi_cpu(
                                                                                                 hamiltonian_obj, energy_loc,

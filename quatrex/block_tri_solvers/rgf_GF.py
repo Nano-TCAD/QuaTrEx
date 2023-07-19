@@ -42,6 +42,8 @@ def rgf_GF(M, H, SigL, SigG, GR, GRnn1, GL, GLnn1, GG, GGnn1, DOS, nE, nP, idE, 
     #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GL
     #GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Greater GF
     #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
+    SigLB = np.zeros((NB-1, Bsize, Bsize), dtype=np.cfloat) # Lesser boundary self-energy
+    SigGB = np.zeros((NB-1, Bsize, Bsize), dtype=np.cfloat) # Greater boundary self-energy
 
     IdE = np.zeros(NB)
     n = np.zeros(NB)

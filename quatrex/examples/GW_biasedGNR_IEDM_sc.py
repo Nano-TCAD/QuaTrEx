@@ -673,8 +673,9 @@ if __name__ == "__main__":
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
-                                                                                                    w_mkl_threads,
-                                                                                                    w_worker_threads,
+                                                                                                    nbc,
+                                                                                                    mkl_threads = w_mkl_threads,
+                                                                                                    worker_threads = w_worker_threads,
                                                                                                     block_inv=args.block_inv,
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)

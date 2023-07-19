@@ -780,16 +780,17 @@ def rgf_w_opt(
     if not isinstance(vh, sparse.csr_matrix):
         bsr = True
 
-    # Anti-Hermitian symmetrizing of PL and PG
-    pl = 1j * np.imag(pl)
-    pl = (pl - pl.conj().T) / 2
+    # is now done outside of function.
+    # # Anti-Hermitian symmetrizing of PL and PG
+    # pl = 1j * np.imag(pl)
+    # pl = (pl - pl.conj().T) / 2
 
-    pg = 1j * np.imag(pg)
-    pg = (pg - pg.conj().T) / 2
+    # pg = 1j * np.imag(pg)
+    # pg = (pg - pg.conj().T) / 2
 
-    # PR has to be derived from PL and PG and then has to be symmetrized
-    pr = 1j * np.imag(pg - pl) / 2
-    pr = (pr + pr.T) / 2
+    # # PR has to be derived from PL and PG and then has to be symmetrized
+    # pr = 1j * np.imag(pg - pl) / 2
+    # pr = (pr + pr.T) / 2
 
 
     times[0] += time.perf_counter()
