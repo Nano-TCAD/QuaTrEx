@@ -117,12 +117,12 @@ def p2w_pool_mpi_cpu(
         pr[ie] = 1j * np.imag(pg[ie] - pl[ie]) / 2
         pr[ie] = (pr[ie] + pr[ie].T) / 2
         if homogenize:
-            pr[ie] = homogenize_matrix(pr[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
-                                        pr[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'R')
-            pl[ie] = homogenize_matrix(pl[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
-                                        pl[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'L')
-            pg[ie] = homogenize_matrix(pg[ie][bmin[0] -1 : bmax[0], bmin[0] -1 : bmax[0]],
-                                        pg[ie][bmin[0] -1 : bmax[0], bmin[1] -1 : bmax[1]], len(bmax), 'G')
+            pr[ie] = homogenize_matrix(pr[ie][bmin[0] : bmax[0], bmin[0] : bmax[0]],
+                                        pr[ie][bmin[0] : bmax[0], bmin[1]  : bmax[1]], len(bmax), 'R')
+            pl[ie] = homogenize_matrix(pl[ie][bmin[0]  : bmax[0], bmin[0]  : bmax[0]],
+                                        pl[ie][bmin[0]  : bmax[0], bmin[1]  : bmax[1]], len(bmax), 'L')
+            pg[ie] = homogenize_matrix(pg[ie][bmin[0]  : bmax[0], bmin[0]  : bmax[0]],
+                                        pg[ie][bmin[0]  : bmax[0], bmin[1]  : bmax[1]], len(bmax), 'G')
 
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:

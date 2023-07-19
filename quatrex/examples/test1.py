@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-15, 10, 5000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 10, 500, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClassinput.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -722,8 +722,9 @@ if __name__ == "__main__":
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
-                                                                                                    w_mkl_threads,
-                                                                                                    w_worker_threads,
+                                                                                                    nbc,
+                                                                                                    mkl_threads = w_mkl_threads,
+                                                                                                    worker_num = w_worker_threads,
                                                                                                     block_inv=args.block_inv,
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
