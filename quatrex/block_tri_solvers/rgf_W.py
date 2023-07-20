@@ -1401,7 +1401,29 @@ def rgf_w_opt(
 
         if ref_flag:
             # reference solution
+            # Apply boundary conditions.
+
+            # last block index
+            idx_lb = nb_mm - 1
+            #   slice for last block
+            slb_lb = slice(bmin_mm[idx_lb],bmax_mm[idx_lb]+1)
+
+            # first block index
+            idx_fb = 0
+            #   slice for first block
+            slb_fb = slice(bmin_mm[idx_fb],bmax_mm[idx_fb]+1)
+
+            vh_cp[slb_lb, slb_lb] -= dvh_ed
+            vh_cp[slb_fb, slb_fb] -= dvh_sd
+            mr[slb_lb, slb_lb] += dmr_ed
+            mr[slb_fb, slb_fb] += dmr_sd
+            lg[slb_lb, slb_lb] += dlg_ed
+            lg[slb_fb, slb_fb] += dlg_sd
+            ll[slb_lb, slb_lb] += dll_ed
+            ll[slb_fb, slb_fb] += dll_sd
+
             # invert m
+            
             mr_dense = mr.toarray()
             xr_ref = np.linalg.inv(mr_dense)
             wr_ref = xr_ref @ vh_cp.todense()

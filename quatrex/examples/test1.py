@@ -51,7 +51,7 @@ if __name__ == "__main__":
     #scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
 
     scratch_path = "/usr/scratch2/tortin12/chexia/"
-    
+
 
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path = os.path.join(scratch_path, "GNR_pd")
@@ -141,9 +141,9 @@ if __name__ == "__main__":
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
 
-    # Only keep diagonals of P and Sigma
-    rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
-    columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    #Only keep diagonals of P and Sigma
+    #rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    #columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
@@ -164,6 +164,7 @@ if __name__ == "__main__":
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
+    nbc = 2
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -193,7 +194,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 40
+    epsR = 25
     # DFT Conduction Band Minimum
     #ECmin = -3.5
     ECmin = -3.7
@@ -220,7 +221,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))

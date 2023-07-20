@@ -124,7 +124,9 @@ def p2w_pool_mpi_cpu(
             pg[ie] = homogenize_matrix(pg[ie][bmin[0]  : bmax[0], bmin[0]  : bmax[0]],
                                         pg[ie][bmin[0]  : bmax[0], bmin[1]  : bmax[1]], len(bmax), 'G')
 
-    # Create a process pool with 4 workers
+    # Create a process pool with num_worker workers
+
+    ref_flag = True
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         executor.map(
@@ -140,7 +142,7 @@ def p2w_pool_mpi_cpu(
                     idx_e, factor,
                     repeat(block_inv),
                     repeat(use_dace),
-                    repeat(validate_dace))
+                    repeat(validate_dace),repeat(ref_flag))
         #for res in results:
         #   assert isinstance(res, np.ndarray)
 
