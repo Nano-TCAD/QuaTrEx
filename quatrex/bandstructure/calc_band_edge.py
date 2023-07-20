@@ -8,9 +8,9 @@ from mpi4py import MPI
 import os
 import pickle
 
-from OMEN_structure_matrices import OMENHamClass
-from bandstructure.calc_contact_bs import calc_bandstructure, calc_bandstructure_mpi
-from utils import change_format
+from quatrex.OMEN_structure_matrices import OMENHamClass
+from quatrex.bandstructure.calc_contact_bs import calc_bandstructure, calc_bandstructure_mpi
+from quatrex.utils import change_format
 
 def get_band_edge(ECmin_DFT, E, S, H, SigmaR_GW, SigmaR_PHN, Bmin, Bmax, side = 'left'):
     # First step: get a first estimate of the CB edge
