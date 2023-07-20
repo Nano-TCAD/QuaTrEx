@@ -141,7 +141,7 @@ quatrex/results/
 
 # Profiling files
 gmon.out
-.nsys-rep
+*.nsys-rep
 
 # DaCe
 .dacecache/
