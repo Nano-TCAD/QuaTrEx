@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
-    energy = np.linspace(-30, 60.0, 20001, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-30, 60.0, 201, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
