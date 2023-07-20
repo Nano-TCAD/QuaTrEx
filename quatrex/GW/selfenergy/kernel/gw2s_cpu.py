@@ -1,7 +1,6 @@
-"""
-Functions to calculate the self-energies on the cpu.
-See README for more information.
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Functions to calculate the self-energies on the cpu. See README for more information. """
+
 import numpy as np
 import numpy.typing as npt
 import typing
@@ -15,6 +14,7 @@ sys.path.append(parent_path)
 
 from utils import linalg_cpu
 
+
 def gw2s_fft_cpu(
     pre_factor: np.complex128,
     ij2ji: npt.NDArray[np.int32],
@@ -24,9 +24,7 @@ def gw2s_fft_cpu(
     wg: npt.NDArray[np.complex128],
     wl: npt.NDArray[np.complex128],
     wr: npt.NDArray[np.complex128],
-) -> typing.Tuple[npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128]]:
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the cpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -63,25 +61,25 @@ def gw2s_fft_cpu(
     wr_t = linalg_cpu.fft_numba(wr, ne2, no)
 
     # fft of energy reversed
-    rgg_t =  linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
-    rgl_t =  linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
-    rgr_t =  linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
+    rgg_t = linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
+    rgl_t = linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
+    rgr_t = linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
 
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
-    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gg_t, wr_t)
+    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gg_t, wr_t)
 
-    # time reverse 
+    # time reverse
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_t[ij2ji,:] - np.repeat(wl[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_t[ij2ji,:] - np.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              linalg_cpu.elementmul(rgr_t, wg_t[ij2ji,:] - np.repeat(wg[:,0].reshape(-1,1), 2*ne, axis=1)))
-
+    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_t[ij2ji, :] - np.repeat(wl[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_t[ij2ji, :] - np.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sr_t_2 = (
+        linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+        linalg_cpu.elementmul(rgr_t, wg_t[ij2ji, :] - np.repeat(wg[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
@@ -92,11 +90,9 @@ def gw2s_fft_cpu(
     sl_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no), axis=1)
     sr_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no), axis=1)
 
-
     sg = sg_1 + sg_2
     sl = sl_1 + sl_2
     sr = sr_1 + sr_2
-
 
 
 def gw2s_fft_cpu_3part_sr(
@@ -108,9 +104,7 @@ def gw2s_fft_cpu_3part_sr(
     wg: npt.NDArray[np.complex128],
     wl: npt.NDArray[np.complex128],
     wr: npt.NDArray[np.complex128],
-) -> typing.Tuple[npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128]]:
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the cpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -147,27 +141,28 @@ def gw2s_fft_cpu_3part_sr(
     wr_t = linalg_cpu.fft_numba(wr, ne2, no)
 
     # fft of energy reversed
-    rgg_t =  linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
-    rgl_t =  linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
-    rgr_t =  linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
+    rgg_t = linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
+    rgl_t = linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
+    rgr_t = linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
 
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
-    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
+    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
 
-    # time reverse 
+    # time reverse
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_t[ij2ji,:] - np.repeat(wl[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_t[ij2ji,:] - np.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
+    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_t[ij2ji, :] - np.repeat(wl[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_t[ij2ji, :] - np.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
     #sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
     #          linalg_cpu.elementmul(rgr_t, wg_t[ij2ji,:] - np.repeat(wg[:,0].reshape(-1,1), 2*ne, axis=1)))
-    sr_t_2 = (linalg_cpu.elementmul(rgl_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              linalg_cpu.elementmul(rgr_t, wg_t[ij2ji,:] - np.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1)) + 
-                linalg_cpu.elementmul(rgr_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))))
+    sr_t_2 = (
+        linalg_cpu.elementmul(rgl_t, np.conjugate(wr_t_mod - np.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+        linalg_cpu.elementmul(rgr_t, wg_t[ij2ji, :] - np.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1)) +
+        linalg_cpu.elementmul(rgr_t, np.conjugate(wr_t_mod - np.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
@@ -178,26 +173,18 @@ def gw2s_fft_cpu_3part_sr(
     sl_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no), axis=1)
     sr_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no), axis=1)
 
-
     sg = sg_1 + sg_2
     sl = sl_1 + sl_2
     sr = sr_1 + sr_2
 
     return (sg, sl, sr)
 
+
 def gw2s_fft_mpi_cpu(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the cpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -239,25 +226,27 @@ def gw2s_fft_mpi_cpu(
     wl_transposed_t = linalg_cpu.fft_numba(wl_transposed, ne2, no)
 
     # fft of energy reversed
-    rgg_t =  linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
-    rgl_t =  linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
-    rgr_t =  linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
+    rgg_t = linalg_cpu.fft_numba(np.flip(gg, axis=1), ne2, no)
+    rgl_t = linalg_cpu.fft_numba(np.flip(gl, axis=1), ne2, no)
+    rgr_t = linalg_cpu.fft_numba(np.flip(gr, axis=1), ne2, no)
 
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
-    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gg_t, wr_t)
+    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gg_t, wr_t)
 
     # time reverse
     wr_t_mod = np.roll(np.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = linalg_cpu.elementmul(rgg_t, wl_transposed_t - np.repeat(wl_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = linalg_cpu.elementmul(rgl_t, wg_transposed_t - np.repeat(wg_transposed[:,0].reshape(-1,1), 2*ne, axis=1))
-    sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              linalg_cpu.elementmul(rgr_t, wg_transposed_t - np.repeat(wg_transposed[:,0].reshape(-1,1), 2*ne, axis=1)))
-
+    sg_t_2 = linalg_cpu.elementmul(rgg_t,
+                                   wl_transposed_t - np.repeat(wl_transposed[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = linalg_cpu.elementmul(rgl_t,
+                                   wg_transposed_t - np.repeat(wg_transposed[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sr_t_2 = (
+        linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+        linalg_cpu.elementmul(rgr_t, wg_transposed_t - np.repeat(wg_transposed[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
@@ -267,7 +256,6 @@ def gw2s_fft_mpi_cpu(
     sg_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no), axis=1)
     sl_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no), axis=1)
     sr_2 = np.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no), axis=1)
-
 
     sg = sg_1 + sg_2
     sl = sl_1 + sl_2
@@ -282,18 +270,10 @@ def gw2s_fft_mpi_cpu(
             nogil=True,
             error_model="numpy")
 def gw2s_fft_mpi_cpu_3part_sr(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128], 
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the cpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -335,27 +315,27 @@ def gw2s_fft_mpi_cpu_3part_sr(
     wl_transposed_t = linalg_cpu.fft_numba(wl_transposed, ne2, no)
 
     # fft of energy reversed
-    rgg_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gg), ne2, no)
-    rgl_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gl), ne2, no)
-    rgr_t =  linalg_cpu.fft_numba(linalg_cpu.flip(gr), ne2, no)
+    rgg_t = linalg_cpu.fft_numba(linalg_cpu.flip(gg), ne2, no)
+    rgl_t = linalg_cpu.fft_numba(linalg_cpu.flip(gl), ne2, no)
+    rgr_t = linalg_cpu.fft_numba(linalg_cpu.flip(gr), ne2, no)
 
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
     sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
     #sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gg_t, wr_t)
-    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) +  linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
+    sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
     # time reverse
     wr_t_mod = linalg_cpu.reversal(wr_t)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(wl_transposed_t,wl_transposed[:,0]))
-    sl_t_2 = linalg_cpu.elementmul(rgl_t,  linalg_cpu.substract_special(wg_transposed_t,wg_transposed[:,0]))
+    sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(wl_transposed_t, wl_transposed[:, 0]))
+    sl_t_2 = linalg_cpu.elementmul(rgl_t, linalg_cpu.substract_special(wg_transposed_t, wg_transposed[:, 0]))
     #sr_t_2 = (linalg_cpu.elementmul(rgg_t, np.conjugate(wr_t_mod - np.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
     #          linalg_cpu.elementmul(rgr_t, wg_transposed_t - np.repeat(wg[:,0].reshape(-1,1), 2*ne, axis=1)))
-    sr_t_2 = (linalg_cpu.elementmul(rgl_t, np.conjugate( linalg_cpu.substract_special(wr_t_mod,wr[:,0]))) +
-              linalg_cpu.elementmul(rgr_t,  linalg_cpu.substract_special(wg_transposed_t,wg_transposed[:,0])) +
-                linalg_cpu.elementmul(rgr_t, np.conjugate(linalg_cpu.substract_special(wr_t_mod,wr[:,0]))))
+    sr_t_2 = (linalg_cpu.elementmul(rgl_t, np.conjugate(linalg_cpu.substract_special(wr_t_mod, wr[:, 0]))) +
+              linalg_cpu.elementmul(rgr_t, linalg_cpu.substract_special(wg_transposed_t, wg_transposed[:, 0])) +
+              linalg_cpu.elementmul(rgr_t, np.conjugate(linalg_cpu.substract_special(wr_t_mod, wr[:, 0]))))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
@@ -366,10 +346,8 @@ def gw2s_fft_mpi_cpu_3part_sr(
     sl_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no))
     sr_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sr_t_2, pre_factor, ne, no))
 
-
     sg = sg_1 + sg_2
     sl = sl_1 + sl_2
     sr = sr_1 + sr_2
 
     return (sg, sl, sr)
-

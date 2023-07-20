@@ -6,9 +6,8 @@ import numpy as np
 import cupy as cp
 from cupyx import jit
 
-def aloc_pinned_empty_like(
-        array: np.ndarray
-    ) -> np.ndarray:
+
+def aloc_pinned_empty_like(array: np.ndarray) -> np.ndarray:
     """
     Allocates pinned memory of the same size as array.
 
@@ -20,13 +19,11 @@ def aloc_pinned_empty_like(
     """
     # constructing pinned memory
     mem = cp.cuda.alloc_pinned_memory(array.nbytes)
-    src = np.frombuffer(
-                mem, array.dtype, array.size).reshape(array.shape)
+    src = np.frombuffer(mem, array.dtype, array.size).reshape(array.shape)
     return src
 
-def aloc_pinned_filled(
-        array: np.ndarray
-    ) -> np.ndarray:
+
+def aloc_pinned_filled(array: np.ndarray) -> np.ndarray:
     """
     Allocates pinned memory of the same size as array
     and fills it with the array values.
@@ -39,10 +36,10 @@ def aloc_pinned_filled(
     """
     # constructing pinned memory
     mem = cp.cuda.alloc_pinned_memory(array.nbytes)
-    src = np.frombuffer(
-                mem, array.dtype, array.size).reshape(array.shape)
+    src = np.frombuffer(mem, array.dtype, array.size).reshape(array.shape)
     src[...] = array
     return src
+
 
 @cp.fuse()
 def pr_special_gpu(gr: cp.ndarray, gl_mod: cp.ndarray, gl: cp.ndarray) -> cp.ndarray:
@@ -57,6 +54,7 @@ def pr_special_gpu(gr: cp.ndarray, gl_mod: cp.ndarray, gl: cp.ndarray) -> cp.nda
         cp.ndarray: gr*gl_mod + gl*gr^*
     """
     return gr * gl_mod + gl * cp.conjugate(gr)
+
 
 @jit.rawkernel()
 def reversal_gpu(g1: cp.ndarray, g1_transposed: cp.ndarray, sizex: np.int32, sizey: np.int32) -> cp.ndarray:
@@ -80,6 +78,5 @@ def reversal_gpu(g1: cp.ndarray, g1_transposed: cp.ndarray, sizex: np.int32, siz
     idx = jit.blockIdx.x * jit.blockDim.x + jit.threadIdx.x
     if idx < sizex:
         g1_transposed[idx, 0] = -cp.conjugate(g1[idx, 0])
-        for j in range(1,sizey):
-            g1_transposed[idx, j] = -cp.conjugate(g1[idx, 2*sizey-j])
-            
+        for j in range(1, sizey):
+            g1_transposed[idx, j] = -cp.conjugate(g1[idx, 2 * sizey - j])

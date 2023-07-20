@@ -1,7 +1,6 @@
-"""
-Functions to calculate the polarization on the cpu.
-See README.md for more information. 
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Functions to calculate the polarization on the cpu. See README.md for more information. """
+
 import numpy as np
 import numpy.typing as npt
 import typing
@@ -27,19 +26,11 @@ NO = dace.symbol("NO")
 
 
 # define various functions for cpu/gpu with mpi/dace----------------------------
-@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_cpu(
-    pre_factor: np.complex128,
-    ij2ji: npt.NDArray[np.int32],
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128], gr: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and a mapping to the transposed indices are needed.
 
@@ -63,9 +54,9 @@ def g2p_fft_cpu(
     ne2 = 2 * ne
 
     # fft
-    gg_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gg,ne2,no)
-    gl_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl,ne2,no)
-    gr_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gr,ne2,no)
+    gg_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gg, ne2, no)
+    gl_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl, ne2, no)
+    gr_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gr, ne2, no)
 
     # reverse and transpose
     gl_t_mod: npt.NDArray[np.complex128] = linalg_cpu.reversal_transpose(gl_t, ij2ji)
@@ -74,35 +65,25 @@ def g2p_fft_cpu(
     # multiply elementwise
     pg_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(gg_t, gl_t_mod)
     pl_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(gl_t, gg_t_mod)
-    pr_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(
-        gr_t, gl_t_mod) + linalg_cpu.elementmul(gl_t, gr_t.conjugate())
+    pr_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(gr_t, gl_t_mod) + linalg_cpu.elementmul(
+        gl_t, gr_t.conjugate())
 
     # test identity
     # assert np.allclose(pre_factor * pg_t, -np.conjugate(pre_factor * pl_t))
 
     # ifft, cutoff and multiply with pre factor
-    pg: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(
-        pg_t, pre_factor, ne, no)
-    pl: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(
-        pl_t, pre_factor, ne, no)
-    pr: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(
-        pr_t, pre_factor, ne, no)
+    pg: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(pg_t, pre_factor, ne, no)
+    pl: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(pl_t, pre_factor, ne, no)
+    pr: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft_cutoff(pr_t, pre_factor, ne, no)
 
     return (pg, pl, pr)
 
-@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_mpi_cpu(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and a mapping to the transposed indices are needed.
 
@@ -126,45 +107,36 @@ def g2p_fft_mpi_cpu(
     ne2 = 2 * ne
 
     # fft
-    gg_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gg,ne2,no)
-    gl_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl,ne2,no)
-    gr_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gr,ne2,no)
-    gl_transposed_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl_transposed,ne2,no)
+    gg_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gg, ne2, no)
+    gl_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl, ne2, no)
+    gr_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gr, ne2, no)
+    gl_transposed_t: npt.NDArray[np.complex128] = linalg_cpu.fft_numba(gl_transposed, ne2, no)
 
     # time reversed
     gl_t_mod: npt.NDArray[np.complex128] = linalg_cpu.reversal(gl_transposed_t)
 
     # multiply elementwise
     pg_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(gg_t, gl_t_mod)
-    pr_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(
-        gr_t, gl_t_mod) + linalg_cpu.elementmul(gl_t, gr_t.conjugate())
+    pr_t: npt.NDArray[np.complex128] = linalg_cpu.elementmul(gr_t, gl_t_mod) + linalg_cpu.elementmul(
+        gl_t, gr_t.conjugate())
 
     # test identity
     # assert np.allclose(pre_factor * pg_t, -np.conjugate(pre_factor * pl_t))
 
     # ifft, and multiply with pre factor
-    pg: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft(
-        pg_t, pre_factor, ne, no)
-    pr: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft(
-        pr_t, pre_factor, ne, no)
+    pg: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft(pg_t, pre_factor, ne, no)
+    pr: npt.NDArray[np.complex128] = linalg_cpu.scalarmul_ifft(pr_t, pre_factor, ne, no)
     # lesser polarization from identity
     pl = -np.conjugate(linalg_cpu.reversal(pg))
 
     return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
 
-@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+
+@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_cpu_inlined(
-    pre_factor: np.complex128,
-    ij2ji: npt.NDArray[np.int32],
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128], gr: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and a mapping to the transposed indices are needed.
 
@@ -188,14 +160,13 @@ def g2p_fft_cpu_inlined(
     ne2 = 2 * ne
 
     # fft
-    gg_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
-    gl_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
-    gr_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
+    gg_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    gl_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    gr_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
     for i in numba.prange(no):
-        gg_t[i,:] = fft.fft(gg[i,:], n=ne2)
-        gl_t[i,:] = fft.fft(gl[i,:], n=ne2)
-        gr_t[i,:] = fft.fft(gr[i,:], n=ne2)
-
+        gg_t[i, :] = fft.fft(gg[i, :], n=ne2)
+        gl_t[i, :] = fft.fft(gl[i, :], n=ne2)
+        gr_t[i, :] = fft.fft(gr[i, :], n=ne2)
 
     # reverse and transpose
     gl_t_mod: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
@@ -219,10 +190,9 @@ def g2p_fft_cpu_inlined(
 
     for i in numba.prange(no):
         for j in numba.prange(ne2):
-            pg_t[i,j] = gg_t[i,j] * gl_t_mod[i,j]
-            pl_t[i,j] = gl_t[i,j] * gg_t_mod[i,j]
-            pr_t[i,j] = gr_t[i,j] * gl_t_mod[i,j] + gl_t[i,j] * np.conjugate(gr_t[i,j])
-
+            pg_t[i, j] = gg_t[i, j] * gl_t_mod[i, j]
+            pl_t[i, j] = gl_t[i, j] * gg_t_mod[i, j]
+            pr_t[i, j] = gr_t[i, j] * gl_t_mod[i, j] + gl_t[i, j] * np.conjugate(gr_t[i, j])
 
     # ifft, cutoff and multiply with pre factor
     pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
@@ -230,9 +200,9 @@ def g2p_fft_cpu_inlined(
     pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
 
     for i in numba.prange(no):
-        pg[i,:] = fft.ifft(pg_t[i,:])[:ne]
-        pl[i,:] = fft.ifft(pl_t[i,:])[:ne]
-        pr[i,:] = fft.ifft(pr_t[i,:])[:ne]
+        pg[i, :] = fft.ifft(pg_t[i, :])[:ne]
+        pl[i, :] = fft.ifft(pl_t[i, :])[:ne]
+        pr[i, :] = fft.ifft(pr_t[i, :])[:ne]
     for i in numba.prange(no):
         for j in numba.prange(ne):
             pg[i, j] = pg[i, j] * pre_factor
@@ -241,19 +211,12 @@ def g2p_fft_cpu_inlined(
 
     return (pg, pl, pr)
 
-@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_mpi_cpu_inlined(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and a the lesser transposed are needed.
 
@@ -277,15 +240,15 @@ def g2p_fft_mpi_cpu_inlined(
     ne2 = 2 * ne
 
     # fft
-    gg_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
-    gl_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
-    gr_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
-    gl_transposed_t: npt.NDArray[np.complex128] = np.empty((no,ne2), dtype=np.complex128)
+    gg_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    gl_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    gr_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    gl_transposed_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
     for i in numba.prange(no):
-        gg_t[i,:] = fft.fft(gg[i,:], n=ne2)
-        gl_t[i,:] = fft.fft(gl[i,:], n=ne2)
-        gr_t[i,:] = fft.fft(gr[i,:], n=ne2)
-        gl_transposed_t[i,:] = fft.fft(gl_transposed[i,:], n=ne2)
+        gg_t[i, :] = fft.fft(gg[i, :], n=ne2)
+        gl_t[i, :] = fft.fft(gl[i, :], n=ne2)
+        gr_t[i, :] = fft.fft(gr[i, :], n=ne2)
+        gl_transposed_t[i, :] = fft.fft(gl_transposed[i, :], n=ne2)
 
     # reverse and transpose
     gl_t_mod: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
@@ -300,17 +263,16 @@ def g2p_fft_mpi_cpu_inlined(
 
     for i in numba.prange(no):
         for j in numba.prange(ne2):
-            pg_t[i,j] = gg_t[i,j] * gl_t_mod[i,j]
-            pr_t[i,j] = gr_t[i,j] * gl_t_mod[i,j] + gl_t[i,j] * np.conjugate(gr_t[i,j])
-
+            pg_t[i, j] = gg_t[i, j] * gl_t_mod[i, j]
+            pr_t[i, j] = gr_t[i, j] * gl_t_mod[i, j] + gl_t[i, j] * np.conjugate(gr_t[i, j])
 
     # ifft, cutoff and multiply with pre factor
     pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     pr: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     for i in numba.prange(no):
-        pg[i,:] = fft.ifft(pg_t[i,:])
-        pr[i,:] = fft.ifft(pr_t[i,:])
+        pg[i, :] = fft.ifft(pg_t[i, :])
+        pr[i, :] = fft.ifft(pr_t[i, :])
     for i in numba.prange(no):
         for j in numba.prange(ne2):
             pg[i, j] = pg[i, j] * pre_factor
@@ -323,19 +285,12 @@ def g2p_fft_mpi_cpu_inlined(
 
     return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
 
-@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+
+@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_conv_cpu(
-    pre_factor: np.complex128,
-    ij2ji: npt.NDArray[np.int32],
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128], gr: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with convolution on the cpu(see file description). 
         The Green's function and a mapping to the transposed indices are needed.
         Is njit compiled
@@ -372,20 +327,17 @@ def g2p_conv_cpu(
             tmpl = 0
             tmpr = 0
             for ep in range(e, ne):
-                tmpg += pre_factor * gg[ij, ep] * gl[ji, ep-e]
-                tmpl += pre_factor * gl[ij, ep] * gg[ji, ep-e]
-                tmpr += pre_factor * (gr[ij, ep] * gl[ji, ep-e] +
-                gl[ij, ep] * np.conjugate(gr[ij, ep-e]))
+                tmpg += pre_factor * gg[ij, ep] * gl[ji, ep - e]
+                tmpl += pre_factor * gl[ij, ep] * gg[ji, ep - e]
+                tmpr += pre_factor * (gr[ij, ep] * gl[ji, ep - e] + gl[ij, ep] * np.conjugate(gr[ij, ep - e]))
             pg[ij, e] = tmpg
             pl[ij, e] = tmpl
             pr[ij, e] = tmpr
 
     return (pg, pl, pr)
 
-def g2p_dense(
-    gg: np.ndarray, gl: np.ndarray, gr: np.ndarray,
-    energy: np.ndarray, workers=64
-):
+
+def g2p_dense(gg: np.ndarray, gl: np.ndarray, gr: np.ndarray, energy: np.ndarray, workers=64):
     '''
     See readme, implementation of runsheng.
 
@@ -417,50 +369,36 @@ def g2p_dense(
     assert np.allclose(np.diff(energy), np.diff(energy)[0])  # evenly spaced
 
     ne = energy.shape[0]
-    denergy = energy[1]-energy[0]
+    denergy = energy[1] - energy[0]
 
-    nep = 2*(ne-1)+1  # mode="full"
-    ep = np.linspace(-(ne-1)*denergy, +(ne-1)*denergy, nep)
+    nep = 2 * (ne - 1) + 1  # mode="full"
+    ep = np.linspace(-(ne - 1) * denergy, +(ne - 1) * denergy, nep)
 
     # P^<>_ij(E') = -i*denergy/2pi \sum_{E} (G^<>_ij(E) G^><_ji(E-E'))
-    pl = linalg_cpu.correlate_3D(
-        gl, gg, mode="full", b_index="ji", method="fft", n_worker=workers
-    )
+    pl = linalg_cpu.correlate_3D(gl, gg, mode="full", b_index="ji", method="fft", n_worker=workers)
     assert pl.shape[0] == nep
 
-    pg = linalg_cpu.correlate_3D(
-        gg, gl, mode="full", b_index="ji", method="fft", n_worker=workers
-    )
+    pg = linalg_cpu.correlate_3D(gg, gl, mode="full", b_index="ji", method="fft", n_worker=workers)
 
     # P^r_ij(E') = -i*denergy/2pi \sum_{E} (G^<_ij(E) G^a_ji(E-E')+G^r_ij(E) G^<_ji(E-E'))
     # G^a=(G^r)^dagger
     ga = np.conjugate(np.einsum("ijk->ikj", gr, optimize="optimal"))
-    pr = linalg_cpu.correlate_3D(
-        gl, ga, mode="full", b_index="ji", method="fft", n_worker=workers
-    )
+    pr = linalg_cpu.correlate_3D(gl, ga, mode="full", b_index="ji", method="fft", n_worker=workers)
     del ga
-    pr += linalg_cpu.correlate_3D(
-        gr, gl, mode="full", b_index="ji", method="fft", n_worker=workers
-    )
+    pr += linalg_cpu.correlate_3D(gr, gl, mode="full", b_index="ji", method="fft", n_worker=workers)
     # times factor 2 to match gold solution, changed minus to plus
-    pre_factor = -1.0j*denergy/(np.pi)
+    pre_factor = -1.0j * denergy / (np.pi)
     pr = pre_factor * pr
     pl = pre_factor * pl
     pg = pre_factor * pg
 
-    return  pg, pl, pr, ep
+    return pg, pl, pr, ep
 
 
 @dace.program(auto_optimize=True)
-def g2p_conv_dace(pre_factor: dace.complex128[1],
-                 ij2ji: dace.int32[NO],
-                 gg: dace.complex128[NO,NE],
-                 gl: dace.complex128[NO,NE],
-                 gr: dace.complex128[NO,NE],
-                 pg: dace.complex128[NO,NE],
-                 pl: dace.complex128[NO,NE],
-                 pr: dace.complex128[NO,NE]
-                ):
+def g2p_conv_dace(pre_factor: dace.complex128[1], ij2ji: dace.int32[NO], gg: dace.complex128[NO, NE],
+                  gl: dace.complex128[NO, NE], gr: dace.complex128[NO, NE], pg: dace.complex128[NO, NE],
+                  pl: dace.complex128[NO, NE], pr: dace.complex128[NO, NE]):
     """Todo finalize and test with new dace version
 
     Args:
@@ -477,21 +415,15 @@ def g2p_conv_dace(pre_factor: dace.complex128[1],
         for e in range(NE):
             for ep in range(e, NE):
                 ji = ij2ji[ij]
-                pg[ij, e] += pre_factor[0] * gg[ij, ep] * gl[ji, ep-e]
-                pl[ij, e] += pre_factor[0] * gl[ij, ep] * gg[ji, ep-e]
-                pr[ij, e] += pre_factor[0] * (gr[ij, ep] * gl[ji, ep-e] + gl[ij, ep] * np.conjugate(gr[ij, ep-e]))
+                pg[ij, e] += pre_factor[0] * gg[ij, ep] * gl[ji, ep - e]
+                pl[ij, e] += pre_factor[0] * gl[ij, ep] * gg[ji, ep - e]
+                pr[ij, e] += pre_factor[0] * (gr[ij, ep] * gl[ji, ep - e] + gl[ij, ep] * np.conjugate(gr[ij, ep - e]))
+
 
 @dace.program(auto_optimize=True)
-def g2p_fft_dace(
-                 pre_factor: dace.complex128[1],
-                 ij2ji: dace.int32[NO],
-                 gg: dace.complex128[NO,NE],
-                 gl: dace.complex128[NO,NE],
-                 gr: dace.complex128[NO,NE],
-                 pg: dace.complex128[NO,NE],
-                 pl: dace.complex128[NO,NE],
-                 pr: dace.complex128[NO,NE]
-                ):
+def g2p_fft_dace(pre_factor: dace.complex128[1], ij2ji: dace.int32[NO], gg: dace.complex128[NO, NE],
+                 gl: dace.complex128[NO, NE], gr: dace.complex128[NO, NE], pg: dace.complex128[NO, NE],
+                 pl: dace.complex128[NO, NE], pr: dace.complex128[NO, NE]):
     """Todo finalize, not working state
 
     Args:
@@ -505,24 +437,23 @@ def g2p_fft_dace(
         pr (dace.complex128[NO,NE]): _description_
     """
     # fft
-    gg_t = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    gl_t = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    gr_t = dace.ndarray((NO,2*NE), dtype=dace.complex128)
+    gg_t = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    gl_t = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    gr_t = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
     for i in dace.map[0:NO]:
-        gg_t[i,:] = fft.fft(gg[i,:], n=2*NE)
-        gl_t[i,:] = fft.fft(gl[i,:], n=2*NE)
-        gr_t[i,:] = fft.fft(gr[i,:], n=2*NE)
-
+        gg_t[i, :] = fft.fft(gg[i, :], n=2 * NE)
+        gl_t[i, :] = fft.fft(gl[i, :], n=2 * NE)
+        gr_t[i, :] = fft.fft(gr[i, :], n=2 * NE)
 
     # reverse and transpose
-    gl_t_mod: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    gg_t_mod: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
+    gl_t_mod: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    gg_t_mod: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
 
-    tmpl: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    tmpg: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
+    tmpl: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    tmpg: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
 
     for i in dace.map[0:NO]:
-        for j in dace.map[0:2*NE]:
+        for j in dace.map[0:2 * NE]:
             tmpl[i, j] = gl_t[i, -j]
             tmpg[i, j] = gg_t[i, -j]
     for i in dace.map[0:NO]:
@@ -530,25 +461,23 @@ def g2p_fft_dace(
         gg_t_mod[ij2ji[i], :] = tmpg[i, :]
 
     # multiply elementwise
-    pg_t: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    pl_t: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
-    pr_t: npt.NDArray[np.complex128] = dace.ndarray((NO,2*NE), dtype=dace.complex128)
+    pg_t: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    pl_t: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
+    pr_t: npt.NDArray[np.complex128] = dace.ndarray((NO, 2 * NE), dtype=dace.complex128)
 
     for i in dace.map[0:NO]:
-        for j in dace.map[0:2*NE]:
-            pg_t[i,j] = gg_t[i,j] * gl_t_mod[i,j]
-            pl_t[i,j] = gl_t[i,j] * gg_t_mod[i,j]
-            pr_t[i,j] = gr_t[i,j] * gl_t_mod[i,j] + gl_t[i,j] * np.conjugate(gr_t[i,j])
+        for j in dace.map[0:2 * NE]:
+            pg_t[i, j] = gg_t[i, j] * gl_t_mod[i, j]
+            pl_t[i, j] = gl_t[i, j] * gg_t_mod[i, j]
+            pr_t[i, j] = gr_t[i, j] * gl_t_mod[i, j] + gl_t[i, j] * np.conjugate(gr_t[i, j])
 
     # ifft, cutoff and multiply with pre factor
     for i in dace.map[0:NO]:
-        pg[i,:] = fft.ifft(pg_t[i,:])[:NE]
-        pl[i,:] = fft.ifft(pl_t[i,:])[:NE]
-        pr[i,:] = fft.ifft(pr_t[i,:])[:NE]
+        pg[i, :] = fft.ifft(pg_t[i, :])[:NE]
+        pl[i, :] = fft.ifft(pl_t[i, :])[:NE]
+        pr[i, :] = fft.ifft(pr_t[i, :])[:NE]
     for i in dace.map[0:NO]:
         for j in dace.map[0:NE]:
             pg[i, j] = pg[i, j] * pre_factor[0]
             pl[i, j] = pl[i, j] * pre_factor[0]
             pr[i, j] = pr[i, j] * pre_factor[0]
-
-

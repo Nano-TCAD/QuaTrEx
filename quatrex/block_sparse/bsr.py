@@ -1,3 +1,4 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """
 An extension to SciPy's sparse bsr_array type with other useful methods.
 
@@ -34,11 +35,11 @@ class bsr(sp.bsr_array):
 
     def _get_col_indices(self, row: int) -> np.ndarray:
         """Returns the indices of the blocks in the given block row."""
-        return self.indices[self.indptr[row] : self.indptr[row + 1]]
+        return self.indices[self.indptr[row]:self.indptr[row + 1]]
 
     def _get_data_blocks(self, row: int) -> np.ndarray:
         """Returns the data of the blocks in the given block row."""
-        return self.data[self.indptr[row] : self.indptr[row + 1]]
+        return self.data[self.indptr[row]:self.indptr[row + 1]]
 
     def _check_block_in_bounds(self, row: int, col: int):
         """Checks if the given block is in bounds."""
@@ -145,10 +146,8 @@ class bsr(sp.bsr_array):
             # For some reason, setting an incompatible blocksize raises
             # a TypeError instead of a ValueError.
             if not enforce:
-                raise ValueError(
-                    f"Invalid block size {blocksize}. "
-                    "Use enforce=True to enforce the block size."
-                )
+                raise ValueError(f"Invalid block size {blocksize}. "
+                                 "Use enforce=True to enforce the block size.")
             return self._enforce_blocksize(blocksize)
 
     def _enforce_blocksize(self, blocksize: tuple[int, int]) -> "bsr":
@@ -242,7 +241,7 @@ class bsr(sp.bsr_array):
 
         r, c = 0, 0
         for i, (rr, cc) in enumerate(shapes):
-            out[r : r + rr, c : c + cc] += blocks[i]
+            out[r:r + rr, c:c + cc] += blocks[i]
             r += rr - overlap
             c += cc - overlap
         return bsr(out, blocksize=blocksize)

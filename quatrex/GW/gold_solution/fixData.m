@@ -1,3 +1,5 @@
+% Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 function dataOut  = fixData(largerIdx, smallerIdx, dataIn)
 % FIXDATA - Adjusts dataIn based on a set of larger and smaller indices
 %

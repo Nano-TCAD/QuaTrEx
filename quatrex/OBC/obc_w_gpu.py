@@ -1,3 +1,4 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """
 Containing functions to apply the OBC for the screened interaction
 
@@ -20,15 +21,9 @@ from OBC import sancho
 from OBC import dL_OBC_eigenmode_gpu
 import typing
 
-def obc_w_sl(
-    vh: cusparse.spmatrix,
-    pg: cusparse.spmatrix,
-    pl: cusparse.spmatrix,
-    pr: cusparse.spmatrix,
-    nao: int
-) -> typing.Tuple[cusparse.spmatrix,
-                  cusparse.spmatrix,
-                  cusparse.spmatrix]:
+
+def obc_w_sl(vh: cusparse.spmatrix, pg: cusparse.spmatrix, pl: cusparse.spmatrix, pr: cusparse.spmatrix,
+             nao: int) -> typing.Tuple[cusparse.spmatrix, cusparse.spmatrix, cusparse.spmatrix]:
     """
     Calculates for the additional helper variables.
 
@@ -42,7 +37,6 @@ def obc_w_sl(
     Returns:
         typing.Tuple[cusparse.csr_matrix, cusparse.csr_matrix, cusparse.csr_matrix]: M^{r}\left(E\right), L^{>}\left(E\right), L^{<}\left(E\right)
     """
-
 
     vh_ct = vh.conjugate().T
 
@@ -114,28 +108,27 @@ def obc_w_sc(
     lb_vec = bmax - bmin + 1
     # length of first and last block
     lb_start = lb_vec[0]
-    lb_end = lb_vec[nb-1]
+    lb_end = lb_vec[nb - 1]
 
     # slice block start diagonal and slice block start off diagonal
-    slb_sd = slice(0,lb_start)
-    slb_so = slice(lb_start,2*lb_start)
+    slb_sd = slice(0, lb_start)
+    slb_so = slice(lb_start, 2 * lb_start)
     # slice block end diagonal and slice block end off diagonal
-    slb_ed = slice(nao-lb_end,nao)
-    slb_eo = slice(nao-2*lb_end,nao-lb_end)
+    slb_ed = slice(nao - lb_end, nao)
+    slb_eo = slice(nao - 2 * lb_end, nao - lb_end)
 
     # from M^{r}\left(E\right)/L^{\lessgtr}\left(E\right)\hat(V)\left(E\right)
     mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_gpu.get_mm_obc_dense(
-                vh[slb_sd,slb_sd].toarray(order="C"), vh[slb_sd,slb_so].toarray(order="C"),
-                pg[slb_sd,slb_sd].toarray(order="C"), pg[slb_sd,slb_so].toarray(order="C"),
-                pl[slb_sd,slb_sd].toarray(order="C"), pl[slb_sd,slb_so].toarray(order="C"),
-                pr[slb_sd,slb_sd].toarray(order="C"), pr[slb_sd,slb_so].toarray(order="C"),
-                nbc)
+        vh[slb_sd, slb_sd].toarray(order="C"), vh[slb_sd, slb_so].toarray(order="C"), pg[slb_sd,
+                                                                                         slb_sd].toarray(order="C"),
+        pg[slb_sd, slb_so].toarray(order="C"), pl[slb_sd, slb_sd].toarray(order="C"), pl[slb_sd,
+                                                                                         slb_so].toarray(order="C"),
+        pr[slb_sd, slb_sd].toarray(order="C"), pr[slb_sd, slb_so].toarray(order="C"), nbc)
     mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_gpu.get_mm_obc_dense(
-                vh[slb_ed,slb_ed].toarray(order="C"), vh[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pg[slb_ed,slb_ed].toarray(order="C"), -pg[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pl[slb_ed,slb_ed].toarray(order="C"), -pl[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pr[slb_ed,slb_ed].toarray(order="C"), pr[slb_ed,slb_eo].transpose().toarray(order="C"),
-                nbc)
+        vh[slb_ed, slb_ed].toarray(order="C"), vh[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pg[slb_ed, slb_ed].toarray(order="C"), -pg[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pl[slb_ed, slb_ed].toarray(order="C"), -pl[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pr[slb_ed, slb_ed].toarray(order="C"), pr[slb_ed, slb_eo].transpose().toarray(order="C"), nbc)
     # write to output
     mr_sf[0] = mr_s[0]
     mr_sf[1] = mr_s[1]
@@ -165,6 +158,7 @@ def obc_w_sc(
     dll_sf[0] = dll_s[0]
     dll_ef[0] = dll_e[1]
 
+
 def obc_w_sc_alt(
     pg: cusparse.csr_matrix,
     pl: cusparse.csr_matrix,
@@ -173,20 +167,10 @@ def obc_w_sc_alt(
     bmax: npt.NDArray[np.int32],
     bmin: npt.NDArray[np.int32],
     nbc: int,
-) -> typing.Tuple[typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray,
-                  cp.ndarray]:
+) -> typing.Tuple[typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+                  cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray, cp.ndarray]:
     """
     Calculates the blocks needed for the boundary correction.
 
@@ -208,29 +192,27 @@ def obc_w_sc_alt(
     lb_vec = bmax - bmin + 1
     # length of first and last block
     lb_start = lb_vec[0]
-    lb_end = lb_vec[nb-1]
+    lb_end = lb_vec[nb - 1]
 
     # slice block start diagonal and slice block start off diagonal
-    slb_sd = slice(0,lb_start)
-    slb_so = slice(lb_start,2*lb_start)
+    slb_sd = slice(0, lb_start)
+    slb_so = slice(lb_start, 2 * lb_start)
     # slice block end diagonal and slice block end off diagonal
-    slb_ed = slice(nao-lb_end,nao)
-    slb_eo = slice(nao-2*lb_end,nao-lb_end)
+    slb_ed = slice(nao - lb_end, nao)
+    slb_eo = slice(nao - 2 * lb_end, nao - lb_end)
 
     # from M^{r}\left(E\right)/L^{\lessgtr}\left(E\right)\hat(V)\left(E\right)
     mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_gpu.get_mm_obc_dense(
-                vh[slb_sd,slb_sd].toarray(order="C"), vh[slb_sd,slb_so].toarray(order="C"),
-                pg[slb_sd,slb_sd].toarray(order="C"), pg[slb_sd,slb_so].toarray(order="C"),
-                pl[slb_sd,slb_sd].toarray(order="C"), pl[slb_sd,slb_so].toarray(order="C"),
-                pr[slb_sd,slb_sd].toarray(order="C"), pr[slb_sd,slb_so].toarray(order="C"),
-                nbc)
+        vh[slb_sd, slb_sd].toarray(order="C"), vh[slb_sd, slb_so].toarray(order="C"), pg[slb_sd,
+                                                                                         slb_sd].toarray(order="C"),
+        pg[slb_sd, slb_so].toarray(order="C"), pl[slb_sd, slb_sd].toarray(order="C"), pl[slb_sd,
+                                                                                         slb_so].toarray(order="C"),
+        pr[slb_sd, slb_sd].toarray(order="C"), pr[slb_sd, slb_so].toarray(order="C"), nbc)
     mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_gpu.get_mm_obc_dense(
-                vh[slb_ed,slb_ed].toarray(order="C"), vh[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pg[slb_ed,slb_ed].toarray(order="C"), -pg[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pl[slb_ed,slb_ed].toarray(order="C"), -pl[slb_ed,slb_eo].conjugate().transpose().toarray(order="C"),
-                pr[slb_ed,slb_ed].toarray(order="C"), pr[slb_ed,slb_eo].transpose().toarray(order="C"),
-                nbc)
+        vh[slb_ed, slb_ed].toarray(order="C"), vh[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pg[slb_ed, slb_ed].toarray(order="C"), -pg[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pl[slb_ed, slb_ed].toarray(order="C"), -pl[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"),
+        pr[slb_ed, slb_ed].toarray(order="C"), pr[slb_ed, slb_eo].transpose().toarray(order="C"), nbc)
 
-    return ((mr_s, mr_e), (lg_s, lg_e), (ll_s, ll_e),
-            (vh_s[0], vh_e[1]), (dmr_s[0], dmr_e[1]),
-            (dlg_s[0], dlg_e[1]), (dll_s[0], dll_e[1]))
+    return ((mr_s, mr_e), (lg_s, lg_e), (ll_s, ll_e), (vh_s[0], vh_e[1]), (dmr_s[0], dmr_e[1]), (dlg_s[0], dlg_e[1]),
+            (dll_s[0], dll_e[1]))

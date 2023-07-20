@@ -1,3 +1,5 @@
+% Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 function changeFormatV(pathV)
     % function to change format from matlab sparse
     % to directly save the three vectors independently

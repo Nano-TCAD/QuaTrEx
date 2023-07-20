@@ -1,16 +1,16 @@
-"""
-Implemented multi-node GPU polarization computations.
-Includes all MPI communication needed for the whole chain.
-Assumes every node has a GPU connected.
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Implemented multi-node GPU polarization computations. Includes all MPI communication needed for the whole chain.
+    Assumes every node has a GPU connected. """
+
 import mpi4py
 import sys
 import numpy as np
 import numpy.typing as npt
 import os
 import argparse
+
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
-mpi4py.rc.finalize = False    # do not finalize MPI automatically
+mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
 main_path = os.path.abspath(os.path.dirname(__file__))
@@ -39,29 +39,26 @@ if __name__ == "__main__":
         # read gold solution
         solution_path = os.path.join("/scratch/quatrex_data", "data_GPWS_04.mat")
 
-        parser = argparse.ArgumentParser(
-            description="Tests the mpi implementation of the polarization calculation"
-        )
+        parser = argparse.ArgumentParser(description="Tests the mpi implementation of the polarization calculation")
         parser.add_argument("-f", "--file", default=solution_path, required=False)
 
         args = parser.parse_args()
 
         # load greens function
-        energy, rows, columns, gg_gold, gl_gold, gr_gold    = read_solution.load_x(args.file, "g")
+        energy, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x(args.file, "g")
         # load polarization
-        _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file, "p")
+        _, _, _, pg_gold, pl_gold, pr_gold = read_solution.load_x(args.file, "p")
 
-        ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
-        denergy:    npt.NDArray[np.double]  = np.array([energy[1] - energy[0]], dtype=np.double)
-        ne:         np.int32                = np.int32(energy.shape[0])
-        no:         np.int32                = np.int32(columns.shape[0])
-        pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
+        ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
+        denergy: npt.NDArray[np.double] = np.array([energy[1] - energy[0]], dtype=np.double)
+        ne: np.int32 = np.int32(energy.shape[0])
+        no: np.int32 = np.int32(columns.shape[0])
+        pre_factor: np.complex128 = -1.0j * denergy / (np.pi)
 
         data_shape = np.array(gg_gold.shape)
 
         # print size of data
         print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
-
 
     # broadcast needed quantities-----------------------------------------------
 
@@ -71,8 +68,6 @@ if __name__ == "__main__":
     # transposing vector buffer
     if rank != 0:
         ij2ji = np.empty(data_shape[0], dtype=np.int32)
-
-
 
     # broadcast energy step
     comm.Bcast(pre_factor, root=0)
@@ -87,15 +82,13 @@ if __name__ == "__main__":
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
-    count[:, size-1] += data_shape % size
+    count[:, size - 1] += data_shape % size
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
 
     # print rank distribution
-    print(
-    f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", 
-    name)
+    print(f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", name)
 
     # create needed data types--------------------------------------------------
 
@@ -125,8 +118,7 @@ if __name__ == "__main__":
     # receive types g2p
     # vector of size of #ranks
     # multi column data type for every rank size #energy not divisible
-    G2P_R = np.array([BASE_TYPE.Create_vector(
-        count[0, rank], count[1, i], data_shape[1]) for i in range(size)])
+    G2P_R = np.array([BASE_TYPE.Create_vector(count[0, rank], count[1, i], data_shape[1]) for i in range(size)])
     G2P_R_RIZ = np.empty_like(G2P_R)
     for i in range(size):
         G2P_R_RIZ[i] = G2P_R[i].Create_resized(0, base_size)
@@ -143,21 +135,17 @@ if __name__ == "__main__":
     # receive types p2g
     # vector of size of #ranks
     # multi column data type for every rank size #nnz not divisible
-    P2G_R = np.array([BASE_TYPE.Create_vector(
-        count[1, rank], count[0, i], data_shape[0]) for i in range(size)])
+    P2G_R = np.array([BASE_TYPE.Create_vector(count[1, rank], count[0, i], data_shape[0]) for i in range(size)])
     P2G_R_RIZ = np.empty_like(P2G_R)
     for i in range(size):
         P2G_R_RIZ[i] = P2G_R[i].Create_resized(0, base_size)
         MPI.Datatype.Commit(P2G_R[i])
         MPI.Datatype.Commit(P2G_R_RIZ[i])
 
-
     # define helper communication functions-------------------------------------
     # captures all variables from the outside (comm/count/disp/rank/size/types)
 
-    def scatter_master(inp: npt.NDArray[np.complex128],
-                       outp: npt.NDArray[np.complex128],
-                     transpose_net: bool = True):
+    def scatter_master(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = True):
         if transpose_net:
             comm.Scatterv([inp, count[1, :], disp[1, :], COLUMN_RIZ], outp, root=0)
         else:
@@ -165,11 +153,9 @@ if __name__ == "__main__":
                 inp_trans = np.copy(inp.T, order="C")
             else:
                 inp_trans = None
-            comm.Scatterv([inp_trans, count[1, :]*data_shape[0], disp[1, :]*data_shape[0], BASE_TYPE], outp, root=0)
+            comm.Scatterv([inp_trans, count[1, :] * data_shape[0], disp[1, :] * data_shape[0], BASE_TYPE], outp, root=0)
 
-    def gather_master(inp: npt.NDArray[np.complex128],
-                      outp: npt.NDArray[np.complex128],
-                      transpose_net: bool = True):
+    def gather_master(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = True):
         if transpose_net:
             comm.Gatherv(inp, [outp, count[1, :], disp[1, :], COLUMN_RIZ], root=0)
         else:
@@ -177,45 +163,40 @@ if __name__ == "__main__":
                 out_trans = np.copy(outp.T, order="C")
             else:
                 out_trans = None
-            comm.Gatherv(inp, [out_trans, count[1, :]*data_shape[0], disp[1, :]*data_shape[0], BASE_TYPE], root=0)
+            comm.Gatherv(inp, [out_trans, count[1, :] * data_shape[0], disp[1, :] * data_shape[0], BASE_TYPE], root=0)
             if rank == 0:
-                outp[:,:] = out_trans.T
-    
-    def alltoall_g2p(inp: npt.NDArray[np.complex128],
-                     outp: npt.NDArray[np.complex128],
-                     transpose_net: bool = True):
-        if transpose_net:
-            comm.Alltoallw(
-            [inp, count[0, :], disp[0, :]*base_size, np.repeat(G2P_S_RIZ, size)],
-            [outp, np.repeat([1], size), disp[1, :]*base_size, G2P_R_RIZ])
-        else:
-            inp_trans = np.copy(inp.T, order="C")
-            comm.Alltoallw(
-            [inp_trans, count[0,:]*count[1, rank], disp[0, :]*count[1, rank]*base_size, np.repeat(BASE_TYPE, size)],
-            [outp, np.repeat([1], size), disp[1, :]*base_size, G2P_R_RIZ])
+                outp[:, :] = out_trans.T
 
-    def alltoall_p2g(inp: npt.NDArray[np.complex128],
-                     outp: npt.NDArray[np.complex128],
-                     transpose_net: bool = True):
+    def alltoall_g2p(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = True):
         if transpose_net:
-            comm.Alltoallw(
-            [inp, count[1, :], disp[1, :]*base_size, np.repeat(P2G_S_RIZ, size)],
-            [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
+            comm.Alltoallw([inp, count[0, :], disp[0, :] * base_size,
+                            np.repeat(G2P_S_RIZ, size)],
+                           [outp, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
         else:
             inp_trans = np.copy(inp.T, order="C")
-            comm.Alltoallw(
-            [inp_trans, count[1,:]*count[0, rank], disp[1, :]*count[0, rank]*base_size, np.repeat(BASE_TYPE, size)],
-            [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
+            comm.Alltoallw([
+                inp_trans, count[0, :] * count[1, rank], disp[0, :] * count[1, rank] * base_size,
+                np.repeat(BASE_TYPE, size)
+            ], [outp, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
+
+    def alltoall_p2g(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = True):
+        if transpose_net:
+            comm.Alltoallw([inp, count[1, :], disp[1, :] * base_size,
+                            np.repeat(P2G_S_RIZ, size)],
+                           [outp, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
+        else:
+            inp_trans = np.copy(inp.T, order="C")
+            comm.Alltoallw([
+                inp_trans, count[1, :] * count[0, rank], disp[1, :] * count[0, rank] * base_size,
+                np.repeat(BASE_TYPE, size)
+            ], [outp, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
 
     # distribute greens function according to RGF step--------------------------
 
     # create local buffers
-    gg_rgf = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    gl_rgf = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    gr_rgf = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
+    gg_rgf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+    gl_rgf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+    gr_rgf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # communicate from master to all other rank
     if rank == 0:
@@ -227,23 +208,17 @@ if __name__ == "__main__":
         scatter_master(None, gl_rgf)
         scatter_master(None, gr_rgf)
 
-
     # transpose of gl at every rank---------------------------------------------
 
-    gl_trans_rgf = np.copy(gl_rgf[:,ij2ji], order="C")
-
+    gl_trans_rgf = np.copy(gl_rgf[:, ij2ji], order="C")
 
     # distribute according to g2p step------------------------------------------
 
     # create local buffers
-    gg_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gl_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gr_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
-    gl_trans_g2p = np.empty((count[0, rank], data_shape[1]),
-                      dtype=np.complex128, order="C")
+    gg_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+    gl_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+    gr_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+    gl_trans_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
 
     # use of all to all w since not divisible
     alltoall_g2p(gg_rgf, gg_g2p)
@@ -253,29 +228,19 @@ if __name__ == "__main__":
 
     # calculate the polarization at every rank----------------------------------
 
-    pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu_streams(pre_factor[0],
-                                                        gg_g2p,
-                                                        gl_g2p,
-                                                        gr_g2p,
-                                                        gl_trans_g2p)
-
-
+    pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu_streams(pre_factor[0], gg_g2p, gl_g2p, gr_g2p, gl_trans_g2p)
 
     # distribute polarization function according to RGF step--------------------
 
     # create local buffers
-    pg_p2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    pl_p2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
-    pr_p2g = np.empty((count[1, rank], data_shape[0]),
-                      dtype=np.complex128, order="C")
+    pg_p2g = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+    pl_p2g = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+    pr_p2g = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # use of all to all w since not divisible
     alltoall_p2g(pg_g2p, pg_p2g)
     alltoall_p2g(pl_g2p, pl_p2g)
     alltoall_p2g(pr_g2p, pr_p2g)
-
 
     # culminate on master again-------------------------------------------------
 
@@ -292,7 +257,6 @@ if __name__ == "__main__":
         gather_master(pg_p2g, None)
         gather_master(pl_p2g, None)
         gather_master(pr_p2g, None)
-
 
     # test against gold solution------------------------------------------------
 
@@ -315,7 +279,6 @@ if __name__ == "__main__":
         assert np.allclose(pr_gold, pr_mpi)
         print("The mpi implementation is correct.")
 
-
     # free datatypes------------------------------------------------------------
 
     MPI.Datatype.Free(COLUMN_RIZ)
@@ -331,7 +294,6 @@ if __name__ == "__main__":
         MPI.Datatype.Free(G2P_R[i])
         MPI.Datatype.Free(P2G_R_RIZ[i])
         MPI.Datatype.Free(P2G_R[i])
-
 
     # finalize
     MPI.Finalize()

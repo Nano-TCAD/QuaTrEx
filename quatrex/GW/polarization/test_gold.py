@@ -1,6 +1,6 @@
-"""Tests the different polarization implementation 
-a reference solution from a matlab code
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Tests the different polarization implementation a reference solution from a matlab code. """
+
 import numpy as np
 import numpy.typing as npt
 import sys
@@ -27,16 +27,16 @@ if utils_gpu.gpu_avail():
 if __name__ == "__main__":
     # parse the possible arguments
     solution_path = os.path.join("/usr/scratch/mont-fort17/dleonard/CNT/", "data_GPWS_04.mat")
-    parser = argparse.ArgumentParser(
-        description="Tests different implementation of the polarization calculation"
-    )
-    parser.add_argument("-t", "--type", default="cpu_fft",
-                        choices=["gpu_fft", "gpu_conv", "gpu_fft_mpi",
-                                 "gpu_fft_mpi_streams", "gpu_fft_mpi_batched",
-                                 "cpu_fft_inlined", "cpu_fft",
-                                 "cpu_fft_mpi", "cpu_fft_mpi_inlined",
-                                 "cpu_conv", "cpu_conv_dace",
-                                 "cpu_dense"], required=False)
+    parser = argparse.ArgumentParser(description="Tests different implementation of the polarization calculation")
+    parser.add_argument("-t",
+                        "--type",
+                        default="cpu_fft",
+                        choices=[
+                            "gpu_fft", "gpu_conv", "gpu_fft_mpi", "gpu_fft_mpi_streams", "gpu_fft_mpi_batched",
+                            "cpu_fft_inlined", "cpu_fft", "cpu_fft_mpi", "cpu_fft_mpi_inlined", "cpu_conv",
+                            "cpu_conv_dace", "cpu_dense"
+                        ],
+                        required=False)
     parser.add_argument("-f", "--file", default=solution_path, required=False)
     args = parser.parse_args()
 
@@ -51,15 +51,15 @@ if __name__ == "__main__":
     print("Number of used numba threads: ", numba.get_num_threads())
 
     # load greens function
-    energy, rows, columns, gg_gold, gl_gold, gr_gold    = read_solution.load_x(args.file, "g")
+    energy, rows, columns, gg_gold, gl_gold, gr_gold = read_solution.load_x(args.file, "g")
     # load polarization
-    _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file, "p")
+    _, _, _, pg_gold, pl_gold, pr_gold = read_solution.load_x(args.file, "p")
 
-    ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
-    denergy:    np.double               = energy[1] - energy[0]
-    ne:         np.int32                = np.int32(energy.shape[0])
-    no:         np.int32                = np.int32(columns.shape[0])
-    pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
+    ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
+    denergy: np.double = energy[1] - energy[0]
+    ne: np.int32 = np.int32(energy.shape[0])
+    no: np.int32 = np.int32(columns.shape[0])
+    pre_factor: np.complex128 = -1.0j * denergy / (np.pi)
 
     # sanity checks
     assert gg_gold.ndim == 2
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     # assume energy is the second index
     assert np.shape(energy)[0] == np.shape(gg_gold)[1]
-    
+
     # assume energy is evenly spaced
     assert np.allclose(np.diff(energy), np.diff(energy)[0])
 
@@ -89,11 +89,11 @@ if __name__ == "__main__":
     # assert np.allclose(gg_gold - gl_gold, gr_gold - gr_gold[ij2ji, :].conjugate())
 
     # copy input to test
-    energy_copy:    npt.NDArray[np.double]      = np.copy(energy)
-    ij2ji_copy:     npt.NDArray[np.int32]       = np.copy(ij2ji)
-    gg_copy:        npt.NDArray[np.complex128]  = np.copy(gg_gold)
-    gl_copy:        npt.NDArray[np.complex128]  = np.copy(gl_gold)
-    gr_copy:        npt.NDArray[np.complex128]  = np.copy(gr_gold)
+    energy_copy: npt.NDArray[np.double] = np.copy(energy)
+    ij2ji_copy: npt.NDArray[np.int32] = np.copy(ij2ji)
+    gg_copy: npt.NDArray[np.complex128] = np.copy(gg_gold)
+    gl_copy: npt.NDArray[np.complex128] = np.copy(gl_gold)
+    gr_copy: npt.NDArray[np.complex128] = np.copy(gr_gold)
 
     print("Number of energy points: ", ne)
     print("Number of non zero elements: ", no)
@@ -109,12 +109,15 @@ if __name__ == "__main__":
         size_dense = gg_dense.nbytes / (1024**3)
         print(f"Size of one dense greens function in GB: {size_dense:.2f} GB")
 
-        pg_cpu_dense, pl_cpu_dense, pr_cpu_dense, ep_dense = g2p_cpu.g2p_dense(
-            gg_dense, gl_dense, gr_dense, energy, workers=numba.get_num_threads())
+        pg_cpu_dense, pl_cpu_dense, pr_cpu_dense, ep_dense = g2p_cpu.g2p_dense(gg_dense,
+                                                                               gl_dense,
+                                                                               gr_dense,
+                                                                               energy,
+                                                                               workers=numba.get_num_threads())
 
         # define energy interval for dense
         energy_s: np.int32 = ne - 1
-        energy_n: np.int32 = 2*ne - 1
+        energy_n: np.int32 = 2 * ne - 1
 
         # assert physical identity
         # P^{>}_{ij}\left(E\right) = -P^{<}_{ij}\left(-E\right)^{*}
@@ -153,29 +156,25 @@ if __name__ == "__main__":
         # testing on cpu or gpu
         if args.type == "cpu_fft":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu(
-                pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
-            
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu(pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+
         elif args.type == "cpu_fft_mpi":
 
-            gl_gold_transposed = gl_gold[ij2ji,:]
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+            gl_gold_transposed = gl_gold[ij2ji, :]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu(pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
 
         elif args.type == "cpu_fft_inlined":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(
-                pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_cpu_inlined(pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
         elif args.type == "cpu_fft_mpi_inlined":
 
-            gl_gold_transposed = gl_gold[ij2ji,:]
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
-    
+            gl_gold_transposed = gl_gold[ij2ji, :]
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, gg_gold, gl_gold, gr_gold,
+                                                                     gl_gold_transposed)
+
         elif args.type == "cpu_conv":
 
-            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(
-                pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
+            pg_cpu, pl_cpu, pr_cpu = g2p_cpu.g2p_conv_cpu(pre_factor, ij2ji, gg_gold, gl_gold, gr_gold)
 
         elif args.type == "cpu_conv_dace":
 
@@ -183,7 +182,6 @@ if __name__ == "__main__":
             pg_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
             pl_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
             pr_cpu = np.zeros_like(gg_gold, dtype=np.cdouble)
-
 
             # compile to SDFG
             sdfg: dace.SDFG = g2p_cpu.g2p_conv_dace.to_sdfg(simplify=True)
@@ -194,19 +192,25 @@ if __name__ == "__main__":
             csdfg = sdfg.compile()
 
             # call compiled function
-            csdfg(pre_factor=np.array([pre_factor]), ij2ji=ij2ji, gg=gg_gold,
-                gl=gl_gold, gr=gr_gold, pg=pg_cpu, pl=pl_cpu, pr=pr_cpu, NE=ne, NO=no)
-
+            csdfg(pre_factor=np.array([pre_factor]),
+                  ij2ji=ij2ji,
+                  gg=gg_gold,
+                  gl=gl_gold,
+                  gr=gr_gold,
+                  pg=pg_cpu,
+                  pl=pl_cpu,
+                  pr=pr_cpu,
+                  NE=ne,
+                  NO=no)
 
         elif args.type == "gpu_fft":
             # load data to gpu
-            ij2ji_gpu:   cp.ndarray = cp.asarray(ij2ji)
+            ij2ji_gpu: cp.ndarray = cp.asarray(ij2ji)
             gg_gold_gpu: cp.ndarray = cp.asarray(gg_gold)
             gl_gold_gpu: cp.ndarray = cp.asarray(gl_gold)
             gr_gold_gpu: cp.ndarray = cp.asarray(gr_gold)
 
-            pg_gpu, pl_gpu, pr_gpu = g2p_gpu.g2p_fft_gpu(
-                pre_factor, ij2ji_gpu, gg_gold_gpu, gl_gold_gpu, gr_gold_gpu)
+            pg_gpu, pl_gpu, pr_gpu = g2p_gpu.g2p_fft_gpu(pre_factor, ij2ji_gpu, gg_gold_gpu, gl_gold_gpu, gr_gold_gpu)
 
             # load data to cpu
             pg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pg_gpu)
@@ -214,12 +218,11 @@ if __name__ == "__main__":
             pr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pr_gpu)
 
         elif args.type == "gpu_fft_mpi":
-            gl_gold_transposed = gl_gold[ij2ji,:]
-            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu(
-                pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
+            gl_gold_transposed = gl_gold[ij2ji, :]
+            pg_cpu, pl_cpu, pr_cpu = g2p_gpu.g2p_fft_mpi_gpu(pre_factor, gg_gold, gl_gold, gr_gold, gl_gold_transposed)
 
         elif args.type == "gpu_fft_mpi_streams":
-            gl_gold_transposed = gl_gold[ij2ji,:]
+            gl_gold_transposed = gl_gold[ij2ji, :]
             # allocate streams
             # start gpu streams
             streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
@@ -231,12 +234,11 @@ if __name__ == "__main__":
             pg_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
             pl_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
             pr_cpu = linalg_gpu.aloc_pinned_empty_like(gg_gold)
-            g2p_gpu.g2p_fft_mpi_gpu_streams(
-                pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu,
-                pg_cpu, pl_cpu, pr_cpu, streams)
-            
+            g2p_gpu.g2p_fft_mpi_gpu_streams(pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu, pg_cpu, pl_cpu,
+                                            pr_cpu, streams)
+
         elif args.type == "gpu_fft_mpi_batched":
-            gl_gold_transposed = gl_gold[ij2ji,:]
+            gl_gold_transposed = gl_gold[ij2ji, :]
             # allocate streams
             # start gpu streams
             streams = [cp.cuda.Stream(non_blocking=True) for i in range(4)]
@@ -252,42 +254,36 @@ if __name__ == "__main__":
             # chose batch size
             batch_size = no // 5
 
-            g2p_gpu.g2p_fft_mpi_gpu_batched(
-                pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu,
-                pg_cpu, pl_cpu, pr_cpu, streams, batch_size)
+            g2p_gpu.g2p_fft_mpi_gpu_batched(pre_factor, gg_cpu, gl_cpu, gr_cpu, gl_transposed_cpu, pg_cpu, pl_cpu,
+                                            pr_cpu, streams, batch_size)
 
         elif args.type == "gpu_conv":
             # load data to gpu
-            ij2ji_gpu:      cp.ndarray = cp.asarray(ij2ji)
-            gg_gold_gpu:    cp.ndarray = cp.asarray(gg_gold, order="C")
-            gl_gold_gpu:    cp.ndarray = cp.asarray(gl_gold, order="C")
-            gr_gold_gpu:    cp.ndarray = cp.asarray(gr_gold, order="C")
-            pg_gpu:         cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
-            pl_gpu:         cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
-            pr_gpu:         cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
-            
+            ij2ji_gpu: cp.ndarray = cp.asarray(ij2ji)
+            gg_gold_gpu: cp.ndarray = cp.asarray(gg_gold, order="C")
+            gl_gold_gpu: cp.ndarray = cp.asarray(gl_gold, order="C")
+            gr_gold_gpu: cp.ndarray = cp.asarray(gr_gold, order="C")
+            pg_gpu: cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
+            pl_gpu: cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
+            pr_gpu: cp.ndarray = cp.empty_like(gg_gold_gpu, dtype=cp.complex128, order="C")
+
             # define number of threads
-            num_threadsx    = 32
-            num_threadsy    = 32
-            num_blocksx     = (no + num_threadsx - 1) // num_threadsx
-            num_blocksy     = (ne + num_threadsy - 1) // num_threadsy
+            num_threadsx = 32
+            num_threadsy = 32
+            num_blocksx = (no + num_threadsx - 1) // num_threadsx
+            num_blocksy = (ne + num_threadsy - 1) // num_threadsy
 
             gpu_conv = g2p_gpu.g2p_conv_gpu(1)
 
-            gpu_conv((num_blocksx, num_blocksy),
-                    (num_threadsx, num_threadsy),
-                    (pre_factor, ij2ji_gpu,
-                    gg_gold_gpu, gl_gold_gpu, gr_gold_gpu,
-                    pg_gpu, pl_gpu, pr_gpu,
-                    no, ne))
+            gpu_conv((num_blocksx, num_blocksy), (num_threadsx, num_threadsy),
+                     (pre_factor, ij2ji_gpu, gg_gold_gpu, gl_gold_gpu, gr_gold_gpu, pg_gpu, pl_gpu, pr_gpu, no, ne))
 
             # load data to cpu
             pg_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pg_gpu)
             pl_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pl_gpu)
             pr_cpu: npt.NDArray[np.complex128] = cp.asnumpy(pr_gpu)
         else:
-            raise ValueError(
-            "Argument error, type input not possible")
+            raise ValueError("Argument error, type input not possible")
 
         # assert physical identity
         # test: P^{>}_{ij}\left(E\right) = -P^{<}_{ij}\left(-E\right)^{*}
@@ -296,10 +292,10 @@ if __name__ == "__main__":
 
         # sanity checks
         assert np.allclose(energy_copy, energy)
-        assert np.allclose(ij2ji_copy,  ij2ji)
-        assert np.allclose(gg_copy,     gg_gold)
-        assert np.allclose(gl_copy,     gl_gold)
-        assert np.allclose(gr_copy,     gr_gold)
+        assert np.allclose(ij2ji_copy, ij2ji)
+        assert np.allclose(gg_copy, gg_gold)
+        assert np.allclose(gl_copy, gl_gold)
+        assert np.allclose(gr_copy, gr_gold)
         assert np.array_equal(np.shape(gg_copy), np.shape(pg_cpu))
         assert np.array_equal(np.shape(gg_copy), np.shape(pl_cpu))
         assert np.array_equal(np.shape(gg_copy), np.shape(pr_cpu))

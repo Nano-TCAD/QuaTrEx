@@ -1,7 +1,6 @@
-"""
-Functions to calculate the self-energies on the gpu.
-See README for more information.
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Functions to calculate the self-energies on the gpu. See README for more information. """
+
 import numpy as np
 import numpy.typing as npt
 import typing
@@ -14,15 +13,8 @@ parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
 
 
-def gw2s_fft_gpu_fullgrid(
-    pre_factor: np.complex128,
-    gg: cp.ndarray,
-    gl: cp.ndarray,
-    gr: cp.ndarray,
-    wg: cp.ndarray,
-    wl: cp.ndarray,
-    wr: cp.ndarray
-) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+def gw2s_fft_gpu_fullgrid(pre_factor: np.complex128, gg: cp.ndarray, gl: cp.ndarray, gr: cp.ndarray, wg: cp.ndarray,
+                          wl: cp.ndarray, wr: cp.ndarray) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -59,7 +51,7 @@ def gw2s_fft_gpu_fullgrid(
     # multiply elementwise
     sg_t = cp.multiply(gg_t, wg_t)
     sl_t = cp.multiply(gl_t, wl_t)
-    sr_t = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+    sr_t = cp.multiply(gr_t, wl_t) + cp.multiply(gg_t, wr_t)
 
     # ifft, cutoff and multiply with pre factor
     sg = cp.multiply(cp.fft.ifft(sg_t, axis=1)[:, :ne], pre_factor)
@@ -68,16 +60,9 @@ def gw2s_fft_gpu_fullgrid(
 
     return (sg, sl, sr)
 
-def gw2s_fft_gpu(
-    pre_factor: np.complex128,
-    ij2ji: cp.ndarray,
-    gg: cp.ndarray,
-    gl: cp.ndarray,
-    gr: cp.ndarray,
-    wg: cp.ndarray,
-    wl: cp.ndarray,
-    wr: cp.ndarray
-) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+
+def gw2s_fft_gpu(pre_factor: np.complex128, ij2ji: cp.ndarray, gg: cp.ndarray, gl: cp.ndarray, gr: cp.ndarray,
+                 wg: cp.ndarray, wl: cp.ndarray, wr: cp.ndarray) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -119,18 +104,17 @@ def gw2s_fft_gpu(
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = cp.multiply(gg_t, wg_t)
     sl_t_1 = cp.multiply(gl_t, wl_t)
-    sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+    sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gg_t, wr_t)
 
-    # time reverse 
-    wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)    
+    # time reverse
+    wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = cp.multiply(rgg_t, wl_t[ij2ji,:] - cp.repeat(wl[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = cp.multiply(rgl_t, wg_t[ij2ji,:] - cp.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              cp.multiply(rgr_t, wg_t[ij2ji,:] - cp.repeat(wg[:,0].reshape(-1,1), 2*ne, axis=1)))
-
+    sg_t_2 = cp.multiply(rgg_t, wl_t[ij2ji, :] - cp.repeat(wl[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_t[ij2ji, :] - cp.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+              cp.multiply(rgr_t, wg_t[ij2ji, :] - cp.repeat(wg[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
@@ -141,7 +125,6 @@ def gw2s_fft_gpu(
     sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
     sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
 
-
     sg = cp.multiply(sg_1 + sg_2, pre_factor)
     sl = cp.multiply(sl_1 + sl_2, pre_factor)
     sr = cp.multiply(sr_1 + sr_2, pre_factor)
@@ -149,16 +132,9 @@ def gw2s_fft_gpu(
     return (sg, sl, sr)
 
 
-def gw2s_fft_gpu_3part_sr(
-    pre_factor: np.complex128,
-    ij2ji: cp.ndarray,
-    gg: cp.ndarray,
-    gl: cp.ndarray,
-    gr: cp.ndarray,
-    wg: cp.ndarray,
-    wl: cp.ndarray,
-    wr: cp.ndarray
-) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+def gw2s_fft_gpu_3part_sr(pre_factor: np.complex128, ij2ji: cp.ndarray, gg: cp.ndarray, gl: cp.ndarray, gr: cp.ndarray,
+                          wg: cp.ndarray, wl: cp.ndarray,
+                          wr: cp.ndarray) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -200,19 +176,18 @@ def gw2s_fft_gpu_3part_sr(
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = cp.multiply(gg_t, wg_t)
     sl_t_1 = cp.multiply(gl_t, wl_t)
-    sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gl_t, wr_t) + cp.multiply(gr_t, wr_t)
+    sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gl_t, wr_t) + cp.multiply(gr_t, wr_t)
 
-    # time reverse 
-    wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)    
+    # time reverse
+    wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = cp.multiply(rgg_t, wl_t[ij2ji,:] - cp.repeat(wl[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = cp.multiply(rgl_t, wg_t[ij2ji,:] - cp.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1))
-    sr_t_2 = (cp.multiply(rgl_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              cp.multiply(rgr_t, wg_t[ij2ji,:] - cp.repeat(wg[ij2ji,0].reshape(-1,1), 2*ne, axis=1)) + 
-                cp.multiply(rgr_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:,0].reshape(-1,1), 2*ne, axis=1))))
-
+    sg_t_2 = cp.multiply(rgg_t, wl_t[ij2ji, :] - cp.repeat(wl[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_t[ij2ji, :] - cp.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sr_t_2 = (cp.multiply(rgl_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+              cp.multiply(rgr_t, wg_t[ij2ji, :] - cp.repeat(wg[ij2ji, 0].reshape(-1, 1), 2 * ne, axis=1)) +
+              cp.multiply(rgr_t, cp.conjugate(wr_t_mod - cp.repeat(wr[:, 0].reshape(-1, 1), 2 * ne, axis=1))))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
@@ -223,25 +198,18 @@ def gw2s_fft_gpu_3part_sr(
     sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
     sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
 
-
     sg = cp.multiply(sg_1 + sg_2, pre_factor)
     sl = cp.multiply(sl_1 + sl_2, pre_factor)
     sr = cp.multiply(sr_1 + sr_2, pre_factor)
 
     return (sg, sl, sr)
+
 
 def gw2s_fft_mpi_gpu(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -269,26 +237,26 @@ def gw2s_fft_mpi_gpu(
     ne: int = gg.shape[1]
 
     # load data to gpu----------------------------------------------------------
-    gg_gpu       = cp.asarray(gg)
-    gl_gpu       = cp.asarray(gl)
-    gr_gpu       = cp.asarray(gr)
-    wg_gpu       = cp.asarray(wg)
-    wl_gpu       = cp.asarray(wl)
-    wr_gpu       = cp.asarray(wr)
+    gg_gpu = cp.asarray(gg)
+    gl_gpu = cp.asarray(gl)
+    gr_gpu = cp.asarray(gr)
+    wg_gpu = cp.asarray(wg)
+    wl_gpu = cp.asarray(wl)
+    wr_gpu = cp.asarray(wr)
     wg_transposed_gpu = cp.asarray(wg_transposed)
     wl_transposed_gpu = cp.asarray(wl_transposed)
     # compute sg/sl/sr----------------------------------------------------------
 
     # todo possibility to avoid fft in global chain
     # fft
-    gg_t        = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
-    gl_t        = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
-    gr_t        = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
-    wg_t        = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
-    wl_t        = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
-    wr_t        = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
-    wg_transposed_t  = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
-    wl_transposed_t  = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
+    gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+    gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+    gr_t = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
+    wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
+    wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
+    wr_t = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
+    wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
+    wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
 
     # fft of energy reversed
     rgg_t = cp.fft.fft(cp.flip(gg_gpu, axis=1), n=2 * ne, axis=1)
@@ -298,18 +266,17 @@ def gw2s_fft_mpi_gpu(
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = cp.multiply(gg_t, wg_t)
     sl_t_1 = cp.multiply(gl_t, wl_t)
-    sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+    sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gg_t, wr_t)
 
     # time reverse
     wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
-    sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
-
+    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+              cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
@@ -319,7 +286,6 @@ def gw2s_fft_mpi_gpu(
     sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
     sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
     sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
-
 
     sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
     sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
@@ -335,17 +301,10 @@ def gw2s_fft_mpi_gpu(
 
 
 def gw2s_fft_mpi_gpu_3part_sr(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -373,26 +332,26 @@ def gw2s_fft_mpi_gpu_3part_sr(
     ne: int = gg.shape[1]
 
     # load data to gpu----------------------------------------------------------
-    gg_gpu       = cp.asarray(gg)
-    gl_gpu       = cp.asarray(gl)
-    gr_gpu       = cp.asarray(gr)
-    wg_gpu       = cp.asarray(wg)
-    wl_gpu       = cp.asarray(wl)
-    wr_gpu       = cp.asarray(wr)
+    gg_gpu = cp.asarray(gg)
+    gl_gpu = cp.asarray(gl)
+    gr_gpu = cp.asarray(gr)
+    wg_gpu = cp.asarray(wg)
+    wl_gpu = cp.asarray(wl)
+    wr_gpu = cp.asarray(wr)
     wg_transposed_gpu = cp.asarray(wg_transposed)
     wl_transposed_gpu = cp.asarray(wl_transposed)
     # compute sg/sl/sr----------------------------------------------------------
 
     # todo possibility to avoid fft in global chain
     # fft
-    gg_t        = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
-    gl_t        = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
-    gr_t        = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
-    wg_t        = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
-    wl_t        = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
-    wr_t        = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
-    wg_transposed_t  = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
-    wl_transposed_t  = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
+    gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+    gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+    gr_t = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
+    wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
+    wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
+    wr_t = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
+    wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
+    wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
 
     # fft of energy reversed
     rgg_t = cp.fft.fft(cp.flip(gg_gpu, axis=1), n=2 * ne, axis=1)
@@ -402,22 +361,21 @@ def gw2s_fft_mpi_gpu_3part_sr(
     # multiply elementwise for sigma_1 the normal term
     sg_t_1 = cp.multiply(gg_t, wg_t)
     sl_t_1 = cp.multiply(gl_t, wl_t)
-    sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gl_t, wr_t) + cp.multiply(gr_t, wr_t)
+    sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gl_t, wr_t) + cp.multiply(gr_t, wr_t)
 
     # time reverse
     wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation
-    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
-    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
     #sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
     #          cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
 
-    sr_t_2 = (cp.multiply(rgl_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
-              cp.multiply(rgr_t, wg_transposed_t- cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1)) + 
-                cp.multiply(rgr_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))))
-    
+    sr_t_2 = (cp.multiply(rgl_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+              cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1)) +
+              cp.multiply(rgr_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))))
 
     # ifft, cutoff and multiply with pre factor
     sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
@@ -427,7 +385,6 @@ def gw2s_fft_mpi_gpu_3part_sr(
     sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
     sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
     sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
-
 
     sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
     sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
@@ -439,24 +396,16 @@ def gw2s_fft_mpi_gpu_3part_sr(
     sl = cp.asnumpy(sl_gpu)
     sr = cp.asnumpy(sr_gpu)
 
-    return (sg, sl, sr)    
+    return (sg, sl, sr)
+
 
 def gw2s_fft_mpi_gpu_streams(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128],
-    sg: npt.NDArray[np.complex128],
-    sl: npt.NDArray[np.complex128],
-    sr: npt.NDArray[np.complex128],
-    streams: typing.List[cp.cuda.Stream]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128],
+    wl_transposed: npt.NDArray[np.complex128], sg: npt.NDArray[np.complex128], sl: npt.NDArray[np.complex128],
+    sr: npt.NDArray[np.complex128], streams: typing.List[cp.cuda.Stream]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -535,7 +484,7 @@ def gw2s_fft_mpi_gpu_streams(
     streams[5].synchronize()
     with streams[2]:
         rgr_t = cp.fft.fft(cp.flip(gr_gpu, axis=1), n=2 * ne, axis=1)
-        sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+        sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gg_t, wr_t)
         # time reverse
         wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
@@ -544,13 +493,13 @@ def gw2s_fft_mpi_gpu_streams(
     streams[0].synchronize()
     streams[7].synchronize()
     with streams[0]:
-        sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+        sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
     streams[6].synchronize()
     with streams[1]:
-        sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+        sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
     with streams[2]:
-        sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
-                cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
+        sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+                  cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
     # load data to cpu----------------------------------------------------------
     # ifft, cutoff and multiply with pre factor
@@ -573,23 +522,14 @@ def gw2s_fft_mpi_gpu_streams(
     for stream in streams:
         stream.synchronize()
 
+
 def gw2s_fft_mpi_gpu_batched(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    wg: npt.NDArray[np.complex128],
-    wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
-    wg_transposed: npt.NDArray[np.complex128],
-    wl_transposed: npt.NDArray[np.complex128],
-    sg: npt.NDArray[np.complex128],
-    sl: npt.NDArray[np.complex128],
-    sr: npt.NDArray[np.complex128],
-    streams: typing.List[cp.cuda.Stream],
-    batch_size: int
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128],
+    wl_transposed: npt.NDArray[np.complex128], sg: npt.NDArray[np.complex128], sl: npt.NDArray[np.complex128],
+    sr: npt.NDArray[np.complex128], streams: typing.List[cp.cuda.Stream], batch_size: int
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the gpu(see file description todo). 
         The inputs are the pre factor, the Green's Functions
         and the screened interactions.
@@ -638,34 +578,34 @@ def gw2s_fft_mpi_gpu_batched(
     # todo possibility to avoid fft of green's function in global chain
 
     for batch in range(batches):
-        batch_start = batch*batch_size
+        batch_start = batch * batch_size
         # last batch different, if not dividable
-        batch_end = batch_size*(batch+1) if batch != batches-1 else batch_size*(batch+1) + no % batch_size
+        batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
 
         # load to gpu and fft
         with streams[0]:
-            gg_gpu[0:batch_end-batch_start].set(gg[batch_start:batch_end,:], stream=streams[0])
+            gg_gpu[0:batch_end - batch_start].set(gg[batch_start:batch_end, :], stream=streams[0])
             gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
         with streams[1]:
-            gl_gpu[0:batch_end-batch_start].set(gl[batch_start:batch_end,:], stream=streams[1])
+            gl_gpu[0:batch_end - batch_start].set(gl[batch_start:batch_end, :], stream=streams[1])
             gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
         with streams[2]:
-            gr_gpu[0:batch_end-batch_start].set(gr[batch_start:batch_end,:], stream=streams[2])
+            gr_gpu[0:batch_end - batch_start].set(gr[batch_start:batch_end, :], stream=streams[2])
             gr_t = cp.fft.fft(gr_gpu, n=2 * ne, axis=1)
         with streams[3]:
-            wg_gpu[0:batch_end-batch_start].set(wg[batch_start:batch_end,:], stream=streams[3])
+            wg_gpu[0:batch_end - batch_start].set(wg[batch_start:batch_end, :], stream=streams[3])
             wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
         with streams[4]:
-            wl_gpu[0:batch_end-batch_start].set(wl[batch_start:batch_end,:], stream=streams[4])
+            wl_gpu[0:batch_end - batch_start].set(wl[batch_start:batch_end, :], stream=streams[4])
             wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
         with streams[5]:
-            wr_gpu[0:batch_end-batch_start].set(wr[batch_start:batch_end,:], stream=streams[5])
+            wr_gpu[0:batch_end - batch_start].set(wr[batch_start:batch_end, :], stream=streams[5])
             wr_t = cp.fft.fft(wr_gpu, n=2 * ne, axis=1)
         with streams[6]:
-            wg_transposed_gpu[0:batch_end-batch_start].set(wg_transposed[batch_start:batch_end,:], stream=streams[6])
+            wg_transposed_gpu[0:batch_end - batch_start].set(wg_transposed[batch_start:batch_end, :], stream=streams[6])
             wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
         with streams[7]:
-            wl_transposed_gpu[0:batch_end-batch_start].set(wl_transposed[batch_start:batch_end,:], stream=streams[7])
+            wl_transposed_gpu[0:batch_end - batch_start].set(wl_transposed[batch_start:batch_end, :], stream=streams[7])
             wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
 
         # element wise multiplication of the screened interaction with the Green's function
@@ -681,7 +621,7 @@ def gw2s_fft_mpi_gpu_batched(
         streams[5].synchronize()
         with streams[2]:
             rgr_t = cp.fft.fft(cp.flip(gr_gpu, axis=1), n=2 * ne, axis=1)
-            sr_t_1 = cp.multiply(gr_t, wl_t) +  cp.multiply(gg_t, wr_t)
+            sr_t_1 = cp.multiply(gr_t, wl_t) + cp.multiply(gg_t, wr_t)
             # time reverse
             wr_t_mod = cp.roll(cp.flip(wr_t, axis=1), 1, axis=1)
 
@@ -690,13 +630,16 @@ def gw2s_fft_mpi_gpu_batched(
         streams[0].synchronize()
         streams[7].synchronize()
         with streams[0]:
-            sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+            sg_t_2 = cp.multiply(rgg_t,
+                                 wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
         streams[6].synchronize()
         with streams[1]:
-            sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:,0].reshape(-1,1), 2*ne, axis=1))
+            sl_t_2 = cp.multiply(rgl_t,
+                                 wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
         with streams[2]:
-            sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
-                    cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
+            sr_t_2 = (
+                cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))) +
+                cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1)))
 
         # load data to cpu----------------------------------------------------------
         # ifft, cutoff and multiply with pre factor
@@ -704,17 +647,17 @@ def gw2s_fft_mpi_gpu_batched(
             sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
             sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
             sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
-            cp.asnumpy(sg_gpu[0:batch_end-batch_start], out=sg[batch_start:batch_end,:], stream=streams[0])
+            cp.asnumpy(sg_gpu[0:batch_end - batch_start], out=sg[batch_start:batch_end, :], stream=streams[0])
         with streams[1]:
             sl_1 = cp.fft.ifft(sl_t_1, axis=1)[:, :ne]
             sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
             sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
-            cp.asnumpy(sl_gpu[0:batch_end-batch_start], out=sl[batch_start:batch_end,:], stream=streams[1])
+            cp.asnumpy(sl_gpu[0:batch_end - batch_start], out=sl[batch_start:batch_end, :], stream=streams[1])
         with streams[2]:
             sr_1 = cp.fft.ifft(sr_t_1, axis=1)[:, :ne]
             sr_2 = cp.flip(cp.fft.ifft(sr_t_2, axis=1)[:, :ne], axis=1)
             sr_gpu = cp.multiply(sr_1 + sr_2, pre_factor)
-            cp.asnumpy(sr_gpu[0:batch_end-batch_start], out=sr[batch_start:batch_end,:], stream=streams[2])
+            cp.asnumpy(sr_gpu[0:batch_end - batch_start], out=sr[batch_start:batch_end, :], stream=streams[2])
 
     for stream in streams:
         stream.synchronize()

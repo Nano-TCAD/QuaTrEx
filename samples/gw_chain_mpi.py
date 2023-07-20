@@ -1,3 +1,4 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """
 Example of the first GW iteration with MPI+CUDA.
 With transposition through network.
