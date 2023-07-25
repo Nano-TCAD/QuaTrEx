@@ -28,7 +28,7 @@ from GW.gold_solution import read_solution
 from GW.screenedinteraction.kernel import p2w_cpu
 from GW.coulomb_matrix.read_coulomb_matrix import load_V
 from GreensFunction import calc_GF_pool
-from OMEN_structure_matrices import OMENHamClassinput 
+from OMEN_structure_matrices import OMENHamClass
 from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from utils import change_format
 from utils import utils_gpu
@@ -131,9 +131,9 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-15, 10, 6, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 10, 700, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClassinput.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -387,7 +387,7 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 200
+    max_iter = 2
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

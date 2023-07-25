@@ -51,7 +51,7 @@ class Hamiltonian:
     TB = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0, rank = 0):
+    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', rank = 0):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -62,6 +62,7 @@ class Hamiltonian:
             self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
             
             self.Vappl = Vappl
+            self.bias_point = bias_point
             #self.Hamiltonian = []
             #for p in self.blocks:
             #   self.Hamiltonian.append(read_sparse_matrix(p))
@@ -100,7 +101,14 @@ class Hamiltonian:
             self.prepare_block_properties()
             self.map_neighbor_indices()
             self.map_sparse_indices()
-            self.Vpot = self.get_linear_potential_drop()
+            if(potential_type == 'linear'):
+                self.Vpot = self.get_linear_potential_drop()
+            elif (potential_type == 'unit_cell'):
+                self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
+                self.Vpot = self.get_unit_cell_potential()
+            elif (potential_type == 'atomic'):
+                self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                self.Vpot = self.get_atomic_potential()
             self.add_potential()
 
     #Helper function to initialise all hamiltonians
@@ -368,6 +376,60 @@ class Hamiltonian:
         ind = 0
         for IA in range(self.NA):
             Vpot[ind:ind+orb_per_at_loc[IA]] = V[IA]
+            ind += orb_per_at_loc[IA]
+
+        return Vpot
+    
+    def get_unit_cell_potential(self,):
+        """
+        This function extracts the potential for a particular bias from the OMEN solver with unit cell resolution
+        Returns
+        -------
+        Vpot : float
+            Potential of each atom in eV 
+
+        """
+        self.NBlock = self.Smin[0]
+        self.NA = self.LM.shape[0]
+
+        orb_per_at_loc = self.no_orb[self.LM[:,3].astype(int)-1]
+
+        Vpercell = self.Vbias[:,self.bias_point]
+        no_of_cells = Vpercell.shape[0]
+        no_at_per_cell = int(self.NA/no_of_cells)
+
+        V = np.zeros(self.NA)
+
+        for IC in range(no_of_cells):
+            V[IC:IC+no_at_per_cell] = Vpercell[IC]
+
+        Vpot = np.zeros(np.sum(orb_per_at_loc))
+
+        ind = 0
+        for IA in range(self.NA):
+            Vpot[ind:ind+orb_per_at_loc[IA]] = V[IA]
+            ind += orb_per_at_loc[IA]
+
+        return Vpot
+    
+    def get_atomic_potential(self,):
+        """
+        This function extracts the potential for a particular bias from the OMEN solver with atomistic resolution
+        Returns
+        -------
+        Vpot : float
+            Potential at each atom in eV 
+
+        """
+        self.NBlock = self.Smin[0]
+        self.NA = self.LM.shape[0]
+        orb_per_at_loc = self.no_orb[self.LM[:,3].astype(int)-1]
+
+        Vpot = np.zeros(np.sum(orb_per_at_loc))
+
+        ind = 0
+        for IA in range(self.NA):
+            Vpot[ind:ind+orb_per_at_loc[IA]] = self.Vatom[IA,self.bias_point]
             ind += orb_per_at_loc[IA]
 
         return Vpot
