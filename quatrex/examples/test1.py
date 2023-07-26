@@ -26,7 +26,7 @@ from GW.polarization.kernel import g2p_cpu
 from GW.selfenergy.kernel import gw2s_cpu
 from GW.gold_solution import read_solution
 from GW.screenedinteraction.kernel import p2w_cpu
-from GW.coulomb_matrix.read_coulomb_matrix import load_V
+from GW.coulomb_matrix.read_coulomb_matrix import load_V_mpi
 from GreensFunction import calc_GF_pool
 from OMEN_structure_matrices import OMENHamClass
 from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
@@ -222,6 +222,7 @@ if __name__ == "__main__":
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
+    #vh = load_V_mpi('/usr/scratch2/tortin12/chexia/rgf48bias/', rows, columns, comm, rank)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))

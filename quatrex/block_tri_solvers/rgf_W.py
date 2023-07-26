@@ -1102,36 +1102,44 @@ def rgf_w_opt(
 
         # x^{r}_E_nn = M_E_nn^{-1}
         if bsr:
-            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb]+ dmr_ed)
+            #xr_lb = np.linalg.inv(mr[slb_lb, slb_lb]+ dmr_ed)
+            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb])
             xr_lb_ct = xr_lb.conjugate().transpose()
             xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
 
             # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
-            wg_lb = xr_lb @ (lg[slb_lb, slb_lb] + dlg_ed) @ xr_lb_ct
+            #wg_lb = xr_lb @ (lg[slb_lb, slb_lb] + dlg_ed) @ xr_lb_ct
+            wg_lb = xr_lb @ (lg[slb_lb, slb_lb]) @ xr_lb_ct
             wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
 
             # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
-            wl_lb = xr_lb @ (ll[slb_lb, slb_lb] + dll_ed) @ xr_lb_ct
+            #wl_lb = xr_lb @ (ll[slb_lb, slb_lb] + dll_ed) @ xr_lb_ct
+            wl_lb = xr_lb @ (ll[slb_lb, slb_lb]) @ xr_lb_ct
             wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
 
             # wR_E_nn = xR_E_nn * V_nn
-            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb] - dvh_ed)
+            #wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb] - dvh_ed)
+            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb])
             wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
         else:
-            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray() + dmr_ed)
+            #xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray() + dmr_ed)
+            xr_lb = np.linalg.inv(mr[slb_lb, slb_lb].toarray())
             xr_lb_ct = xr_lb.conjugate().transpose()
             xr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = xr_lb
 
             # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
-            wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray() + dlg_ed) @ xr_lb_ct
+            #wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray() + dlg_ed) @ xr_lb_ct
+            wg_lb = xr_lb @ (lg[slb_lb, slb_lb].toarray()) @ xr_lb_ct
             wg_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wg_lb
 
             # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
-            wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray() + dll_ed) @ xr_lb_ct
+            #wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray() + dll_ed) @ xr_lb_ct
+            wl_lb = xr_lb @ (ll[slb_lb, slb_lb].toarray()) @ xr_lb_ct
             wl_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wl_lb
 
             # wR_E_nn = xR_E_nn * V_nn
-            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb].toarray() - dvh_ed)
+            #wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb].toarray() - dvh_ed)
+            wr_lb  = xr_lb @ (vh_cp[slb_lb, slb_lb].toarray())
             wr_diag_rgf[idx_lb,:lb_lb,:lb_lb] = wr_lb
 
 
@@ -1178,10 +1186,11 @@ def rgf_w_opt(
                 ll_d = ll[slb_p,slb_c].toarray()
 
             if idx_ib == 0:
-                lg_c += dlg_sd
-                ll_c += dll_sd
-                vh_c -= dvh_sd
-                mr_c += dmr_sd
+                pass
+                #lg_c += dlg_sd
+                #ll_c += dll_sd
+                #vh_c -= dvh_sd
+                #mr_c += dmr_sd
             # MxR = M_E_kk+1 * xR_E_k+1k+1
             mr_xr = mr_r @ xr_p
 
