@@ -1,18 +1,11 @@
 import numpy as np
-import time
 
-from scipy.sparse import lil_matrix, csr_matrix, csc_matrix, linalg
 from scipy.linalg import svd
 from numpy.linalg import eig
-from utils.read_utils import read_file_to_float_ndarray
 
 np.random.seed(0)
 
 def beyn(M00, M01, M10, imag_lim, R, type, function = 'W', block: bool = False):
-    
-    #np.seterr(divide='ignore', invalid='ignore')
-
-    # ctime = - time.perf_counter()
 
     theta_min = 0
     theta_max = 2*np.pi
@@ -57,144 +50,157 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W', block: bool = False):
     P0 = np.zeros((N, N), dtype=np.complex128)
     P1 = np.zeros((N, N), dtype=np.complex128)
 
-    if block:
+    try:
 
-        A = M00[:N//2, :N//2]
-        B = M00[:N//2, N//2:]
-        C = M00[N//2:, :N//2]
-        D = M00[N//2:, N//2:]
+        if block:
 
-        iA = np.linalg.inv(A)
-        iD = np.linalg.inv(D)
+            A = M00[:N//2, :N//2]
+            B = M00[:N//2, N//2:]
+            C = M00[N//2:, :N//2]
+            D = M00[N//2:, N//2:]
 
-        iT = np.empty((N, N), dtype=np.complex128)
+            iA = np.linalg.inv(A)
+            iD = np.linalg.inv(D)
 
-        for I in range(len(z)):
+            iT = np.empty((N, N), dtype=np.complex128)
+
+            for I in range(len(z)):
+
+                if type == 'L':
+                    Bi = B + M10[:N//2, N//2:]*z[I]
+                    Ci = C + M01[N//2:, :N//2]/z[I]
+                else:
+                    Bi = B + M10[:N//2, N//2:]/z[I]
+                    Ci = C + M01[N//2:, :N//2]*z[I]
+
+                T0 = np.linalg.inv(A - Bi@iD@Ci)
+                T1 = np.linalg.inv(D - Ci@iA@Bi)
+
+                iT[:N//2, :N//2] = T0
+                iT[:N//2, N//2:] = -iA@Bi@T1
+                iT[N//2:, :N//2] = -iD@Ci@T0
+                iT[N//2:, N//2:] = T1
+
+                P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+                P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        
+        else:
+
+            for I in range(len(z)):
+
+                if type == 'L':
+                    T = M00 + M01/z[I] + M10*z[I]
+                else:
+                    T = M00 + M01*z[I] + M10/z[I]
+
+                iT = np.linalg.inv(T)
+
+                P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+                P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+
+        LP0 = P0@Y
+        LP1 = P1@Y
+
+        RP0 = Y.T@P0
+        RP1 = Y.T@P1
+
+        # ctime += time.perf_counter()
+        # print(f'Time for contour integral: {ctime} s')
+
+        # ctime = - time.perf_counter()
+
+        LV, LS, LW = svd(LP0, full_matrices=False)
+        Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
+
+        RV, RS, RW = svd(RP0, full_matrices=True)
+        Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
+
+        # ctime += time.perf_counter()
+        # print(f'Time for SVD: {ctime} s')
+
+        if len(Lind) == 0:
+
+            cond = np.nan
+            ksurf = None
+            Sigma = None
+            gR = None
+
+        else:
+
+            # ctime = - time.perf_counter()
+
+            LV = LV[:, Lind]
+            LS = LS[Lind]
+            LW = np.conj(LW).T[:, Lind]
+
+            Llambda, Lu = eig(np.conj(LV).T@LP1@LW@np.linalg.inv(np.diag(LS)))
+            #Llambda = np.diag(Llambda)
+            phiL = LV@Lu
+
+            RV = RV[:, Rind]
+            RS = RS[Rind]
+            RW = np.conj(RW).T[:, Rind]
+
+            Rlambda, Ru = eig(np.linalg.inv(np.diag(RS))@np.conj(RV).T@RP1@RW)
+            #Rlambda = np.diag(Rlambda)
+            phiR = np.linalg.solve(Ru, np.conj(RW).T)
 
             if type == 'L':
-                Bi = B + M10[:N//2, N//2:]*z[I]
-                Ci = C + M01[N//2:, :N//2]/z[I]
+                kL = 1j * np.log(Llambda)
+                kR = 1j * np.log(Rlambda)
             else:
-                Bi = B + M10[:N//2, N//2:]/z[I]
-                Ci = C + M01[N//2:, :N//2]*z[I]
+                kL = -1j * np.log(Llambda)
+                kR = -1j * np.log(Rlambda)
 
-            T0 = np.linalg.inv(A - Bi@iD@Ci)
-            T1 = np.linalg.inv(D - Ci@iA@Bi)
+            ind_sort_kL = np.argsort(abs(np.imag(kL)))
+            k = kL[ind_sort_kL]
+            phiL = phiL[:, ind_sort_kL]
 
-            iT[:N//2, :N//2] = T0
-            iT[:N//2, N//2:] = -iA@Bi@T1
-            iT[N//2:, :N//2] = -iD@Ci@T0
-            iT[N//2:, N//2:] = T1
+            # ctime += time.perf_counter()
+            # print(f'Time for eigenvalue problem: {ctime} s')
 
-            P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-            P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+            # ctime = - time.perf_counter()
+
+            if type == 'L':
+                ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
+                gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
+                for IC in range(ref_iteration):
+                    gR = np.linalg.inv(M00 - M10 @ gR @ M01)
+                if(np.imag(np.trace(gR)) > 0 and function == 'G'):
+                        ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, 1.0)
+                        gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
+                        for IC in range(ref_iteration):
+                            gR = np.linalg.inv(M00 - M10 @ gR @ M01)
+                Sigma = M10 @ gR @ M01
+            else:
+                ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, -1.0)
+                gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
+                for IC in range(ref_iteration):
+                    gR = np.linalg.inv(M00 - M01 @ gR @ M10)
+                if(np.imag(np.trace(gR)) > 0 and function == 'G'):
+                        ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, -1.0)
+                        gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
+                        for IC in range(ref_iteration):
+                            gR = np.linalg.inv(M00 - M01 @ gR @ M10)
+                Sigma = M01 @ gR @ M10
+            
+            # ctime += time.perf_counter()
+            # print(f'Time for Sigma: {ctime} s')
+
+            ind = np.where(abs(dEk_dk))
+            if len(ind[0]) > 0:
+                min_dEk = np.min(abs(dEk_dk[ind]))
     
-    else:
+    except Exception as e:
 
-        for I in range(len(z)):
-
-            if type == 'L':
-                T = M00 + M01/z[I] + M10*z[I]
-            else:
-                T = M00 + M01*z[I] + M10/z[I]
-
-            iT = np.linalg.inv(T)
-
-            P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-            P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-
-    LP0 = P0@Y
-    LP1 = P1@Y
-
-    RP0 = Y.T@P0
-    RP1 = Y.T@P1
-
-    # ctime += time.perf_counter()
-    # print(f'Time for contour integral: {ctime} s')
-
-    # ctime = - time.perf_counter()
-
-    LV, LS, LW = svd(LP0, full_matrices=False)
-    Lind = np.where(abs(np.diag(LS)) > eps_lim)[0]
-
-    RV, RS, RW = svd(RP0, full_matrices=True)
-    Rind = np.where(abs(np.diag(RS)) > eps_lim)[0]
-
-    # ctime += time.perf_counter()
-    # print(f'Time for SVD: {ctime} s')
-
-    if len(Lind) == 0:
+        print("Error in Beyn:")
+        print(e)
 
         cond = np.nan
         ksurf = None
         Sigma = None
         gR = None
 
-    else:
-
-        # ctime = - time.perf_counter()
-
-        LV = LV[:, Lind]
-        LS = LS[Lind]
-        LW = np.conj(LW).T[:, Lind]
-
-        Llambda, Lu = eig(np.conj(LV).T@LP1@LW@np.linalg.inv(np.diag(LS)))
-        #Llambda = np.diag(Llambda)
-        phiL = LV@Lu
-
-        RV = RV[:, Rind]
-        RS = RS[Rind]
-        RW = np.conj(RW).T[:, Rind]
-
-        Rlambda, Ru = eig(np.linalg.inv(np.diag(RS))@np.conj(RV).T@RP1@RW)
-        #Rlambda = np.diag(Rlambda)
-        phiR = np.linalg.solve(Ru, np.conj(RW).T)
-
-        if type == 'L':
-            kL = 1j * np.log(Llambda)
-            kR = 1j * np.log(Rlambda)
-        else:
-            kL = -1j * np.log(Llambda)
-            kR = -1j * np.log(Rlambda)
-
-        ind_sort_kL = np.argsort(abs(np.imag(kL)))
-        k = kL[ind_sort_kL]
-        phiL = phiL[:, ind_sort_kL]
-
-        # ctime += time.perf_counter()
-        # print(f'Time for eigenvalue problem: {ctime} s')
-
-        # ctime = - time.perf_counter()
-
-        if type == 'L':
-            ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
-            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
-            for IC in range(ref_iteration):
-                gR = np.linalg.inv(M00 - M10 @ gR @ M01)
-            if(np.imag(np.trace(gR)) > 0 and function == 'G'):
-                    ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, 1.0)
-                    gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
-                    for IC in range(ref_iteration):
-                        gR = np.linalg.inv(M00 - M10 @ gR @ M01)
-            Sigma = M10 @ gR @ M01
-        else:
-            ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, -1.0)
-            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
-            for IC in range(ref_iteration):
-                gR = np.linalg.inv(M00 - M01 @ gR @ M10)
-            if(np.imag(np.trace(gR)) > 0 and function == 'G'):
-                    ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, 0.5, -1.0)
-                    gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
-                    for IC in range(ref_iteration):
-                        gR = np.linalg.inv(M00 - M01 @ gR @ M10)
-            Sigma = M01 @ gR @ M10
-        
-        # ctime += time.perf_counter()
-        # print(f'Time for Sigma: {ctime} s')
-
-        ind = np.where(abs(dEk_dk))
-        if len(ind[0]) > 0:
-            min_dEk = np.min(abs(dEk_dk[ind]))
     return ksurf, cond, gR, Sigma, min_dEk
 
 def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
