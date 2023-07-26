@@ -19,7 +19,7 @@ def surface_function(M00, M10, M01):
 
     cond = float('inf')
     cond_limit = 1e-8
-    max_iter = 5000
+    max_iter = 125
     IC = 1
 
     alpha = M10
@@ -45,5 +45,11 @@ def surface_function(M00, M10, M01):
         IC += 1
     #print(IC)
     #print(cond)
+    if(cond > cond_limit):
+        print('Warning: Surface function did not converge')
+        print('Condition number: ', cond)
+        cond = np.nan
+        SF = None
+        return SF, cond
     SF = np.linalg.inv(eps_surf)
     return SF, cond

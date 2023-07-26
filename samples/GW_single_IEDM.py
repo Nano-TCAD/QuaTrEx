@@ -35,6 +35,10 @@ if utils_gpu.gpu_avail():
     from quatrex.GW.polarization.kernel import g2p_gpu
     from quatrex.GW.selfenergy.kernel import gw2s_gpu
 
+main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, ".."))
+
+
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
     comm = MPI.COMM_WORLD
@@ -527,11 +531,20 @@ if __name__ == "__main__":
 
         # calculate the screened interaction on every rank--------------------------
         if args.pool:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
-                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh,
-                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size,
-                w_mkl_threads, w_worker_threads)
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+                                                                                                hamiltonian_obj, energy_loc,
+                                                                                                pg_p2w_vec, pl_p2w_vec,
+                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                Idx_e_loc,   
+                                                                                                factor_w_loc,
+                                                                                                comm,
+                                                                                                rank,
+                                                                                                size,
+                                                                                                nbc,
+                                                                                                homogenize = False,
+                                                                                                mkl_threads = w_mkl_threads,
+                                                                                                worker_num = w_worker_threads)
         else:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                 hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh,
@@ -650,6 +663,13 @@ if __name__ == "__main__":
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+
+        if rank == 0:
+            np.savetxt(parent_path + folder + 'E.dat', energy)
+            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
 
     if rank == 0:
         # create buffers at master

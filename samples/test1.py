@@ -26,7 +26,7 @@ from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V
 from quatrex.GreensFunction import calc_GF_pool
-from quatrex.OMEN_structure_matrices import OMENHamClassinput
+from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.utils import change_format
 from quatrex.utils import utils_gpu
@@ -36,6 +36,9 @@ from quatrex.utils.matrix_creation import get_number_connected_blocks
 if utils_gpu.gpu_avail():
     from quatrex.GW.polarization.kernel import g2p_gpu
     from quatrex.GW.selfenergy.kernel import gw2s_gpu
+
+main_path = os.path.abspath(os.path.dirname(__file__))
+parent_path = os.path.abspath(os.path.join(main_path, ".."))
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
@@ -98,7 +101,7 @@ if __name__ == "__main__":
         from dace.sdfg import utils
         if rank == 0:
             print("Using dace for Beyn")
-            from OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
+            from quatrex.OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
             from dace.transformation.auto.auto_optimize import auto_optimize
             ci_sdfg = contour_integral_dace.to_sdfg(simplify=True)
             auto_optimize(ci_sdfg, dace.DeviceType.CPU, thread_safe=True)
@@ -112,7 +115,7 @@ if __name__ == "__main__":
         else:
             ci_sdfg, ci_block_sdfg, sk_sdfg = None, None, None
         comm.Barrier()
-        import OBC.beyn_globals as bg
+        import quatrex.OBC.beyn_globals as bg
         bg.contour_integral = utils.distributed_compile(ci_sdfg, comm)
         bg.contour_integral_block = utils.distributed_compile(ci_block_sdfg, comm)
         bg.sort_k = utils.distributed_compile(sk_sdfg, comm)
@@ -123,9 +126,9 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-15, 10, 6, endpoint=True, dtype=float)  # Energy Vector
-    Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
-    hamiltonian_obj = OMENHamClassinput.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank)
+    energy = np.linspace(-5, 5, 1000, endpoint = True, dtype = float) # Energy Vector
+    Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -155,7 +158,8 @@ if __name__ == "__main__":
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
-    bmax_mm = bmax[nbc - 1:nb:nbc]
+    nbc = 2
+    bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
@@ -182,7 +186,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 40
+    epsR = 25
     # DFT Conduction Band Minimum
     #ECmin = -3.5
     ECmin = -3.7
@@ -209,7 +213,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -365,7 +369,7 @@ if __name__ == "__main__":
     mem_w = 0.75
     # max number of iterations
 
-    max_iter = 200
+    max_iter = 2
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

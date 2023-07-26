@@ -11,9 +11,9 @@ from scipy import sparse
 from utils import matrix_creation
 from utils import change_format
 from utils.matrix_creation import homogenize_matrix
-from block_tri_solvers import rgf_W
-# from block_tri_solvers import matrix_inversion_w
-from OBC import obc_w_cpu
+from quatrex.block_tri_solvers import rgf_W
+from quatrex.block_tri_solvers import matrix_inversion_w
+from quatrex.OBC import obc_w_cpu
 import time
 
 
@@ -116,34 +116,25 @@ def p2w_pool_mpi_cpu(
             pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0], bmin[0]:bmax[0]],
                                        pg[ie][bmin[0]:bmax[0], bmin[1]:bmax[1]], len(bmax), 'G')
 
-    # Create a process pool with 4 workers
+    # Create a process pool with num_worker workers
+
+    ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         executor.map(
-            #results = executor.map(
-            rgf_W.rgf_w_opt,
-            repeat(vh),
-            pg,
-            pl,
-            pr,
-            repeat(bmax),
-            repeat(bmin),
-            wg_diag,
-            wg_upper,
-            wl_diag,
-            wl_upper,
-            wr_diag,
-            wr_upper,
-            xr_diag,
-            dosw,
-            new,
-            npw,
-            repeat(nbc),
-            idx_e,
-            factor,
-            repeat(block_inv),
-            repeat(use_dace),
-            repeat(validate_dace))
+        #results = executor.map(
+                    rgf_W.rgf_w_opt,
+                    repeat(vh),
+                    pg, pl, pr,
+                    repeat(bmax), repeat(bmin),
+                    wg_diag, wg_upper,
+                    wl_diag, wl_upper,
+                    wr_diag, wr_upper,
+                    xr_diag, dosw, new, npw, repeat(nbc),
+                    idx_e, factor,
+                    repeat(block_inv),
+                    repeat(use_dace),
+                    repeat(validate_dace),repeat(ref_flag))
         #for res in results:
         #   assert isinstance(res, np.ndarray)
 
