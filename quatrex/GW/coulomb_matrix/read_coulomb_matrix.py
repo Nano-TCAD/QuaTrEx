@@ -37,7 +37,7 @@ def load_V(
     V_sparse = (V_sparse + V_sparse.conj().T)/2
 
     # Adding a small real part to the diagonal to make the matrix positive definite
-    V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
+    #V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
     
     return V_sparse
 
