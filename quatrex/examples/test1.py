@@ -222,7 +222,7 @@ if __name__ == "__main__":
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
-    vh = load_V('/usr/scratch2/tortin12/chexia/long48bias', rows, columns, comm, rank, reduce_to_neighbor_indices=False)
+    vh = load_V('/usr/scratch2/tortin12/chexia/long48bias', rows, columns, reduce_to_neighbor_indices=False)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
