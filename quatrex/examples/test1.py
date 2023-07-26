@@ -222,7 +222,7 @@ if __name__ == "__main__":
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
-    #vh = load_V_mpi('/usr/scratch2/tortin12/chexia/rgf48bias/', rows, columns, comm, rank)
+    vh = load_V_mpi('/usr/scratch2/tortin12/chexia/long48bias', rows, columns, comm, rank, reduce_to_neighbor_indices=False)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -383,12 +383,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.75
+    mem_s = 0.5
     mem_g = 0.0
-    mem_w = 0.75
+    mem_w = 0.0
     # max number of iterations
 
-    max_iter = 2
+    max_iter = 50
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

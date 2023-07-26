@@ -73,7 +73,7 @@ def load_V_mpi(
         V_sparse = (V_sparse + V_sparse.conj().T)/2
 
         # Adding a small real part to the diagonal to make the matrix positive definite
-        V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
+        #V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
         comm.Bcast([np.array(nao), MPI.INT], root = 0)
         comm.Bcast([V_sparse.data, MPI.DOUBLE_COMPLEX], root = 0)
         return V_sparse
