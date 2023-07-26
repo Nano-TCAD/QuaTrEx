@@ -934,6 +934,9 @@ if __name__ == "__main__":
             np.savetxt(parent_path + folder + 'E.dat', energy)
             np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
             np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)

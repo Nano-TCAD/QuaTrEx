@@ -126,7 +126,7 @@ def p2w_pool_mpi_cpu(
 
     # Create a process pool with num_worker workers
 
-    ref_flag = True
+    ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         executor.map(

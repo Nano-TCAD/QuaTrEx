@@ -124,7 +124,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
     Vappl = 0.0
-    energy = np.linspace(-25, 20.0, 1000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-10, 2, 450, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = 1.0
+    energy_fl = -3.85
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
@@ -189,7 +189,7 @@ if __name__ == "__main__":
     # relative permittivity
     epsR = 5.0
     # DFT Conduction Band Minimum
-    ECmin = 1.0133
+    ECmin = -3.524
 
     # Phyiscal Constants -----------
 
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -379,7 +379,7 @@ if __name__ == "__main__":
     mem_w = 0.80
     # max number of iterations
 
-    max_iter = 500
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -432,7 +432,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_sc_dacerange_f2/'
+    folder = '/results/CNT_sc/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -934,6 +934,9 @@ if __name__ == "__main__":
             np.savetxt(parent_path + folder + 'E.dat', energy)
             np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
             np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)

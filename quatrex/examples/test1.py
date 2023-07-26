@@ -131,7 +131,7 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-15, 10, 700, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-5, 5, 1000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -142,8 +142,8 @@ if __name__ == "__main__":
     columns = hamiltonian_obj.columns
 
     #Only keep diagonals of P and Sigma
-    #rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
-    #columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
@@ -221,7 +221,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform=True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
