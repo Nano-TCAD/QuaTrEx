@@ -127,9 +127,9 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-5, -3, 1000, endpoint = True, dtype = float) # Energy Vector
-    Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, potential_type='atomic')
+    energy = np.linspace(-5, -3, 1000, endpoint=True, dtype=float)  # Energy Vector
+    Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     nb = hamiltonian_obj.Bmin.shape[0]
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
     nbc = 2
-    bmax_mm = bmax[nbc-1:nb:nbc]
+    bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
@@ -214,7 +214,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = True, orb_uniform=True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=True, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -440,11 +440,27 @@ if __name__ == "__main__":
         sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1] = get_band_edge_mpi(ECmin_vec[iter_num], energy, hamiltonian_obj.Overlap['H_4'], hamiltonian_obj.Hamiltonian['H_4'], sr_h2g_vec, sr_ephn_h2g_vec, rows, columns, bmin, bmax, comm, rank, size, count, disp, side = 'left')
-        ECmin_vec[iter_num+1] = ECmin_vec[iter_num]
-        energy_fl = ECmin_vec[iter_num+1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num+1] + dEfR_EC
+        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1, rank], no), dtype=np.complex128), rows,
+                                                            columns, nao)
+        ECmin_vec[iter_num + 1] = get_band_edge_mpi(ECmin_vec[iter_num],
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_h2g_vec,
+                                                    sr_ephn_h2g_vec,
+                                                    rows,
+                                                    columns,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    side='left')
+        ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
+        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
+        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
