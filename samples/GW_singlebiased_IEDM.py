@@ -33,8 +33,11 @@ from quatrex.utils import utils_gpu
 from quatrex.utils.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
-    from quatrex.GW.polarization.kernel import g2p_gpu
-    from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    try:
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    except ImportError:
+        print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
@@ -346,7 +349,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_biased_sc/'
+    folder = '/quatrex/results/GNR_biased_sc/'
     for iter_num in range(max_iter):
 
         # initialize observables----------------------------------------------------

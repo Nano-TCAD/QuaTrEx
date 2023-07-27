@@ -32,8 +32,11 @@ from quatrex.utils import change_format
 from quatrex.utils import utils_gpu
 
 if utils_gpu.gpu_avail():
-    from quatrex.GW.polarization.kernel import g2p_gpu
-    from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    try:
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    except ImportError:
+        print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
@@ -349,7 +352,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/GNR_sc_0v/'
+    folder = '/quatrex/results/GNR_sc_0v/'
     for iter_num in range(max_iter):
 
         # initialize observables----------------------------------------------------

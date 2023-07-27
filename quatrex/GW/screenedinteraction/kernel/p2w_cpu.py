@@ -12,7 +12,7 @@ from utils import matrix_creation
 from utils import change_format
 from utils.matrix_creation import homogenize_matrix
 from quatrex.block_tri_solvers import rgf_W
-from quatrex.block_tri_solvers import matrix_inversion_w
+#from quatrex.block_tri_solvers import matrix_inversion_w
 from quatrex.OBC import obc_w_cpu
 import time
 
