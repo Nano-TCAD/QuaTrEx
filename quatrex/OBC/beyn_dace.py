@@ -195,7 +195,7 @@ def sort_k_dace(ksurf: dace.complex128[NM], Vsurf: dace.complex128[N, NM], dEk_d
     out_Nref[0] = Nref
 
 
-from . import beyn_globals as bg
+from quatrex.OBC import beyn_globals as bg
 
 
 def beyn(M00, M01, M10, imag_lim, R, type: str = 'L', function: str = 'W', block: bool = False, validate: bool = False):

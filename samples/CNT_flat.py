@@ -47,9 +47,9 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/mont-fort17/dleonard/CNT/"
+    scratch_path = "/usr/scratch2/tortin12/chexia/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "CNT_newwannier")
+    solution_path = os.path.join(scratch_path, "CNT_evensort24")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_IEDM_GNR_0v.mat")
@@ -121,9 +121,9 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([1, 1])
+    no_orb = np.array([2, 3])
     Vappl = 0.0
-    energy = np.linspace(-10, 2, 450, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-10, 5, 1500, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
-    nbc = 2
+    #nbc = 2
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
@@ -499,7 +499,7 @@ if __name__ == "__main__":
                                                                 comm,
                                                                 rank,
                                                                 size,
-                                                                homogenize = False,
+                                                                homogenize = True,
                                                                 mkl_threads = gf_mkl_threads,
                                                                 worker_num = gf_worker_threads,
                                                                 block_inv = args.block_inv,
@@ -717,6 +717,7 @@ if __name__ == "__main__":
                                                                                                     rank,
                                                                                                     size,
                                                                                                     nbc,
+                                                                                                    homogenize = True,
                                                                                                     mkl_threads = w_mkl_threads,
                                                                                                     worker_num = w_worker_threads,
                                                                                                     block_inv=args.block_inv,

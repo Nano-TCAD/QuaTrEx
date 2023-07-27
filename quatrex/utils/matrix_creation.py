@@ -230,7 +230,7 @@ def homogenize_matrix(M00, M01, NB, type):
 
 def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
     N = Bmax[0] - Bmin[0] + 1
-    sparse_vector = np.ones(rows.shape[0], dtype=np.float)
+    sparse_vector = np.ones(rows.shape[0], dtype=np.float64)
     sparse_matrix = sparse.csc_matrix((sparse_vector, (rows, columns)), shape=(nao, nao))
     S01 = sparse_matrix[0:N, N:2 * N]
     # find sparse indices of S01
