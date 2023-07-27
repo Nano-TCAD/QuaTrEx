@@ -94,7 +94,8 @@ if __name__ == "__main__":
             print("No gpu available")
             sys.exit(1)
     # print chosen implementation
-    print(f"Using {args.type} implementation")
+    if rank == 0:
+        print(f"Using {args.type} implementation")
 
     if args.dace:
         import dace
