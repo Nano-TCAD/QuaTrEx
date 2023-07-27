@@ -19,25 +19,24 @@ from mpi4py import MPI
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
-sys.path.append(parent_path)
 
-from bandstructure.calc_band_edge import get_band_edge_mpi
-from GW.polarization.kernel import g2p_cpu
-from GW.selfenergy.kernel import gw2s_cpu
-from GW.gold_solution import read_solution
-from GW.screenedinteraction.kernel import p2w_cpu
-from GW.coulomb_matrix.read_coulomb_matrix import load_V
-from GreensFunction import calc_GF_pool
-from OMEN_structure_matrices import OMENHamClass
-from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
-from utils import change_format
-from utils import utils_gpu
-from utils.bsr import bsr_matrix
-from utils.matrix_creation import get_number_connected_blocks
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi
+from quatrex.GW.polarization.kernel import g2p_cpu
+from quatrex.GW.selfenergy.kernel import gw2s_cpu
+from quatrex.GW.gold_solution import read_solution
+from quatrex.GW.screenedinteraction.kernel import p2w_cpu
+from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V
+from quatrex.GreensFunction import calc_GF_pool
+from quatrex.OMEN_structure_matrices import OMENHamClass
+from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
+from quatrex.utils import change_format
+from quatrex.utils import utils_gpu
+from quatrex.utils.bsr import bsr_matrix
+from quatrex.utils.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
-    from GW.polarization.kernel import g2p_gpu
-    from GW.selfenergy.kernel import gw2s_gpu
+    from quatrex.GW.polarization.kernel import g2p_gpu
+    from quatrex.GW.selfenergy.kernel import gw2s_gpu
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
@@ -100,7 +99,7 @@ if __name__ == "__main__":
         from dace.sdfg import utils
         if rank == 0:
             print("Using dace for Beyn")
-            from OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
+            from quarex.OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
             from dace.transformation.auto.auto_optimize import auto_optimize
             ci_sdfg = contour_integral_dace.to_sdfg(simplify=True)
             auto_optimize(ci_sdfg, dace.DeviceType.CPU, thread_safe=True)
@@ -114,7 +113,7 @@ if __name__ == "__main__":
         else:
             ci_sdfg, ci_block_sdfg, sk_sdfg = None, None, None
         comm.Barrier()
-        import OBC.beyn_globals as bg
+        import quatrex.OBC.beyn_globals as bg
         bg.contour_integral = utils.distributed_compile(ci_sdfg, comm)
         bg.contour_integral_block = utils.distributed_compile(ci_block_sdfg, comm)
         bg.sort_k = utils.distributed_compile(sk_sdfg, comm)

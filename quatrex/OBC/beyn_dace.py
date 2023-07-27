@@ -1,3 +1,5 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 import dace
 import numpy as np
 import time
@@ -6,22 +8,20 @@ from dace.transformation.auto.auto_optimize import auto_optimize
 from numpy.linalg import eig
 from scipy.linalg import svd
 
-
 theta_min = 0
-theta_max = 2*np.pi
+theta_max = 2 * np.pi
 NT = 51
 eps_lim = 1e-8
 ref_iteration = 2
 # rng = np.random.default_rng(42)
 np.random.seed(0)
 
-
 N, NM = (dace.symbol(s) for s in ('N', 'NM'))
 
 
 def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     imag_cond = np.zeros(len(k))
-    dEk_dk = np.zeros(len(k), dtype =  np.cfloat)
+    dEk_dk = np.zeros(len(k), dtype=np.cfloat)
 
     ind = np.where(np.abs(np.imag(k)) < np.max((0.5, max_imag)))[0]
     Ikmax = len(ind)
@@ -57,13 +57,12 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     return imag_cond, dEk_dk
 
 
-
 def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     Nk = len(k)
-    NT = len(phiL[:,0])
+    NT = len(phiL[:, 0])
 
-    ksurf = np.zeros(Nk, dtype = np.cfloat)
-    Vsurf = np.zeros((NT, Nk), dtype = np.cfloat)
+    ksurf = np.zeros(Nk, dtype=np.cfloat)
+    Vsurf = np.zeros((NT, Nk), dtype=np.cfloat)
 
     imag_cond, dEk_dk = check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_limit)
 
@@ -73,39 +72,33 @@ def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
 
         if not imag_cond[Ik] and abs(np.imag(k[Ik])) > 1e-6:
 
-            if factor*np.imag(k[Ik]) < 0:
+            if factor * np.imag(k[Ik]) < 0:
 
                 Nref += 1
 
-                ksurf[Nref-1] = k[Ik]
-                Vsurf[:,Nref-1] = phiL[:,Ik]
+                ksurf[Nref - 1] = k[Ik]
+                Vsurf[:, Nref - 1] = phiL[:, Ik]
 
         else:
-        
-            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.imag(k[Ik]) < 0)
-            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.real(dEk_dk[Ik]) < 0)
+
+            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.imag(k[Ik]) < 0)
+            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.real(dEk_dk[Ik]) < 0)
 
             if cond1 or cond2:
 
                 Nref += 1
 
-                ksurf[Nref-1] = k[Ik]
-                Vsurf[:,Nref-1] = phiL[:,Ik]
+                ksurf[Nref - 1] = k[Ik]
+                Vsurf[:, Nref - 1] = phiL[:, Ik]
     ksurf = ksurf[0:Nref]
-    Vsurf = Vsurf[:,0:Nref]
+    Vsurf = Vsurf[:, 0:Nref]
     return ksurf, Vsurf, dEk_dk
 
 
 @dace.program
-def check_imag_cond_dace(imag_cond: dace.bool[NM],
-                         dEk_dk: dace.complex128[NM],
-                         k: dace.complex128[NM],
-                         kR: dace.complex128[NM],
-                         phiR: dace.complex128[NM, N],
-                         phiL: dace.complex128[N, NM],
-                         M10: dace.complex128[N, N],
-                         M01: dace.complex128[N, N],
-                         max_imag: dace.float64):
+def check_imag_cond_dace(imag_cond: dace.bool[NM], dEk_dk: dace.complex128[NM], k: dace.complex128[NM],
+                         kR: dace.complex128[NM], phiR: dace.complex128[NM, N], phiL: dace.complex128[N, NM],
+                         M10: dace.complex128[N, N], M01: dace.complex128[N, N], max_imag: dace.float64):
 
     # imag_cond = np.zeros((NM,), dtype=np.bool_)
     # dEk_dk = np.zeros((NM,), dtype =  np.complex128)
@@ -118,7 +111,8 @@ def check_imag_cond_dace(imag_cond: dace.bool[NM],
     # if Ikmax % 2 == 1:
     #     Ikmax += 1
 
-    Ikmax = np.add.reduce(np.int32(np.abs(np.imag(k)) < np.maximum(0.5, max_imag)))  # Casting because reduces to bool otherwise
+    Ikmax = np.add.reduce(
+        np.int32(np.abs(np.imag(k)) < np.maximum(0.5, max_imag)))  # Casting because reduces to bool otherwise
     Ikmax += Ikmax % 2
 
     # ind_kRs = np.argmin(np.abs(np.ones((NM, 1)) * k - kR), axis=1)
@@ -128,7 +122,8 @@ def check_imag_cond_dace(imag_cond: dace.bool[NM],
         # ind_kR = np.argmin(np.abs(np.ones(len(kR)) * k[Ik] - kR))
         ind_kR = ind_kRs[Ik]
 
-        dEk_dk[Ik] = -(phiR[ind_kR, :] @ (-(1j * M10) * np.exp(-(1j * k[Ik])) + 1j * M01 * np.exp(1j * k[Ik])) @ phiL[:, Ik]) / (phiR[ind_kR, :] @ phiL[:, Ik])
+        dEk_dk[Ik] = -(phiR[ind_kR, :] @ (-(1j * M10) * np.exp(-(1j * k[Ik])) + 1j * M01 * np.exp(1j * k[Ik]))
+                       @ phiL[:, Ik]) / (phiR[ind_kR, :] @ phiL[:, Ik])
 
     # ind_neighs = np.argmin(np.abs(np.ones((NM,1)) * dEk_dk  + dEk_dk), axis=1)
     ind_neighs = np.argmin(np.abs(np.add.outer(dEk_dk, dEk_dk)), axis=1)
@@ -157,18 +152,10 @@ def check_imag_cond_dace(imag_cond: dace.bool[NM],
 
 
 @dace.program
-def sort_k_dace(ksurf: dace.complex128[NM],
-                Vsurf: dace.complex128[N, NM],
-                dEk_dk: dace.complex128[NM],
-                out_Nref: dace.int32[1],
-                k: dace.complex128[NM],
-                kR: dace.complex128[NM],
-                phiL: dace.complex128[N, NM],
-                phiR: dace.complex128[NM, N],
-                M01: dace.complex128[N, N],
-                M10: dace.complex128[N, N],
-                imag_limit: dace.float64,
-                factor: dace.float64):
+def sort_k_dace(ksurf: dace.complex128[NM], Vsurf: dace.complex128[N, NM], dEk_dk: dace.complex128[NM],
+                out_Nref: dace.int32[1], k: dace.complex128[NM], kR: dace.complex128[NM], phiL: dace.complex128[N, NM],
+                phiR: dace.complex128[NM, N], M01: dace.complex128[N, N], M10: dace.complex128[N, N],
+                imag_limit: dace.float64, factor: dace.float64):
 
     # ksurf = np.zeros((NM,), dtype=np.complex128)
     # Vsurf = np.zeros((N, NM), dtype=np.complex128)
@@ -176,7 +163,7 @@ def sort_k_dace(ksurf: dace.complex128[NM],
     Vsurf[:] = 0
 
     # imag_cond, dEk_dk = check_imag_cond_dace(k, kR, phiR, phiL, M10, M01, imag_limit)
-    imag_cond = np.empty((NM,), dtype=np.bool_)
+    imag_cond = np.empty((NM, ), dtype=np.bool_)
     check_imag_cond_dace(imag_cond, dEk_dk, k, kR, phiR, phiL, M10, M01, imag_limit)
 
     Nref = 0
@@ -185,30 +172,30 @@ def sort_k_dace(ksurf: dace.complex128[NM],
 
         if not imag_cond[Ik] and abs(np.imag(k[Ik])) > 1e-6:
 
-            if factor*np.imag(k[Ik]) < 0:
+            if factor * np.imag(k[Ik]) < 0:
 
                 ksurf[Nref] = k[Ik]
-                Vsurf[:,Nref] = phiL[:,Ik]
+                Vsurf[:, Nref] = phiL[:, Ik]
                 Nref += 1
 
         else:
-        
-            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.imag(k[Ik]) < 0)
-            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.real(dEk_dk[Ik]) < 0)
+
+            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.imag(k[Ik]) < 0)
+            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.real(dEk_dk[Ik]) < 0)
 
             if cond1 or cond2:
 
                 Nref += 1
 
-                ksurf[Nref-1] = k[Ik]
-                Vsurf[:,Nref-1] = phiL[:,Ik]
+                ksurf[Nref - 1] = k[Ik]
+                Vsurf[:, Nref - 1] = phiL[:, Ik]
     # ksurf = ksurf[0:Nref]
     # Vsurf = Vsurf[:,0:Nref]
     # return ksurf, Vsurf, dEk_dk, Nref
     out_Nref[0] = Nref
 
 
-from . import beyn_globals as bg
+from quatrex.OBC import beyn_globals as bg
 
 
 def beyn(M00, M01, M10, imag_lim, R, type: str = 'L', function: str = 'W', block: bool = False, validate: bool = False):
@@ -224,7 +211,7 @@ def beyn(M00, M01, M10, imag_lim, R, type: str = 'L', function: str = 'W', block
         contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
     # if sortk is None:
     #     sortk, _ = sort_k_dace.load_precompiled_sdfg(f'.dacecache/{sort_k_dace.name}')
-    
+
     # ctime = - time.perf_counter()
 
     N = M00.shape[0]
@@ -232,10 +219,10 @@ def beyn(M00, M01, M10, imag_lim, R, type: str = 'L', function: str = 'W', block
     cond = 0
 
     if N < 100:
-        NM = round(3*N/4)
+        NM = round(3 * N / 4)
     else:
-        NM = round(N/2)
-    
+        NM = round(N / 2)
+
     Y = np.complex128(np.random.rand(N, NM))
 
     # LP0, LP1, RP0, RP1 = contour_integral(M00=M00, M01=M01, M10=M10, Y=Y, R=R, is_left=np.bool_(type=='L'), N=N, NM=NM)
@@ -496,30 +483,23 @@ def beyn(M00, M01, M10, imag_lim, R, type: str = 'L', function: str = 'W', block
 
 
 @dace.program
-def contour_integral_dace(LP0: dace.complex128[N, NM],
-                          LP1: dace.complex128[N, NM],
-                          RP0: dace.complex128[NM, N],
-                          RP1: dace.complex128[NM, N],
-                          M00: dace.complex128[N, N],
-                          M01: dace.complex128[N, N],
-                          M10: dace.complex128[N, N],
-                          Y: dace.complex128[N, NM],
-                          R: dace.float64,
-                          is_left: dace.bool):
+def contour_integral_dace(LP0: dace.complex128[N, NM], LP1: dace.complex128[N, NM], RP0: dace.complex128[NM, N],
+                          RP1: dace.complex128[NM, N], M00: dace.complex128[N, N], M01: dace.complex128[N, N],
+                          M10: dace.complex128[N, N], Y: dace.complex128[N, NM], R: dace.float64, is_left: dace.bool):
 
     theta = np.linspace(theta_min, theta_max, NT)
-    dtheta1 = np.hstack((theta[1]-theta[0], theta[2:]-theta[:-2], theta[-1]-theta[-2]))/2
+    dtheta1 = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
 
     c = 0
     r1 = 3.0
-    r2 = 1/R
+    r2 = 1 / R
 
-    zC1 = c + r1*np.exp(1j*theta)
-    zC2 = c + r2*np.exp(1j*theta)
+    zC1 = c + r1 * np.exp(1j * theta)
+    zC2 = c + r2 * np.exp(1j * theta)
     z = np.hstack((zC1, zC2))
 
-    dzC1_dtheta = 1j*r1*np.exp(1j*theta)
-    dzC2_dtheta = 1j*r2*np.exp(1j*theta)
+    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
 
     dtheta = np.hstack((dtheta1, dtheta1))
@@ -535,49 +515,44 @@ def contour_integral_dace(LP0: dace.complex128[N, NM],
 
         # if type == 'L':
         if is_left:
-            T = M00 + M01/z[I] + M10*z[I]
+            T = M00 + M01 / z[I] + M10 * z[I]
         else:
-            T = M00 + M01*z[I] + M10/z[I]
+            T = M00 + M01 * z[I] + M10 / z[I]
 
         iT = np.linalg.inv(T)
 
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        P0 += iT * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
+        P1 += iT * z[I] * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
 
-    LP0[:] = P0@Y
-    LP1[:] = P1@Y
+    LP0[:] = P0 @ Y
+    LP1[:] = P1 @ Y
 
-    RP0[:] = Y.T@P0
-    RP1[:] = Y.T@P1
+    RP0[:] = Y.T @ P0
+    RP1[:] = Y.T @ P1
 
     # return LP0, LP1, RP0, RP1
 
 
 @dace.program
-def contour_integral_block_dace(LP0: dace.complex128[N, NM],
-                                LP1: dace.complex128[N, NM],
-                                RP0: dace.complex128[NM, N],
-                                RP1: dace.complex128[NM, N],
-                                M00: dace.complex128[N, N],
-                                M01: dace.complex128[N, N],
-                                M10: dace.complex128[N, N],
-                                Y: dace.complex128[N, NM],
-                                R: dace.float64,
-                                is_left: dace.bool):
+def contour_integral_block_dace(LP0: dace.complex128[N, NM], LP1: dace.complex128[N, NM], RP0: dace.complex128[NM, N],
+                                RP1: dace.complex128[NM, N], M00: dace.complex128[N, N], M01: dace.complex128[N, N],
+                                M10: dace.complex128[N,
+                                                     N], Y: dace.complex128[N,
+                                                                            NM], R: dace.float64, is_left: dace.bool):
 
     theta = np.linspace(theta_min, theta_max, NT)
-    dtheta1 = np.hstack((theta[1]-theta[0], theta[2:]-theta[:-2], theta[-1]-theta[-2]))/2
+    dtheta1 = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
 
     c = 0
     r1 = 3.0
-    r2 = 1/R
+    r2 = 1 / R
 
-    zC1 = c + r1*np.exp(1j*theta)
-    zC2 = c + r2*np.exp(1j*theta)
+    zC1 = c + r1 * np.exp(1j * theta)
+    zC2 = c + r2 * np.exp(1j * theta)
     z = np.hstack((zC1, zC2))
 
-    dzC1_dtheta = 1j*r1*np.exp(1j*theta)
-    dzC2_dtheta = 1j*r2*np.exp(1j*theta)
+    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
 
     dtheta = np.hstack((dtheta1, dtheta1))
@@ -589,10 +564,10 @@ def contour_integral_block_dace(LP0: dace.complex128[N, NM],
     P0 = np.zeros((N, N), dtype=np.complex128)
     P1 = np.zeros((N, N), dtype=np.complex128)
 
-    A = M00[:N//2, :N//2]
-    B = M00[:N//2, N//2:]
-    C = M00[N//2:, :N//2]
-    D = M00[N//2:, N//2:]
+    A = M00[:N // 2, :N // 2]
+    B = M00[:N // 2, N // 2:]
+    C = M00[N // 2:, :N // 2]
+    D = M00[N // 2:, N // 2:]
 
     iA = np.linalg.inv(A)
     iD = np.linalg.inv(D)
@@ -602,60 +577,54 @@ def contour_integral_block_dace(LP0: dace.complex128[N, NM],
     for I in range(len(z)):
 
         if is_left:
-            Bi = B + M10[:N//2, N//2:]*z[I]
-            Ci = C + M01[N//2:, :N//2]/z[I]
+            Bi = B + M10[:N // 2, N // 2:] * z[I]
+            Ci = C + M01[N // 2:, :N // 2] / z[I]
         else:
-            Bi = B + M10[:N//2, N//2:]/z[I]
-            Ci = C + M01[N//2:, :N//2]*z[I]
+            Bi = B + M10[:N // 2, N // 2:] / z[I]
+            Ci = C + M01[N // 2:, :N // 2] * z[I]
 
-        T0 = np.linalg.inv(A - Bi@iD@Ci)
-        T1 = np.linalg.inv(D - Ci@iA@Bi)
+        T0 = np.linalg.inv(A - Bi @ iD @ Ci)
+        T1 = np.linalg.inv(D - Ci @ iA @ Bi)
 
-        iT[:N//2, :N//2] = T0
-        iT[:N//2, N//2:] = -iA@Bi@T1
-        iT[N//2:, :N//2] = -iD@Ci@T0
-        iT[N//2:, N//2:] = T1
+        iT[:N // 2, :N // 2] = T0
+        iT[:N // 2, N // 2:] = -iA @ Bi @ T1
+        iT[N // 2:, :N // 2] = -iD @ Ci @ T0
+        iT[N // 2:, N // 2:] = T1
 
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        P0 += iT * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
+        P1 += iT * z[I] * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
 
-    LP0[:] = P0@Y
-    LP1[:] = P1@Y
+    LP0[:] = P0 @ Y
+    LP1[:] = P1 @ Y
 
-    RP0[:] = Y.T@P0
-    RP1[:] = Y.T@P1
+    RP0[:] = Y.T @ P0
+    RP1[:] = Y.T @ P1
 
 
 S = dace.symbol('S')
 
+
 @dace.program
 def diag(d: dace.complex128[S]):
     out = np.zeros((S, S), dtype=d.dtype)
-    for i in dace.map[0: S]:
+    for i in dace.map[0:S]:
         out[i, i] = d[i]
     return out
 
 
 @dace.program
 def trace(d: dace.complex128[S, S]):
-    out = np.zeros((1,), dtype=d.dtype)
-    for i in dace.map[0: S]:
+    out = np.zeros((1, ), dtype=d.dtype)
+    for i in dace.map[0:S]:
         out[0] += d[i, i]
     return out
 
 
 @dace.program
-def calc_sigma(k: dace.complex128[NM],
-               kR: dace.complex128[NM],
-               phiL: dace.complex128[N, NM],
-               phiR: dace.complex128[NM, N],
-               M00: dace.complex128[N, N],
-               M01: dace.complex128[N, N],
-               M10: dace.complex128[N, N],
-               imag_lim: dace.float64,
-               is_left: dace.bool,
-               is_W: dace.bool,
-               ref_iteration: int):
+def calc_sigma(k: dace.complex128[NM], kR: dace.complex128[NM], phiL: dace.complex128[N, NM], phiR: dace.complex128[NM,
+                                                                                                                    N],
+               M00: dace.complex128[N, N], M01: dace.complex128[N, N], M10: dace.complex128[N, N],
+               imag_lim: dace.float64, is_left: dace.bool, is_W: dace.bool, ref_iteration: int):
 
     if is_left:
         factor = 1.0
@@ -694,6 +663,7 @@ def calc_sigma(k: dace.complex128[NM],
 def random_complex(shape, rng, dtype=np.float64):
     return (rng.random(shape, dtype) - 0.5) + 1j * (rng.random(shape, dtype) - 0.5)
 
+
 def random_float(shape, rng, dtype=np.float64):
     return rng.random(shape, dtype) - 0.5
 
@@ -728,8 +698,21 @@ if __name__ == "__main__":
     runtimes = repeat("beyn(M00, M01, M10, imag_lim, R, Y)", globals={**globals(), **locals()}, number=1, repeat=10)
     print(f"Reference beyn: {np.median(runtimes) * 1000} ms")
 
-    ksurf_val, Vsurf_val, cond_val, gR_val, Sigma_val, min_dEk_val = beyn_dace(M00, M01, M10, imag_lim, R, Y, contour_integral=ci_func, sortk=sk_func)
-    runtimes = repeat("beyn_dace(M00, M01, M10, imag_lim, R, Y, contour_integral=ci_func, sortk=sk_func)", globals={**globals(), **locals()}, number=1, repeat=10)
+    ksurf_val, Vsurf_val, cond_val, gR_val, Sigma_val, min_dEk_val = beyn_dace(M00,
+                                                                               M01,
+                                                                               M10,
+                                                                               imag_lim,
+                                                                               R,
+                                                                               Y,
+                                                                               contour_integral=ci_func,
+                                                                               sortk=sk_func)
+    runtimes = repeat("beyn_dace(M00, M01, M10, imag_lim, R, Y, contour_integral=ci_func, sortk=sk_func)",
+                      globals={
+                          **globals(),
+                          **locals()
+                      },
+                      number=1,
+                      repeat=10)
     print(f"DaCe beyn: {np.median(runtimes) * 1000} ms")
 
     assert np.allclose(ksurf_ref, ksurf_val)
@@ -749,7 +732,7 @@ if __name__ == "__main__":
     # ksurf_ref, Vsurf_ref, dEk_dk_ref = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, factor)
     # # runtimes = repeat("check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_lim)", globals=globals(), number=1, repeat=10)
     # # print(f"Reference check_imag_cond: {np.median(runtimes) * 1000} ms")
-    
+
     # # sdfg = check_imag_cond_dace.to_sdfg(simplify=True)
     # sdfg = sort_k_dace.to_sdfg(simplify=True)
     # auto_optimize(sdfg, dace.DeviceType.CPU)

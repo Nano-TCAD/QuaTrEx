@@ -1,3 +1,5 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 import numpy as np
 
 from scipy.linalg import svd
@@ -8,37 +10,37 @@ np.random.seed(0)
 def beyn(M00, M01, M10, imag_lim, R, type, function = 'W', block: bool = False):
 
     theta_min = 0
-    theta_max = 2*np.pi
+    theta_max = 2 * np.pi
     NT = 51
     eps_lim = 1e-8
-    ref_iteration = 2                                
+    ref_iteration = 2
     cond = 0
     min_dEk = 1e8
 
     N = M00.shape[0]
 
     theta = np.linspace(theta_min, theta_max, NT)
-    dtheta = np.hstack((theta[1]-theta[0], theta[2:]-theta[:-2], theta[-1]-theta[-2]))/2
+    dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
 
     c = 0
     r1 = 3.0
-    r2 = 1/R
+    r2 = 1 / R
 
-    zC1 = c + r1*np.exp(1j*theta)
-    zC2 = c + r2*np.exp(1j*theta)
+    zC1 = c + r1 * np.exp(1j * theta)
+    zC2 = c + r2 * np.exp(1j * theta)
     z = np.hstack((zC1, zC2))
 
-    dzC1_dtheta = 1j*r1*np.exp(1j*theta)
-    dzC2_dtheta = 1j*r2*np.exp(1j*theta)
+    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
 
     dtheta = np.hstack((dtheta, dtheta))
 
     if N < 100:
-        NM = round(3*N/4)
+        NM = round(3 * N / 4)
     else:
-        NM = round(N/2)
-    
+        NM = round(N / 2)
+
     # ctime += time.perf_counter()
     # print(f'Time for setting up the parameters: {ctime} s')
 
@@ -203,9 +205,10 @@ def beyn(M00, M01, M10, imag_lim, R, type, function = 'W', block: bool = False):
 
     return ksurf, cond, gR, Sigma, min_dEk
 
+
 def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     imag_cond = np.zeros(len(k))
-    dEk_dk = np.zeros(len(k), dtype =  np.cfloat)
+    dEk_dk = np.zeros(len(k), dtype=np.cfloat)
 
     ind = np.where(np.abs(np.imag(k)) < np.max((0.5, max_imag)))[0]
     Ikmax = len(ind)
@@ -241,13 +244,12 @@ def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     return imag_cond, dEk_dk
 
 
-
 def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     Nk = len(k)
-    NT = len(phiL[:,0])
+    NT = len(phiL[:, 0])
 
-    ksurf = np.zeros(Nk, dtype = np.cfloat)
-    Vsurf = np.zeros((NT, Nk), dtype = np.cfloat)
+    ksurf = np.zeros(Nk, dtype=np.cfloat)
+    Vsurf = np.zeros((NT, Nk), dtype=np.cfloat)
 
     imag_cond, dEk_dk = check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_limit)
 
@@ -257,27 +259,28 @@ def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
 
         if not imag_cond[Ik] and abs(np.imag(k[Ik])) > 1e-6:
 
-            if factor*np.imag(k[Ik]) < 0:
+            if factor * np.imag(k[Ik]) < 0:
 
                 Nref += 1
 
-                ksurf[Nref-1] = k[Ik]
-                Vsurf[:,Nref-1] = phiL[:,Ik]
+                ksurf[Nref - 1] = k[Ik]
+                Vsurf[:, Nref - 1] = phiL[:, Ik]
 
         else:
-        
-            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.imag(k[Ik]) < 0)
-            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik]))/100) and (factor*np.real(dEk_dk[Ik]) < 0)
+
+            cond1 = (abs(np.real(dEk_dk[Ik])) < abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.imag(k[Ik]) < 0)
+            cond2 = (abs(np.real(dEk_dk[Ik])) >= abs(np.imag(dEk_dk[Ik])) / 100) and (factor * np.real(dEk_dk[Ik]) < 0)
 
             if cond1 or cond2:
 
                 Nref += 1
 
-                ksurf[Nref-1] = k[Ik]
-                Vsurf[:,Nref-1] = phiL[:,Ik]
+                ksurf[Nref - 1] = k[Ik]
+                Vsurf[:, Nref - 1] = phiL[:, Ik]
     ksurf = ksurf[0:Nref]
-    Vsurf = Vsurf[:,0:Nref]
+    Vsurf = Vsurf[:, 0:Nref]
     return ksurf, Vsurf, dEk_dk
+
 
 def beyn_old(M00, M01, M10, imag_lim, R, type):
     """
@@ -295,40 +298,40 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
     Returns:
         _type_: _description_
     """
-    
+
     #np.seterr(divide='ignore', invalid='ignore')
 
     theta_min = 0
-    theta_max = 2*np.pi
+    theta_max = 2 * np.pi
     NT = 51
     eps_lim = 1e-8
-    ref_iteration = 2                                   
+    ref_iteration = 2
     cond = 0
     min_dEk = 1e8
 
     N = M00.shape[0]
 
     theta = np.linspace(theta_min, theta_max, NT)
-    dtheta = np.hstack((theta[1]-theta[0], theta[2:]-theta[:-2], theta[-1]-theta[-2]))/2
+    dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
 
     c = 0
     r1 = 3.0
-    r2 = 1/R
+    r2 = 1 / R
 
-    zC1 = c + r1*np.exp(1j*theta)
-    zC2 = c + r2*np.exp(1j*theta)
+    zC1 = c + r1 * np.exp(1j * theta)
+    zC2 = c + r2 * np.exp(1j * theta)
     z = np.hstack((zC1, zC2))
 
-    dzC1_dtheta = 1j*r1*np.exp(1j*theta)
-    dzC2_dtheta = 1j*r2*np.exp(1j*theta)
+    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
 
     dtheta = np.hstack((dtheta, dtheta))
 
     if N < 100:
-        NM = round(3*N/4)
+        NM = round(3 * N / 4)
     else:
-        NM = round(N/2)
+        NM = round(N / 2)
 
     Y = np.random.rand(N, NM)
     #Y = np.loadtxt('CNT_newwannier/' + 'ymatrix.dat')
@@ -352,20 +355,20 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
     for I in range(len(z)):
 
         if type == 'L':
-            T = M00 + M01/z[I] + M10*z[I]
+            T = M00 + M01 / z[I] + M10 * z[I]
         else:
-            T = M00 + M01*z[I] + M10/z[I]
+            T = M00 + M01 * z[I] + M10 / z[I]
 
         iT = np.linalg.inv(T)
 
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+        P0 += iT * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
+        P1 += iT * z[I] * dz_dtheta[I] * dtheta[I] / (2 * np.pi * 1j)
 
-    LP0 = P0@Y
-    LP1 = P1@Y
+    LP0 = P0 @ Y
+    LP1 = P1 @ Y
 
-    RP0 = Y.T@P0
-    RP1 = Y.T@P1
+    RP0 = Y.T @ P0
+    RP1 = Y.T @ P1
 
     LV, LS, LW = svd(LP0, full_matrices=False)
     Lind = np.count_nonzero(abs(LS) > eps_lim)
@@ -388,15 +391,15 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
         LS = LS[:Lind]
         LW = np.conj(LW).T[:, :Lind]
 
-        Llambda, Lu = eig(np.conj(LV).T@LP1@LW@np.linalg.inv(np.diag(LS)))
+        Llambda, Lu = eig(np.conj(LV).T @ LP1 @ LW @ np.linalg.inv(np.diag(LS)))
         #Llambda = np.diag(Llambda)
-        phiL = LV@Lu
+        phiL = LV @ Lu
 
         RV = RV[:, :Rind]
         RS = RS[:Rind]
         RW = np.conj(RW).T[:, :Rind]
 
-        Rlambda, Ru = eig(np.linalg.inv(np.diag(RS))@np.conj(RV).T@RP1@RW)
+        Rlambda, Ru = eig(np.linalg.inv(np.diag(RS)) @ np.conj(RV).T @ RP1 @ RW)
         #Rlambda = np.diag(Rlambda)
         phiR = np.linalg.solve(Ru, np.conj(RW).T)
 
@@ -413,13 +416,15 @@ def beyn_old(M00, M01, M10, imag_lim, R, type):
 
         if type == 'L':
             ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
-            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
+            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf +
+                                       Vsurf.T @ M10 @ Vsurf @ np.diag(np.exp(-1j * ksurf))) @ Vsurf.T
             for IC in range(ref_iteration):
                 gR = np.linalg.inv(M00 - M10 @ gR @ M01)
             Sigma = M10 @ gR @ M01
         else:
             ksurf, Vsurf, dEk_dk = sort_k(k, kR, phiL, phiR, M01, M10, imag_lim, -1.0)
-            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf + Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
+            gR = Vsurf @ np.linalg.inv(Vsurf.T @ M00 @ Vsurf +
+                                       Vsurf.T @ M01 @ Vsurf @ np.diag(np.exp(1j * ksurf))) @ Vsurf.T
             for IC in range(ref_iteration):
                 gR = np.linalg.inv(M00 - M01 @ gR @ M10)
             Sigma = M01 @ gR @ M10

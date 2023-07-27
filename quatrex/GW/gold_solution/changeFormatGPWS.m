@@ -1,3 +1,5 @@
+% Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 function changeFormatGPWS(path)
     % load .mat file from path and creates file in format E, rows, cols,
     % real X, img X where E is a vector and the rest are structs of size

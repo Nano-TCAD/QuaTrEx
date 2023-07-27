@@ -46,14 +46,14 @@ class bsr_matrix(object):
     @property
     def T(self):
         return bsr_matrix(self._matrix.T)
-    
+
     @property
     def real(self):
         data = np.real(self.data)
         indices = self.indices.copy()
         indptr = self.indptr.copy()
         return bsr_matrix(sp.bsr_matrix((data, indices, indptr), shape=self.shape, blocksize=self.blocksize))
-    
+
     @property
     def imag(self):
         data = np.imag(self.data)
@@ -86,12 +86,12 @@ class bsr_matrix(object):
                     data_idx = i
                     break
 
-            # NOTE: Special case where a block becomes zero after, e.g., a subtraction. 
+            # NOTE: Special case where a block becomes zero after, e.g., a subtraction.
             if data_idx < 0:
                 return np.zeros((self.blocksize[0], self.blocksize[1]), dtype=self.dtype)
 
             return self.data[data_idx]
-        
+
         else:
 
             result = np.zeros((rows, cols), dtype=self.dtype)
@@ -114,7 +114,7 @@ class bsr_matrix(object):
                     out_slice = (slice((bi - offi) * self.blocksize[0], (bi - offi + 1) * self.blocksize[0]),
                                  slice((bj - offj) * self.blocksize[1], (bj - offj + 1) * self.blocksize[1]))
                     result[out_slice] = block
-            
+
             return result
 
     def copy(self):

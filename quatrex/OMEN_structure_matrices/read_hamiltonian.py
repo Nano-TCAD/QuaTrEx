@@ -1,12 +1,8 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan 17 17:58:38 2023
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-@author: dleonard
-"""
 import numpy as np
 from scipy import sparse
+
 
 def read_hamiltonian(Path):
     """
@@ -26,4 +22,4 @@ def read_hamiltonian(Path):
     """
     H = sparse.random(3120, 3120, 0.5).tocsr()
     S = sparse.random(3120, 3120, 0.01).tocsr()
-    return(H, S)
+    return (H, S)

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "QuaTrex"
+authors = [ { name = "ETH Zurich" }, { name = "Nano-TCAD Group" } ]
+description = "Quantum Transport at the Exascale and Beyond"
+readme = "README.MD"
+requires-python = ">=3.9"
+license = {text = "BSD-3-Clause"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "scipy",
+    "toml",
+]
+dynamic = ["version"]
+
+[tool.setuptools.dynamic]
+version = { attr = "__about__.__version__" }
+
+[tool.setuptools]
+packages = ["quatrex"]
+
+[tool.yapf]
+based_on_style = "pep8"
+column_limit = 120

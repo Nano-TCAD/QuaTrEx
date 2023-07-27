@@ -27,12 +27,12 @@ if __name__ == "__main__":
     solution_path_vh = os.path.join(solution_path, "data_Vh_4.mat")
     hamiltonian_path = os.path.join(solution_path, "CNT_newwannier")
     parser = argparse.ArgumentParser(
-        description="Tests different implementation of the screened interaction calculation"
-    )
-    parser.add_argument("-t", "--type", default="cpu",
-                        choices=["cpu_pool", "cpu",
-                                "cpu_pool_old", "cpu_alt",
-                                "gpu", "gpu_alt"], required=False)
+        description="Tests different implementation of the screened interaction calculation")
+    parser.add_argument("-t",
+                        "--type",
+                        default="cpu",
+                        choices=["cpu_pool", "cpu", "cpu_pool_old", "cpu_alt", "gpu", "gpu_alt"],
+                        required=False)
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
@@ -50,27 +50,27 @@ if __name__ == "__main__":
     print("Number of used pool workers: ", w_worker_threads)
 
     # load block sizes
-    bmax, bmin                                          = read_solution.load_B(args.file_gw)
+    bmax, bmin = read_solution.load_B(args.file_gw)
     # load greens function
-    energy, rows, columns, wg_gold, wl_gold, wr_gold    = read_solution.load_x(args.file_gw, "w")
+    energy, rows, columns, wg_gold, wl_gold, wr_gold = read_solution.load_x(args.file_gw, "w")
     # load polarization
-    _, _, _, pg_gold, pl_gold, pr_gold                  = read_solution.load_x(args.file_gw, "p")
+    _, _, _, pg_gold, pl_gold, pr_gold = read_solution.load_x(args.file_gw, "p")
     # load interaction hat
-    rowsRef, columnsRef, vh_gold                        = read_solution.load_v(args.file_vh)
+    rowsRef, columnsRef, vh_gold = read_solution.load_v(args.file_vh)
     # mapping to transposed
-    ij2ji                                               = change_format.find_idx_transposed(rows, columns)
-    
+    ij2ji = change_format.find_idx_transposed(rows, columns)
+
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
     # create hamiltonian object
     hamiltionian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, 0)
 
     # creating the filtering masks
-    w_mask = np.ndarray(shape = (energy.shape[0],), dtype = bool)
+    w_mask = np.ndarray(shape=(energy.shape[0], ), dtype=bool)
     # masks describe if energy point got calculated
-    wr_mask = np.sum(np.abs(wr_gold), axis = 0) > 1e-10
-    wl_mask = np.sum(np.abs(wl_gold), axis = 0) > 1e-10
-    wg_mask = np.sum(np.abs(wg_gold), axis = 0) > 1e-10
+    wr_mask = np.sum(np.abs(wr_gold), axis=0) > 1e-10
+    wl_mask = np.sum(np.abs(wl_gold), axis=0) > 1e-10
+    wg_mask = np.sum(np.abs(wg_gold), axis=0) > 1e-10
     w_mask = np.logical_or(np.logical_or(wr_mask, wl_mask), wg_mask)
 
     # number of blocks
@@ -87,26 +87,25 @@ if __name__ == "__main__":
     # todo calculate it
     nbc = 2
     # block sizes after matrix multiplication
-    bmax_mm = bmax[nbc-1:nb:nbc]
+    bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
     # number of blocks after matrix multiplication
     nb_mm = bmax_mm.size
     # larges block length after matrix multiplication
     lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
     # create map from block format to 2D format after matrix multiplication
-    map_diag_mm2m, map_upper_mm2m, map_lower_mm2m = change_format.map_block2sparse_alt(rows, columns,
-                                                                                 bmax_mm, bmin_mm)
+    map_diag_mm2m, map_upper_mm2m, map_lower_mm2m = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
     # creating the smoothing and filtering factors
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
-    factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
+    factor_w[ne - dnp - 1:ne] = (np.cos(np.pi * np.linspace(0, 1, dnp + 1)) + 1) / 2
     factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # initialize the density of states and other quantities
-    dosw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
-    new = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
-    npw = np.zeros(shape=(ne,nb_mm), dtype = np.complex128)
+    dosw = np.zeros(shape=(ne, nb_mm), dtype=np.complex128)
+    new = np.zeros(shape=(ne, nb_mm), dtype=np.complex128)
+    npw = np.zeros(shape=(ne, nb_mm), dtype=np.complex128)
 
     # sanity checks
     assert np.max(columns) == nao - 1
@@ -146,62 +145,86 @@ if __name__ == "__main__":
         pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
         pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
         # from data vector to sparse csr format
-        vh = sparse.coo_array((vh_gold, (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128).tocsr()
+        vh = sparse.coo_array((vh_gold, (rows, columns)), shape=(nao, nao), dtype=np.complex128).tocsr()
 
         wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                hamiltionian_obj, energy,
-                                                                                pg_cpu_vec, pl_cpu_vec,
-                                                                                pr_cpu_vec, vh,
-                                                                                dosw, new, npw,
-                                                                                factor_w,
-                                                                                w_mkl_threads, w_worker_threads)
+            hamiltionian_obj, energy, pg_cpu_vec, pl_cpu_vec, pr_cpu_vec, vh, dosw, new, npw, factor_w, w_mkl_threads,
+            w_worker_threads)
         # lower diagonal blocks from physics identity
-        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        wr_lower = wr_upper.transpose((0,1,3,2))
+        wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
+        wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
+        wr_lower = wr_upper.transpose((0, 1, 3, 2))
 
-        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wg_diag, wg_upper,
-                                                        wg_lower, no, ne,
-                                                        energy_contiguous=False)
-        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wl_diag, wl_upper,
-                                                        wl_lower, no, ne,
-                                                        energy_contiguous=False)
-        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wr_diag, wr_upper,
-                                                        wr_lower, no, ne,
-                                                        energy_contiguous=False)
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wg_diag,
+                                                       wg_upper,
+                                                       wg_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wl_diag,
+                                                       wl_upper,
+                                                       wl_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wr_diag,
+                                                       wr_upper,
+                                                       wr_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
     elif args.type == "cpu_pool_old":
         # transform from 2D format to list/vector of sparse arrays format
         pg_cpu_vec = change_format.sparse2vecsparse_v2(pg_gold, rows, columns, nao)
         pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
         pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
         # from data vector to sparse csr format
-        vh = sparse.coo_array((vh_gold, (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128).tocsr()
+        vh = sparse.coo_array((vh_gold, (rows, columns)), shape=(nao, nao), dtype=np.complex128).tocsr()
 
         wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper, _, _ = \
                     calc_W_pool.calc_W_pool(hamiltionian_obj, energy, pg_cpu_vec, pl_cpu_vec, pr_cpu_vec, vh, w_mask, w_mkl_threads, w_worker_threads)
 
         # lower diagonal blocks from physics identity
-        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        wr_lower = wr_upper.transpose((0,1,3,2))
+        wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
+        wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
+        wr_lower = wr_upper.transpose((0, 1, 3, 2))
 
-        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wg_diag, wg_upper,
-                                                        wg_lower, no, ne,
-                                                        energy_contiguous=False)
-        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wl_diag, wl_upper,
-                                                        wl_lower, no, ne,
-                                                        energy_contiguous=False)
-        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wr_diag, wr_upper,
-                                                        wr_lower, no, ne,
-                                                        energy_contiguous=False)
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wg_diag,
+                                                       wg_upper,
+                                                       wg_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wl_diag,
+                                                       wl_upper,
+                                                       wl_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wr_diag,
+                                                       wr_upper,
+                                                       wr_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
 
     elif args.type == "cpu":
         # transform from 2D format to list/vector of sparse arrays format
@@ -209,84 +232,76 @@ if __name__ == "__main__":
         pl_cpu_vec = change_format.sparse2vecsparse_v2(pl_gold, rows, columns, nao)
         pr_cpu_vec = change_format.sparse2vecsparse_v2(pr_gold, rows, columns, nao)
         # from data vector to sparse csr format
-        vh = sparse.coo_array((vh_gold, (rows, columns)),
-                            shape=(nao, nao), dtype = np.complex128).tocsr()
+        vh = sparse.coo_array((vh_gold, (rows, columns)), shape=(nao, nao), dtype=np.complex128).tocsr()
 
-        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(
-                                                                                hamiltionian_obj, energy,
-                                                                                pg_cpu_vec, pl_cpu_vec,
-                                                                                pr_cpu_vec, vh,
-                                                                                dosw, new, npw,
-                                                                                factor_w,
-                                                                                mkl_threads=w_mkl_threads)
+        wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_mpi_cpu(hamiltionian_obj,
+                                                                                            energy,
+                                                                                            pg_cpu_vec,
+                                                                                            pl_cpu_vec,
+                                                                                            pr_cpu_vec,
+                                                                                            vh,
+                                                                                            dosw,
+                                                                                            new,
+                                                                                            npw,
+                                                                                            factor_w,
+                                                                                            mkl_threads=w_mkl_threads)
         # lower diagonal blocks from physics identity
-        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        wr_lower = wr_upper.transpose((0,1,3,2))
+        wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
+        wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
+        wr_lower = wr_upper.transpose((0, 1, 3, 2))
 
-        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wg_diag, wg_upper,
-                                                        wg_lower, no, ne,
-                                                        energy_contiguous=False)
-        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wl_diag, wl_upper,
-                                                        wl_lower, no, ne,
-                                                        energy_contiguous=False)
-        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m, map_upper_mm2m,
-                                                        map_lower_mm2m, wr_diag, wr_upper,
-                                                        wr_lower, no, ne,
-                                                        energy_contiguous=False)
+        wg_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wg_diag,
+                                                       wg_upper,
+                                                       wg_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wl_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wl_diag,
+                                                       wl_upper,
+                                                       wl_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
+        wr_cpu = change_format.block2sparse_energy_alt(map_diag_mm2m,
+                                                       map_upper_mm2m,
+                                                       map_lower_mm2m,
+                                                       wr_diag,
+                                                       wr_upper,
+                                                       wr_lower,
+                                                       no,
+                                                       ne,
+                                                       energy_contiguous=False)
     elif args.type == "cpu_alt":
-        wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_alt(
-                                            hamiltionian_obj,
-                                            ij2ji,
-                                            rows,
-                                            columns,
-                                            pg_gold,
-                                            pl_gold,
-                                            pr_gold,
-                                            vh_gold,
-                                            factor_w,
-                                            map_diag_mm2m,
-                                            map_upper_mm2m,
-                                            map_lower_mm2m,
-                                            mkl_threads=w_mkl_threads
-                                )
+        wg_cpu, wl_cpu, wr_cpu = p2w_cpu.p2w_mpi_cpu_alt(hamiltionian_obj,
+                                                         ij2ji,
+                                                         rows,
+                                                         columns,
+                                                         pg_gold,
+                                                         pl_gold,
+                                                         pr_gold,
+                                                         vh_gold,
+                                                         factor_w,
+                                                         map_diag_mm2m,
+                                                         map_upper_mm2m,
+                                                         map_lower_mm2m,
+                                                         mkl_threads=w_mkl_threads)
     elif args.type == "gpu":
         # todo suboptimal
-        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu(
-                                            hamiltionian_obj,
-                                            ij2ji,
-                                            rows,
-                                            columns,
-                                            pg_gold,
-                                            pl_gold,
-                                            pr_gold,
-                                            vh_gold,
-                                            factor_w,
-                                            map_diag_mm2m,
-                                            map_upper_mm2m,
-                                            map_lower_mm2m
-                                )
+        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu(hamiltionian_obj, ij2ji, rows, columns, pg_gold, pl_gold, pr_gold,
+                                                     vh_gold, factor_w, map_diag_mm2m, map_upper_mm2m, map_lower_mm2m)
     elif args.type == "gpu_alt":
         # todo suboptimal
-        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu_alt(
-                                            hamiltionian_obj,
-                                            ij2ji,
-                                            rows,
-                                            columns,
-                                            pg_gold,
-                                            pl_gold,
-                                            pr_gold,
-                                            vh_gold,
-                                            factor_w,
-                                            map_diag_mm2m,
-                                            map_upper_mm2m,
-                                            map_lower_mm2m
-                                )
+        wg_cpu, wl_cpu, wr_cpu = p2w_gpu.p2w_mpi_gpu_alt(hamiltionian_obj, ij2ji, rows, columns, pg_gold, pl_gold,
+                                                         pr_gold, vh_gold, factor_w, map_diag_mm2m, map_upper_mm2m,
+                                                         map_lower_mm2m)
     else:
-        raise ValueError(
-        "Argument error, type input not possible")
+        raise ValueError("Argument error, type input not possible")
 
     # compare with gold solution and normal matrix inverse
     assert np.allclose(energy_copy, energy)

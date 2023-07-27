@@ -1,7 +1,6 @@
-"""
-Functions to calculate the polarization on the cpu.
-See README.md for more information. 
-"""
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Functions to calculate the polarization on the cpu. See README.md for more information. """
+
 import numpy as np
 import numpy.typing as npt
 import typing
@@ -15,13 +14,9 @@ sys.path.append(parent_path)
 
 from utils import linalg_gpu
 
-def g2p_fft_gpu(
-    pre_factor: np.complex128,
-    ij2ji: cp.ndarray,
-    gg: cp.ndarray,
-    gl: cp.ndarray,
-    gr: cp.ndarray
-) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
+
+def g2p_fft_gpu(pre_factor: np.complex128, ij2ji: cp.ndarray, gg: cp.ndarray, gl: cp.ndarray,
+                gr: cp.ndarray) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
     """Calculate the polarization with fft on the gpu(see file description). 
         The inputs are the pre factor and the Green's Functions.
         Only the data and a mapping to the transposed indices are needed.
@@ -68,6 +63,7 @@ def g2p_fft_gpu(
     pl = pl[:, :ne]
 
     return (pg, pl, pr)
+
 
 def g2p_conv_gpu(iteration: np.int32 = 1):
     """Creates function to calculate the polarization with conv on the gpu(see file description). 
@@ -129,21 +125,17 @@ def g2p_conv_gpu(iteration: np.int32 = 1):
         }
         '''
     else:
-        raise ValueError(
-                "iteration " + str(iteration) + " does not exist")
+        raise ValueError("iteration " + str(iteration) + " does not exist")
 
     kernel = cp.RawKernel(code, "g2p_conv")
 
     return kernel
 
+
 def g2p_fft_mpi_gpu(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128]
-) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128],
-                  npt.NDArray[np.complex128]]:
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the polarization with fft and mpi on the gpu(see file description).
     In addition, already loads and unloads data to and from the gpu.
 
@@ -162,7 +154,7 @@ def g2p_fft_mpi_gpu(
     """
     # number of energy points
     ne = gg.shape[1]
-    
+
     # load data to gpu----------------------------------------------------------
     gg_gpu = cp.asarray(gg)
     gl_gpu = cp.asarray(gl)
@@ -194,7 +186,6 @@ def g2p_fft_mpi_gpu(
     pg_gpu = pg_gpu[:, :ne]
     pl_gpu = pl_gpu[:, :ne]
 
-
     # load data to cpu----------------------------------------------------------
 
     pg = cp.asnumpy(pg_gpu)
@@ -203,17 +194,11 @@ def g2p_fft_mpi_gpu(
 
     return (pg, pl, pr)
 
-def g2p_fft_mpi_gpu_streams(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128],
-    pg: npt.NDArray[np.complex128],
-    pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
-    streams: typing.List[cp.cuda.Stream]
-):
+
+def g2p_fft_mpi_gpu_streams(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+                            gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128],
+                            pg: npt.NDArray[np.complex128], pl: npt.NDArray[np.complex128],
+                            pr: npt.NDArray[np.complex128], streams: typing.List[cp.cuda.Stream]):
     """Calculate the polarization with fft and mpi on the gpu(see file description).
     In addition, already loads and unloads data to and from the gpu.
     Uses streams to overlap data transfer and computation.
@@ -277,18 +262,11 @@ def g2p_fft_mpi_gpu_streams(
     for stream in streams:
         stream.synchronize()
 
-def g2p_fft_mpi_gpu_batched(
-    pre_factor: np.complex128,
-    gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
-    gl_transposed: npt.NDArray[np.complex128],
-    pg: npt.NDArray[np.complex128],
-    pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
-    streams: typing.List[cp.cuda.Stream],
-    batch_size: int
-):
+
+def g2p_fft_mpi_gpu_batched(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+                            gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128],
+                            pg: npt.NDArray[np.complex128], pl: npt.NDArray[np.complex128],
+                            pr: npt.NDArray[np.complex128], streams: typing.List[cp.cuda.Stream], batch_size: int):
     """Calculate the polarization with fft and mpi on the gpu(see file description).
     In addition, already loads and unloads data to and from the gpu.
     Uses streams to overlap data transfer and computation.
@@ -326,21 +304,21 @@ def g2p_fft_mpi_gpu_batched(
     gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
 
     for batch in range(batches):
-        batch_start = batch*batch_size
+        batch_start = batch * batch_size
         # last batch different, if not dividable
-        batch_end = batch_size*(batch+1) if batch != batches-1 else batch_size*(batch+1) + no % batch_size
+        batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
         with streams[0]:
-            gg_gpu[0:batch_end-batch_start].set(gg[batch_start:batch_end,:], stream=streams[0])
-            gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end-batch_start], n=2 * ne, axis=1)
+            gg_gpu[0:batch_end - batch_start].set(gg[batch_start:batch_end, :], stream=streams[0])
+            gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
         with streams[1]:
-            gl_gpu[0:batch_end-batch_start].set(gl[batch_start:batch_end,:], stream=streams[1])
-            gl_t_gpu = cp.fft.fft(gl_gpu[0:batch_end-batch_start], n=2 * ne, axis=1)
+            gl_gpu[0:batch_end - batch_start].set(gl[batch_start:batch_end, :], stream=streams[1])
+            gl_t_gpu = cp.fft.fft(gl_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
         with streams[2]:
-            gr_gpu[0:batch_end-batch_start].set(gr[batch_start:batch_end,:], stream=streams[2])
-            gr_t_gpu = cp.fft.fft(gr_gpu[0:batch_end-batch_start], n=2 * ne, axis=1)
+            gr_gpu[0:batch_end - batch_start].set(gr[batch_start:batch_end, :], stream=streams[2])
+            gr_t_gpu = cp.fft.fft(gr_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
         with streams[3]:
-            gl_transposed_gpu[0:batch_end-batch_start].set(gl_transposed[batch_start:batch_end,:], stream=streams[3])
-            gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end-batch_start], n=2 * ne, axis=1)
+            gl_transposed_gpu[0:batch_end - batch_start].set(gl_transposed[batch_start:batch_end, :], stream=streams[3])
+            gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
             gl_t_mod_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)
 
         streams[1].synchronize()
@@ -353,18 +331,16 @@ def g2p_fft_mpi_gpu_batched(
         streams[0].synchronize()
         with streams[1]:
             pl_gpu = pl_gpu[:, :ne]
-            cp.asnumpy(pl_gpu[0:batch_end-batch_start], out=pl[batch_start:batch_end,:], stream=streams[1])
+            cp.asnumpy(pl_gpu[0:batch_end - batch_start], out=pl[batch_start:batch_end, :], stream=streams[1])
 
         with streams[0]:
             pg_gpu = pg_gpu[:, :ne]
-            cp.asnumpy(pg_gpu[0:batch_end-batch_start], out=pg[batch_start:batch_end,:], stream=streams[0])
+            cp.asnumpy(pg_gpu[0:batch_end - batch_start], out=pg[batch_start:batch_end, :], stream=streams[0])
 
         with streams[2]:
             pr_t_gpu = linalg_gpu.pr_special_gpu(gr_t_gpu, gl_t_mod_gpu, gl_t_gpu)
             pr_gpu = cp.multiply(cp.fft.ifft(pr_t_gpu, axis=1)[:, :ne], pre_factor)
-            cp.asnumpy(pr_gpu[0:batch_end-batch_start], out=pr[batch_start:batch_end,:], stream=streams[2])
-
-
+            cp.asnumpy(pr_gpu[0:batch_end - batch_start], out=pr[batch_start:batch_end, :], stream=streams[2])
 
     for stream in streams:
         stream.synchronize()

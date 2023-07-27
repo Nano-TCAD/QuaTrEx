@@ -17,17 +17,12 @@ import numpy.typing as npt
 import typing
 from scipy import sparse
 
-from utils.bsr import bsr_matrix
+from quatrex.utils.bsr import bsr_matrix
+
 
 def dense2block(
-    xx: npt.NDArray[np.complex128],
-    bmax: npt.NDArray[np.int32],
-    bmin: npt.NDArray[np.int32]
-) -> typing.Tuple[
-    npt.NDArray[np.complex128],
-    npt.NDArray[np.complex128],
-    npt.NDArray[np.complex128]
-]:
+    xx: npt.NDArray[np.complex128], bmax: npt.NDArray[np.int32], bmin: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Read out certain blocks from a dense matrix.
        The blocks are the tri diagonal blocks with varying size
        given through bmax and bmin.
@@ -48,51 +43,46 @@ def dense2block(
     nb = bmin.size
     assert nb == bmax.size
     assert xx.shape[0] == xx.shape[1]
-    assert xx.shape[0] == bmax[nb-1] + 1
+    assert xx.shape[0] == bmax[nb - 1] + 1
 
     # create buffer to read out
-    blocks_diag     = [np.empty((bmax[i]-bmin[i] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb)]
-    blocks_upper    = [np.empty((bmax[i]-bmin[i] + 1, bmax[i+1]-bmin[i+1] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_lower    = [np.empty((bmax[i+1]-bmin[i+1] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_diag     = np.array(blocks_diag, dtype=np.complex128)
-    blocks_upper    = np.array(blocks_upper, dtype=np.complex128)
-    blocks_lower    = np.array(blocks_lower, dtype=np.complex128)
-
+    blocks_diag = [np.empty((bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
+    blocks_upper = [
+        np.empty((bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_lower = [
+        np.empty((bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_diag = np.array(blocks_diag, dtype=np.complex128)
+    blocks_upper = np.array(blocks_upper, dtype=np.complex128)
+    blocks_lower = np.array(blocks_lower, dtype=np.complex128)
 
     # read out from dense array
     for i in range(nb):
         # block length
-        bl = bmax[i]-bmin[i]+1
+        bl = bmax[i] - bmin[i] + 1
         # start index
         idx = bmin[i]
 
-        blocks_diag[i,:,:] = xx[idx:idx+bl,idx:idx+bl]
+        blocks_diag[i, :, :] = xx[idx:idx + bl, idx:idx + bl]
 
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # block lengths
-        bl1 = bmax[i]-bmin[i]+1
-        bl2 = bmax[i+1]-bmin[i+1]+1
+        bl1 = bmax[i] - bmin[i] + 1
+        bl2 = bmax[i + 1] - bmin[i + 1] + 1
         # starting indexes
         id1 = bmin[i]
-        id2 = bmin[i+1]
+        id2 = bmin[i + 1]
 
-        blocks_upper[i,:,:] = xx[id1:id1+bl1,id2:id2+bl2]
-        blocks_lower[i,:,:] = xx[id2:id2+bl2,id1:id1+bl1]
+        blocks_upper[i, :, :] = xx[id1:id1 + bl1, id2:id2 + bl2]
+        blocks_lower[i, :, :] = xx[id2:id2 + bl2, id1:id1 + bl1]
 
     return blocks_diag, blocks_upper, blocks_lower
 
+
 def dense2block_energy(
-    xx: npt.NDArray[np.complex128],
-    bmax: npt.NDArray[np.int32],
-    bmin: npt.NDArray[np.int32]
-) -> typing.Tuple[
-    npt.NDArray[np.complex128],
-    npt.NDArray[np.complex128],
-    npt.NDArray[np.complex128]
-]:
+    xx: npt.NDArray[np.complex128], bmax: npt.NDArray[np.int32], bmin: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Read out certain blocks from a dense matrix.
        The blocks are the tri diagonal blocks with varying size
        given through bmax and bmin.
@@ -117,48 +107,45 @@ def dense2block_energy(
     nb = bmin.size
     assert nb == bmax.size
     assert xx.shape[1] == xx.shape[2]
-    assert xx.shape[1] == bmax[nb-1] + 1
+    assert xx.shape[1] == bmax[nb - 1] + 1
 
     # create buffer to read out
-    blocks_diag     = [np.empty((ne, bmax[i]-bmin[i] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb)]
-    blocks_upper    = [np.empty((ne, bmax[i]-bmin[i] + 1, bmax[i+1]-bmin[i+1] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_lower    = [np.empty((ne, bmax[i+1]-bmin[i+1] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_diag     = np.array(blocks_diag,  dtype=np.complex128).transpose((1,0,2,3))
-    blocks_upper    = np.array(blocks_upper, dtype=np.complex128).transpose((1,0,2,3))
-    blocks_lower    = np.array(blocks_lower, dtype=np.complex128).transpose((1,0,2,3))
-
+    blocks_diag = [np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
+    blocks_upper = [
+        np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_lower = [
+        np.empty((ne, bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_diag = np.array(blocks_diag, dtype=np.complex128).transpose((1, 0, 2, 3))
+    blocks_upper = np.array(blocks_upper, dtype=np.complex128).transpose((1, 0, 2, 3))
+    blocks_lower = np.array(blocks_lower, dtype=np.complex128).transpose((1, 0, 2, 3))
 
     # read out from dense array
     for i in range(nb):
         # block length
-        bl = bmax[i]-bmin[i]+1
+        bl = bmax[i] - bmin[i] + 1
         # start index
         idx = bmin[i]
 
-        blocks_diag[:,i,:,:] = xx[:,idx:idx+bl,idx:idx+bl]
+        blocks_diag[:, i, :, :] = xx[:, idx:idx + bl, idx:idx + bl]
 
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # block lengths
-        bl1 = bmax[i]-bmin[i]+1
-        bl2 = bmax[i+1]-bmin[i+1]+1
+        bl1 = bmax[i] - bmin[i] + 1
+        bl2 = bmax[i + 1] - bmin[i + 1] + 1
         # starting indexes
         id1 = bmin[i]
-        id2 = bmin[i+1]
+        id2 = bmin[i + 1]
 
-        blocks_upper[:,i,:,:] = xx[:,id1:id1+bl1,id2:id2+bl2]
-        blocks_lower[:,i,:,:] = xx[:,id2:id2+bl2,id1:id1+bl1]
+        blocks_upper[:, i, :, :] = xx[:, id1:id1 + bl1, id2:id2 + bl2]
+        blocks_lower[:, i, :, :] = xx[:, id2:id2 + bl2, id1:id1 + bl1]
 
     return blocks_diag, blocks_upper, blocks_lower
 
-def sparse2vecsparse(
-    inp: npt.NDArray[np.complex128],
-    rows: npt.NDArray[np.int32],
-    columns: npt.NDArray[np.int32],
-    nao: np.int64
-) -> np.ndarray:
+
+def sparse2vecsparse(inp: npt.NDArray[np.complex128], rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
+                     nao: np.int64) -> np.ndarray:
     """Convert from the 2D type of (nnz,ne) to a vector 
         of spare csr matrices, where the vector has size ne
 
@@ -174,18 +161,14 @@ def sparse2vecsparse(
     # number of energy points
     ne = inp.shape[1]
     # output buffer
-    out = np.ndarray((ne,), dtype=object)
+    out = np.ndarray((ne, ), dtype=object)
     for i in range(ne):
-        out[i] = sparse.coo_array((inp[:,i], (rows, columns)),
-                                  shape=(nao, nao), dtype = np.complex128).tocsr()
+        out[i] = sparse.coo_array((inp[:, i], (rows, columns)), shape=(nao, nao), dtype=np.complex128).tocsr()
     return out
 
-def sparse2vecsparse_v2(
-    inp: npt.NDArray[np.complex128],
-    rows: npt.NDArray[np.int32],
-    columns: npt.NDArray[np.int32],
-    nao: np.int64
-) -> np.ndarray:
+
+def sparse2vecsparse_v2(inp: npt.NDArray[np.complex128], rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
+                        nao: np.int64) -> np.ndarray:
     """Convert from the 2D type of (ne,nnz) to a vector 
         of spare csr matrices, where the vector has size ne.
         v2 means that the input is transposed compared to normal.
@@ -202,20 +185,14 @@ def sparse2vecsparse_v2(
     # number of energy points
     ne = inp.shape[0]
     # output buffer
-    out = np.ndarray((ne,), dtype=object)
+    out = np.ndarray((ne, ), dtype=object)
     for i in range(ne):
-        out[i] = sparse.coo_array((inp[i,:], (rows, columns)),
-                                  shape=(nao, nao), dtype = np.complex128).tocsr()
+        out[i] = sparse.coo_array((inp[i, :], (rows, columns)), shape=(nao, nao), dtype=np.complex128).tocsr()
     return out
 
 
-def sparse2vecbsr_v2(
-    inp: npt.NDArray[np.complex128],
-    rows: npt.NDArray[np.int32],
-    columns: npt.NDArray[np.int32],
-    nao: np.int64,
-    bsize: np.int64
-) -> np.ndarray:
+def sparse2vecbsr_v2(inp: npt.NDArray[np.complex128], rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
+                     nao: np.int64, bsize: np.int64) -> np.ndarray:
     """Convert from the 2D type of (ne,nnz) to a vector 
         of sparse bsr matrices, where the vector has size ne.
         v2 means that the input is transposed compared to normal.
@@ -233,24 +210,16 @@ def sparse2vecbsr_v2(
     # number of energy points
     ne = inp.shape[0]
     # output buffer
-    out = np.ndarray((ne,), dtype=object)
+    out = np.ndarray((ne, ), dtype=object)
     for i in range(ne):
-        out[i] = bsr_matrix(sparse.coo_array((inp[i,:], (rows, columns)),
-                                             shape=(nao, nao),
-                                             dtype=np.complex128).tobsr(blocksize=(bsize,bsize)))
+        out[i] = bsr_matrix(
+            sparse.coo_array((inp[i, :], (rows, columns)), shape=(nao, nao),
+                             dtype=np.complex128).tobsr(blocksize=(bsize, bsize)))
     return out
 
 
-def map_block2sparse(
-    rows: npt.NDArray[np.int32],
-    columns: npt.NDArray[np.int32],
-    bmax: npt.NDArray[np.int32],
-    bmin: npt.NDArray[np.int32]
-) -> typing.Tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray
-]:
+def map_block2sparse(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32], bmax: npt.NDArray[np.int32],
+                     bmin: npt.NDArray[np.int32]) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Creates mapping from the three block vector diagonal, upper, lower
         to the form of a flattened 2D vector with the indexes given by rows/columns.
         The mapping is a vector of local block wise mappings
@@ -273,9 +242,9 @@ def map_block2sparse(
     # number of blocks
     nb = bmin.size
     # map buffers for the tridiagonal blocks
-    map_diag  = np.ndarray((nb,), dtype=np.ndarray)
-    map_upper = np.ndarray((nb-1,), dtype=np.ndarray)
-    map_lower = np.ndarray((nb-1,), dtype=np.ndarray)
+    map_diag = np.ndarray((nb, ), dtype=np.ndarray)
+    map_upper = np.ndarray((nb - 1, ), dtype=np.ndarray)
+    map_lower = np.ndarray((nb - 1, ), dtype=np.ndarray)
 
     # init number of non zero elements
     no = 0
@@ -294,24 +263,24 @@ def map_block2sparse(
         no += nelements
 
         # local block mapping to one vector data
-        map_loc = np.empty((3,nelements), dtype=np.int32)
+        map_loc = np.empty((3, nelements), dtype=np.int32)
 
         # sparse elements in the block
-        map_loc[0,:] = rows[mask]       - idx_start
-        map_loc[1,:] = columns[mask]    - idx_start
+        map_loc[0, :] = rows[mask] - idx_start
+        map_loc[1, :] = columns[mask] - idx_start
         # location in data vector
-        map_loc[2,:] = np.where(mask)[0]
+        map_loc[2, :] = np.where(mask)[0]
         # assign to buffer
         map_diag[i] = map_loc
 
     # iterate over upper/lower diagonal
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # start index and end index
-        idx1_start  = bmin[i]
-        idx1_end    = bmax[i]
-        idx2_start  = bmin[i+1]
-        idx2_end    = bmax[i+1]
-         # mask if the elements are in the upper/lower block
+        idx1_start = bmin[i]
+        idx1_end = bmax[i]
+        idx2_start = bmin[i + 1]
+        idx2_end = bmax[i + 1]
+        # mask if the elements are in the upper/lower block
         mask_upper = (rows >= idx1_start) & (rows <= idx1_end) & (columns >= idx2_start) & (columns <= idx2_end)
         mask_lower = (rows >= idx2_start) & (rows <= idx2_end) & (columns >= idx1_start) & (columns <= idx1_end)
         # number of to read out elements in the block
@@ -322,18 +291,18 @@ def map_block2sparse(
         no += nelements_lower
 
         # local block mapping to one vector data
-        map_loc_upper = np.empty((3,nelements_upper), dtype=np.int32)
-        map_loc_lower = np.empty((3,nelements_lower), dtype=np.int32)
+        map_loc_upper = np.empty((3, nelements_upper), dtype=np.int32)
+        map_loc_lower = np.empty((3, nelements_lower), dtype=np.int32)
 
         # sparse elements in the upper/lower block
-        map_loc_upper[0,:] = rows[mask_upper] - idx1_start
-        map_loc_upper[1,:] = columns[mask_upper] - idx2_start
-        map_loc_lower[0,:] = rows[mask_lower] - idx2_start
-        map_loc_lower[1,:] = columns[mask_lower] - idx1_start
+        map_loc_upper[0, :] = rows[mask_upper] - idx1_start
+        map_loc_upper[1, :] = columns[mask_upper] - idx2_start
+        map_loc_lower[0, :] = rows[mask_lower] - idx2_start
+        map_loc_lower[1, :] = columns[mask_lower] - idx1_start
 
         # location in data vector
-        map_loc_upper[2,:] = np.where(mask_upper)[0]
-        map_loc_lower[2,:] = np.where(mask_lower)[0]
+        map_loc_upper[2, :] = np.where(mask_upper)[0]
+        map_loc_lower[2, :] = np.where(mask_lower)[0]
 
         # assign to buffer
         map_upper[i] = map_loc_upper
@@ -343,15 +312,10 @@ def map_block2sparse(
 
     return map_diag, map_upper, map_lower
 
-def block2sparse(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_diag: npt.NDArray[np.complex128],
-    x_upper: npt.NDArray[np.complex128],
-    x_lower: npt.NDArray[np.complex128],
-    no: np.int64
-) -> npt.NDArray[np.complex128]:
+
+def block2sparse(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray, x_diag: npt.NDArray[np.complex128],
+                 x_upper: npt.NDArray[np.complex128], x_lower: npt.NDArray[np.complex128],
+                 no: np.int64) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Map created by map_block2sparse
 
@@ -377,27 +341,21 @@ def block2sparse(
         # read out local map
         map_loc = map_diag[i]
         # apply map
-        output[map_loc[2,:]] = x_diag[i,map_loc[0,:],map_loc[1,:]]
+        output[map_loc[2, :]] = x_diag[i, map_loc[0, :], map_loc[1, :]]
     # off diagonal elements
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # read out local map
         map_loc_upper = map_upper[i]
         map_loc_lower = map_lower[i]
         # apply map
-        output[map_loc_upper[2,:]] = x_upper[i,map_loc_upper[0,:],map_loc_upper[1,:]]
-        output[map_loc_lower[2,:]] = x_lower[i,map_loc_lower[0,:],map_loc_lower[1,:]]
+        output[map_loc_upper[2, :]] = x_upper[i, map_loc_upper[0, :], map_loc_upper[1, :]]
+        output[map_loc_lower[2, :]] = x_lower[i, map_loc_lower[0, :], map_loc_lower[1, :]]
     return output
 
-def block2sparse_energy(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_diag: npt.NDArray[np.complex128],
-    x_upper: npt.NDArray[np.complex128],
-    x_lower: npt.NDArray[np.complex128],
-    no: np.int64,
-    ne: np.int64
-) -> npt.NDArray[np.complex128]:
+
+def block2sparse_energy(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
+                        x_diag: npt.NDArray[np.complex128], x_upper: npt.NDArray[np.complex128],
+                        x_lower: npt.NDArray[np.complex128], no: np.int64, ne: np.int64) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Map created by map_block2sparse
 
@@ -424,28 +382,22 @@ def block2sparse_energy(
         # read out local map
         map_loc = map_diag[i]
         # apply map
-        output[map_loc[2,:],:] = x_diag[:,i,map_loc[0,:],map_loc[1,:]].transpose()
+        output[map_loc[2, :], :] = x_diag[:, i, map_loc[0, :], map_loc[1, :]].transpose()
     # off diagonal elements
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # read out local map
         map_loc_upper = map_upper[i]
         map_loc_lower = map_lower[i]
         # apply map
-        output[map_loc_upper[2,:],:] = x_upper[:,i,map_loc_upper[0,:],map_loc_upper[1,:]].transpose()
-        output[map_loc_lower[2,:],:] = x_lower[:,i,map_loc_lower[0,:],map_loc_lower[1,:]].transpose()
+        output[map_loc_upper[2, :], :] = x_upper[:, i, map_loc_upper[0, :], map_loc_upper[1, :]].transpose()
+        output[map_loc_lower[2, :], :] = x_lower[:, i, map_loc_lower[0, :], map_loc_lower[1, :]].transpose()
     return output
 
 
 def map_block2sparse_alt(
-    rows: npt.NDArray[np.int32],
-    columns: npt.NDArray[np.int32],
-    bmax: npt.NDArray[np.int32],
-    bmin: npt.NDArray[np.int32]
-) -> typing.Tuple[
-    npt.NDArray[np.int32],
-    npt.NDArray[np.int32],
-    npt.NDArray[np.int32]
-]:
+        rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32], bmax: npt.NDArray[np.int32],
+        bmin: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32], npt.NDArray[np.int32]]:
     """Creates mapping from the three block vector diagonal, upper, lower
         to the form of a flattened 2D vector with the indexes given by rows/columns
         The mapping is just random access pattern for the 3D block tensor
@@ -469,9 +421,9 @@ def map_block2sparse_alt(
     nb = bmin.size
     # map buffers for the tridiagonal blocks
     #a priori the length is unknown
-    map_diag  = np.empty((4,0), dtype=np.int32)
-    map_upper = np.empty((4,0), dtype=np.int32)
-    map_lower = np.empty((4,0), dtype=np.int32)
+    map_diag = np.empty((4, 0), dtype=np.int32)
+    map_upper = np.empty((4, 0), dtype=np.int32)
+    map_lower = np.empty((4, 0), dtype=np.int32)
 
     # init number of non zero elements
     no = 0
@@ -490,25 +442,25 @@ def map_block2sparse_alt(
         no += nelements
 
         # local block mapping to one vector data
-        map_loc = np.empty((4,nelements), dtype=np.int32)
+        map_loc = np.empty((4, nelements), dtype=np.int32)
 
         # sparse elements in the block
-        map_loc[0,:] = i
-        map_loc[1,:] = rows[mask]       - idx_start
-        map_loc[2,:] = columns[mask]    - idx_start
+        map_loc[0, :] = i
+        map_loc[1, :] = rows[mask] - idx_start
+        map_loc[2, :] = columns[mask] - idx_start
         # location in data vector
-        map_loc[3,:] = np.where(mask)[0]
+        map_loc[3, :] = np.where(mask)[0]
         # concat to buffer
         map_diag = np.concatenate((map_diag, map_loc), axis=1)
 
     # iterate over upper/lower diagonal
-    for i in range(nb-1):
+    for i in range(nb - 1):
         # start index and end index
-        idx1_start  = bmin[i]
-        idx1_end    = bmax[i]
-        idx2_start  = bmin[i+1]
-        idx2_end    = bmax[i+1]
-         # mask if the elements are in the upper/lower block
+        idx1_start = bmin[i]
+        idx1_end = bmax[i]
+        idx2_start = bmin[i + 1]
+        idx2_end = bmax[i + 1]
+        # mask if the elements are in the upper/lower block
         mask_upper = (rows >= idx1_start) & (rows <= idx1_end) & (columns >= idx2_start) & (columns <= idx2_end)
         mask_lower = (rows >= idx2_start) & (rows <= idx2_end) & (columns >= idx1_start) & (columns <= idx1_end)
         # number of to read out elements in the block
@@ -519,20 +471,20 @@ def map_block2sparse_alt(
         no += nelements_lower
 
         # local block mapping to one vector data
-        map_loc_upper = np.empty((4,nelements_upper), dtype=np.int32)
-        map_loc_lower = np.empty((4,nelements_lower), dtype=np.int32)
+        map_loc_upper = np.empty((4, nelements_upper), dtype=np.int32)
+        map_loc_lower = np.empty((4, nelements_lower), dtype=np.int32)
 
         # sparse elements in the upper/lower block
-        map_loc_upper[0,:] = i
-        map_loc_lower[0,:] = i
-        map_loc_upper[1,:] = rows[mask_upper] - idx1_start
-        map_loc_upper[2,:] = columns[mask_upper] - idx2_start
-        map_loc_lower[1,:] = rows[mask_lower] - idx2_start
-        map_loc_lower[2,:] = columns[mask_lower] - idx1_start
+        map_loc_upper[0, :] = i
+        map_loc_lower[0, :] = i
+        map_loc_upper[1, :] = rows[mask_upper] - idx1_start
+        map_loc_upper[2, :] = columns[mask_upper] - idx2_start
+        map_loc_lower[1, :] = rows[mask_lower] - idx2_start
+        map_loc_lower[2, :] = columns[mask_lower] - idx1_start
 
         # location in data vector
-        map_loc_upper[3,:] = np.where(mask_upper)[0]
-        map_loc_lower[3,:] = np.where(mask_lower)[0]
+        map_loc_upper[3, :] = np.where(mask_upper)[0]
+        map_loc_lower[3, :] = np.where(mask_lower)[0]
 
         # concat to buffer
         map_upper = np.concatenate((map_upper, map_loc_upper), axis=1)
@@ -542,15 +494,10 @@ def map_block2sparse_alt(
 
     return map_diag, map_upper, map_lower
 
-def block2sparse_alt(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_diag: npt.NDArray[np.complex128],
-    x_upper: npt.NDArray[np.complex128],
-    x_lower: npt.NDArray[np.complex128],
-    no: np.int64
-) -> npt.NDArray[np.complex128]:
+
+def block2sparse_alt(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
+                     x_diag: npt.NDArray[np.complex128], x_upper: npt.NDArray[np.complex128],
+                     x_lower: npt.NDArray[np.complex128], no: np.int64) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Alternative map created by map_block2sparse_alt
 
@@ -572,23 +519,22 @@ def block2sparse_alt(
     output = np.empty((no), dtype=np.complex128)
 
     # diagonal elements
-    output[map_diag[3,:]] = x_diag[map_diag[0,:],map_diag[1,:],map_diag[2,:]]
+    output[map_diag[3, :]] = x_diag[map_diag[0, :], map_diag[1, :], map_diag[2, :]]
     # off diagonal elements
-    output[map_upper[3,:]] = x_upper[map_upper[0,:],map_upper[1,:],map_upper[2,:]]
-    output[map_lower[3,:]] = x_lower[map_lower[0,:],map_lower[1,:],map_lower[2,:]]
+    output[map_upper[3, :]] = x_upper[map_upper[0, :], map_upper[1, :], map_upper[2, :]]
+    output[map_lower[3, :]] = x_lower[map_lower[0, :], map_lower[1, :], map_lower[2, :]]
     return output
 
-def block2sparse_energy_alt(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_diag: npt.NDArray[np.complex128],
-    x_upper: npt.NDArray[np.complex128],
-    x_lower: npt.NDArray[np.complex128],
-    no: np.int64,
-    ne: np.int64,
-    energy_contiguous: bool = True
-) -> npt.NDArray[np.complex128]:
+
+def block2sparse_energy_alt(map_diag: np.ndarray,
+                            map_upper: np.ndarray,
+                            map_lower: np.ndarray,
+                            x_diag: npt.NDArray[np.complex128],
+                            x_upper: npt.NDArray[np.complex128],
+                            x_lower: npt.NDArray[np.complex128],
+                            no: np.int64,
+                            ne: np.int64,
+                            energy_contiguous: bool = True) -> npt.NDArray[np.complex128]:
     """Applies the map to get from block to sparse form
        Alternative map created by map_block2sparse_alt
 
@@ -607,39 +553,31 @@ def block2sparse_energy_alt(
     """
     assert map_diag.shape[0] == map_upper.shape[0]
     assert map_diag.shape[0] == map_lower.shape[0]
-    assert map_lower[0,:].size + map_diag[0,:].size + map_upper[0,:].size == no
+    assert map_lower[0, :].size + map_diag[0, :].size + map_upper[0, :].size == no
     if energy_contiguous:
         # number of blocks
         output = np.empty((no, ne), dtype=np.complex128)
 
         # diagonal elements
-        output[map_diag[3,:],:] = x_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]].T
+        output[map_diag[3, :], :] = x_diag[:, map_diag[0, :], map_diag[1, :], map_diag[2, :]].T
         # off diagonal elements
-        output[map_upper[3,:],:] = x_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]].T
-        output[map_lower[3,:],:] = x_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]].T
+        output[map_upper[3, :], :] = x_upper[:, map_upper[0, :], map_upper[1, :], map_upper[2, :]].T
+        output[map_lower[3, :], :] = x_lower[:, map_lower[0, :], map_lower[1, :], map_lower[2, :]].T
     else:
         # number of blocks
         output = np.empty((ne, no), dtype=np.complex128)
 
         # diagonal elements
-        output[:,map_diag[3,:]] = x_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]]
+        output[:, map_diag[3, :]] = x_diag[:, map_diag[0, :], map_diag[1, :], map_diag[2, :]]
         # off diagonal elements
-        output[:,map_upper[3,:]] = x_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]]
-        output[:,map_lower[3,:]] = x_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]]
+        output[:, map_upper[3, :]] = x_upper[:, map_upper[0, :], map_upper[1, :], map_upper[2, :]]
+        output[:, map_lower[3, :]] = x_lower[:, map_lower[0, :], map_lower[1, :], map_lower[2, :]]
     return output
 
-def sparse2block_alt(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_s: npt.NDArray[np.complex128],
-    bmax: np.ndarray,
-    bmin: np.ndarray
-) -> typing.Tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray
-]:
+
+def sparse2block_alt(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
+                     x_s: npt.NDArray[np.complex128], bmax: np.ndarray,
+                     bmin: np.ndarray) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Applies the map to get from sparse to block form
 
     Args:
@@ -660,36 +598,32 @@ def sparse2block_alt(
     assert nb == bmax.size
     assert nb == bmin.size
     # create buffer to write
-    blocks_diag     = [np.zeros((bmax[i]-bmin[i] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb)]
-    blocks_upper    = [np.zeros((bmax[i]-bmin[i] + 1, bmax[i+1]-bmin[i+1] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_lower    = [np.zeros((bmax[i+1]-bmin[i+1] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_diag     = np.array(blocks_diag, dtype=np.complex128)
-    blocks_upper    = np.array(blocks_upper, dtype=np.complex128)
-    blocks_lower    = np.array(blocks_lower, dtype=np.complex128)
+    blocks_diag = [np.zeros((bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
+    blocks_upper = [
+        np.zeros((bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_lower = [
+        np.zeros((bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_diag = np.array(blocks_diag, dtype=np.complex128)
+    blocks_upper = np.array(blocks_upper, dtype=np.complex128)
+    blocks_lower = np.array(blocks_lower, dtype=np.complex128)
 
     assert map_diag.shape[0] == map_upper.shape[0]
     assert map_diag.shape[0] == map_lower.shape[0]
-    assert map_lower[0,:].size + map_diag[0,:].size + map_upper[0,:].size == no
+    assert map_lower[0, :].size + map_diag[0, :].size + map_upper[0, :].size == no
 
     # diagonal elements
-    blocks_diag[map_diag[0,:],map_diag[1,:],map_diag[2,:]] = x_s[map_diag[3,:]]
+    blocks_diag[map_diag[0, :], map_diag[1, :], map_diag[2, :]] = x_s[map_diag[3, :]]
     # off diagonal elements
-    blocks_upper[map_upper[0,:],map_upper[1,:],map_upper[2,:]] = x_s[map_upper[3,:]]
-    blocks_lower[map_lower[0,:],map_lower[1,:],map_lower[2,:]] = x_s[map_lower[3,:]]
+    blocks_upper[map_upper[0, :], map_upper[1, :], map_upper[2, :]] = x_s[map_upper[3, :]]
+    blocks_lower[map_lower[0, :], map_lower[1, :], map_lower[2, :]] = x_s[map_lower[3, :]]
     return blocks_diag, blocks_upper, blocks_lower
 
 
-def sparse2block_no_map(
-    in_sparse: sparse.spmatrix,
-    out_diag: npt.NDArray[np.complex128],
-    out_upper: npt.NDArray[np.complex128],
-    out_lower: npt.NDArray[np.complex128],
-    bmax: np.ndarray,
-    bmin: np.ndarray
-):
+def sparse2block_no_map(in_sparse: sparse.spmatrix, out_diag: npt.NDArray[np.complex128],
+                        out_upper: npt.NDArray[np.complex128], out_lower: npt.NDArray[np.complex128], bmax: np.ndarray,
+                        bmin: np.ndarray):
     """
     Transforms a sparse matrix into the three dense block matrices
 
@@ -704,23 +638,15 @@ def sparse2block_no_map(
     # number of blocks
     nb = bmin.size
     for i in range(nb):
-        out_diag[i,:,:] = in_sparse[bmin[i]:bmax[i]+1,bmin[i]:bmax[i]+1].toarray()
-    for i in range(nb-1):
-        out_upper[i,:,:] = in_sparse[bmin[i]:bmax[i]+1,bmin[i+1]:bmax[i+1]+1].toarray()
-        out_lower[i,:,:] = in_sparse[bmin[i+1]:bmax[i+1]+1,bmin[i]:bmax[i]+1].toarray()
+        out_diag[i, :, :] = in_sparse[bmin[i]:bmax[i] + 1, bmin[i]:bmax[i] + 1].toarray()
+    for i in range(nb - 1):
+        out_upper[i, :, :] = in_sparse[bmin[i]:bmax[i] + 1, bmin[i + 1]:bmax[i + 1] + 1].toarray()
+        out_lower[i, :, :] = in_sparse[bmin[i + 1]:bmax[i + 1] + 1, bmin[i]:bmax[i] + 1].toarray()
 
-def sparse2block_energy_alt(
-    map_diag: np.ndarray,
-    map_upper: np.ndarray,
-    map_lower: np.ndarray,
-    x_s: npt.NDArray[np.complex128],
-    bmax,
-    bmin
-) -> typing.Tuple[
-    np.ndarray,
-    np.ndarray,
-    np.ndarray
-]:
+
+def sparse2block_energy_alt(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
+                            x_s: npt.NDArray[np.complex128], bmax,
+                            bmin) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Applies the map to get from sparse to block form
        Alternative map created by map_block2sparse_alt
        The other form does not exist, because 
@@ -745,32 +671,31 @@ def sparse2block_energy_alt(
     assert nb == bmax.size
     assert nb == bmin.size
     # create buffer to write
-    blocks_diag     = [np.empty((ne, bmax[i]-bmin[i] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb)]
-    blocks_upper    = [np.empty((ne, bmax[i]-bmin[i] + 1, bmax[i+1]-bmin[i+1] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_lower    = [np.empty((ne, bmax[i+1]-bmin[i+1] + 1, bmax[i]-bmin[i] + 1),
-                                dtype=np.complex128) for i in range(nb-1)]
-    blocks_diag     = np.array(blocks_diag, dtype=np.complex128).transpose((1,0,2,3))
-    blocks_upper    = np.array(blocks_upper, dtype=np.complex128).transpose((1,0,2,3))
-    blocks_lower    = np.array(blocks_lower, dtype=np.complex128).transpose((1,0,2,3))
+    blocks_diag = [np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
+    blocks_upper = [
+        np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_lower = [
+        np.empty((ne, bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
+    ]
+    blocks_diag = np.array(blocks_diag, dtype=np.complex128).transpose((1, 0, 2, 3))
+    blocks_upper = np.array(blocks_upper, dtype=np.complex128).transpose((1, 0, 2, 3))
+    blocks_lower = np.array(blocks_lower, dtype=np.complex128).transpose((1, 0, 2, 3))
 
     assert map_diag.shape[0] == map_upper.shape[0]
     assert map_diag.shape[0] == map_lower.shape[0]
-    assert map_lower[0,:].size + map_diag[0,:].size + map_upper[0,:].size == no
+    assert map_lower[0, :].size + map_diag[0, :].size + map_upper[0, :].size == no
 
     # diagonal elements
-    blocks_diag[:,map_diag[0,:],map_diag[1,:],map_diag[2,:]] = x_s[map_diag[3,:],:].transpose()
+    blocks_diag[:, map_diag[0, :], map_diag[1, :], map_diag[2, :]] = x_s[map_diag[3, :], :].transpose()
     # off diagonal elements
-    blocks_upper[:,map_upper[0,:],map_upper[1,:],map_upper[2,:]] = x_s[map_upper[3,:],:].transpose()
-    blocks_lower[:,map_lower[0,:],map_lower[1,:],map_lower[2,:]] = x_s[map_lower[3,:],:].transpose()
+    blocks_upper[:, map_upper[0, :], map_upper[1, :], map_upper[2, :]] = x_s[map_upper[3, :], :].transpose()
+    blocks_lower[:, map_lower[0, :], map_lower[1, :], map_lower[2, :]] = x_s[map_lower[3, :], :].transpose()
     return blocks_diag, blocks_upper, blocks_lower
 
 
-def sparse_to_dense(rows: npt.NDArray[np.int32], 
-                    columns: npt.NDArray[np.int32], 
-                    data: npt.NDArray[np.complex128]
-) -> npt.NDArray[np.complex128]:
+def sparse_to_dense(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
+                    data: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
     """Transform the sparse format rows, columns, 
         data to a dense format (#energy, #orbitals, #orbitals).
         Format of input is coo, but data is 2D 
@@ -793,7 +718,6 @@ def sparse_to_dense(rows: npt.NDArray[np.int32],
     assert no == np.shape(rows)[0]
     assert no == np.shape(columns)[0]
 
-
     data_1 = sparse.coo_matrix((data[:, 0], (rows, columns)), dtype=np.complex128)
 
     # assert square matrix
@@ -802,15 +726,12 @@ def sparse_to_dense(rows: npt.NDArray[np.int32],
     out: npt.NDArray[np.complex128] = np.empty((ne, data_1.shape[0], data_1.shape[1]), dtype=np.complex128)
 
     for i in range(ne):
-        out[i, :, :] = sparse.coo_matrix(
-            (data[:, i], (rows, columns)),
-            dtype=np.complex128).todense("C")
+        out[i, :, :] = sparse.coo_matrix((data[:, i], (rows, columns)), dtype=np.complex128).todense("C")
 
     return out
 
 
-def find_idx_transposed(rows: npt.NDArray[np.int32],
-                        columns: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+def find_idx_transposed(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
     """Creates vector with mapping between element ij and ji of a sparse matrix.
         It is assumed that the matrix is either symmetric/hermitian such that if 
         ij exists also ji is non-zero.
@@ -905,6 +826,6 @@ def find_idx_rt(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
     assert idx_transposed.size == np.unique(idx_transposed).size
 
     # time reversal idx, 2*ne due to the padding in fft
-    reversal = np.roll(np.flip(np.arange(2*ne), axis=0), 1, axis=0)
+    reversal = np.roll(np.flip(np.arange(2 * ne), axis=0), 1, axis=0)
 
     return np.ix_(idx_transposed, reversal)

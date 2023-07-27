@@ -3,6 +3,7 @@ Utils for gpu
 """
 import subprocess
 
+
 def gpu_avail() -> bool:
     """Check if a gpu is available
 

@@ -1,7 +1,10 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 import os
+
 main_path = os.path.abspath(os.path.dirname(__file__))
 
 if __name__ == "__main__":
@@ -14,23 +17,21 @@ if __name__ == "__main__":
 
     num_run = (data.shape[0] - 2) // 8
 
-
-    threads = data[0,:]
+    threads = data[0, :]
     num_threads = threads.shape[0]
 
+    speed_up_mean1 = np.mean(data[4 * num_run + 1:5 * num_run + 1, :], axis=0)
+    speed_up_std1 = np.std(data[4 * num_run + 1:5 * num_run + 1, :], axis=0)
 
-    speed_up_mean1 = np.mean(data[  4*num_run   +1:5*num_run    +1,:], axis=0)
-    speed_up_std1 = np.std(data[    4*num_run   +1:5*num_run    +1,:], axis=0)
+    speed_up_mean2 = np.mean(data[5 * num_run + 1:6 * num_run + 1, :], axis=0)
+    speed_up_std2 = np.std(data[5 * num_run + 1:6 * num_run + 1, :], axis=0)
 
-    speed_up_mean2 = np.mean(data[  5*num_run   +1:6*num_run    +1,:], axis=0)
-    speed_up_std2 = np.std(data[    5*num_run   +1:6*num_run    +1,:], axis=0)
+    speed_up_mean3 = np.mean(data[6 * num_run + 1:7 * num_run + 1, :], axis=0)
+    speed_up_std3 = np.std(data[6 * num_run + 1:7 * num_run + 1, :], axis=0)
 
-    speed_up_mean3 = np.mean(data[  6*num_run   +1:7*num_run    +1,:], axis=0)
-    speed_up_std3 = np.std(data[    6*num_run   +1:7*num_run    +1,:], axis=0)
-
-    speed_up_mean4 = np.mean(data[  7*num_run   +1:8*num_run    +1,:], axis=0)
-    speed_up_std4 = np.std(data[    7*num_run   +1:8*num_run    +1,:], axis=0)
-    size_sparse = data[8*num_run + 1,0]
+    speed_up_mean4 = np.mean(data[7 * num_run + 1:8 * num_run + 1, :], axis=0)
+    speed_up_std4 = np.std(data[7 * num_run + 1:8 * num_run + 1, :], axis=0)
+    size_sparse = data[8 * num_run + 1, 0]
 
     fig, ax = plt.subplots()
 
@@ -47,8 +48,6 @@ if __name__ == "__main__":
 
     # add ideal scaling
     ax.plot(threads, np.arange(1, num_threads + 1, 1))
-
-
 
     ax.set_xlabel("Number of Threads", fontsize=font_size)
     ax.set_ylabel("Speedup", fontsize=font_size)

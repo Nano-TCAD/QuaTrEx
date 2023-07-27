@@ -1,3 +1,4 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """
 An implementation of a variable block sparse row matrix.
 
@@ -78,12 +79,8 @@ class vbsr:
 
         self.num_blocks = self.indptr.size - 1
         self.nnz = sum(block.size for block in self.data)
-        self.nbytes = (
-            sys.getsizeof(self.data)
-            + sum(block.nbytes for block in self.data)
-            + self.indices.nbytes
-            + self.indptr.nbytes
-        )
+        self.nbytes = (sys.getsizeof(self.data) + sum(block.nbytes for block in self.data) + self.indices.nbytes +
+                       self.indptr.nbytes)
 
         if blocksizes is None:
             self.blocksizes = self._get_blocksizes()
@@ -106,10 +103,8 @@ class vbsr:
 
     def __str__(self) -> str:
         """Returns a string representation of the matrix."""
-        return (
-            f"{self.shape[0]}x{self.shape[1]} VBSR matrix of type '{self.dtype}'"
-            f" with {self.nnz} nonzero elements ({len(self.data)} blocks)."
-        )
+        return (f"{self.shape[0]}x{self.shape[1]} VBSR matrix of type '{self.dtype}'"
+                f" with {self.nnz} nonzero elements ({len(self.data)} blocks).")
 
     def __repr__(self) -> str:
         """Returns a string representation of the matrix."""
@@ -117,11 +112,11 @@ class vbsr:
 
     def _get_col_indices(self, row: int) -> np.ndarray:
         """Returns the indices of the blocks in the given block row."""
-        return self.indices[self.indptr[row] : self.indptr[row + 1]]
+        return self.indices[self.indptr[row]:self.indptr[row + 1]]
 
     def _get_data_blocks(self, row: int) -> list[np.ndarray]:
         """Returns the data of the blocks in the given block row."""
-        return self.data[self.indptr[row] : self.indptr[row + 1]]
+        return self.data[self.indptr[row]:self.indptr[row + 1]]
 
     def _check_diagonal(self) -> None:
         """Checks that all diagonal blocks are non-zero and square."""
@@ -302,7 +297,7 @@ class vbsr:
             blocks = self._get_data_blocks(row)
             for col, block in zip(col_indices, blocks):
                 n = np.sum(self.blocksizes[:col])
-                mat[m : m + block.shape[0], n : n + block.shape[1]] = block
+                mat[m:m + block.shape[0], n:n + block.shape[1]] = block
 
         return mat
 
@@ -363,7 +358,7 @@ class vbsr:
         indptr = [0]
         for i, m in enumerate(blockoffsets):
             for j, n in enumerate(blockoffsets):
-                block = arr[m : m + blocksizes[i], n : n + blocksizes[j]]
+                block = arr[m:m + blocksizes[i], n:n + blocksizes[j]]
                 if not np.allclose(block, 0.0):
                     data.append(block)
                     indices.append(j)
@@ -401,7 +396,7 @@ class vbsr:
         indptr = [0]
         for i, m in enumerate(blockoffsets):
             for j, n in enumerate(blockoffsets):
-                block = mat[m : m + blocksizes[i], n : n + blocksizes[j]]
+                block = mat[m:m + blocksizes[i], n:n + blocksizes[j]]
                 if block.nnz > 0:
                     data.append(block.toarray())
                     indices.append(j)
@@ -436,7 +431,7 @@ class vbsr:
         blockoffsets = [0]
         m = 0
         for i, size in enumerate(sizes):
-            out[m : m + size, m : m + size] += blocks[i]
+            out[m:m + size, m:m + size] += blocks[i]
             m += size - overlap
             blockoffsets.append(m)
 

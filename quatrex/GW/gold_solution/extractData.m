@@ -1,3 +1,5 @@
+% Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 function [realp, imgp] = extractData(sparseData, realin, imgin, formatted, i)
     % This function extracts the real and imaginary part in the coo format
     % for every energy point i

@@ -1,3 +1,5 @@
+% Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
 function newData = insertAtIndices(index, data, number)
 % This function inserts a number into a data vector at all the elements of the
 % index vector.
