@@ -34,8 +34,11 @@ from quatrex.utils.bsr import bsr_matrix
 from quatrex.utils.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
-    from quatrex.GW.polarization.kernel import g2p_gpu
-    from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    try:
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    except ImportError:
+        print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
@@ -159,7 +162,7 @@ if __name__ == "__main__":
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
-    nbc = 2
+    #nbc = 2
     bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -214,7 +217,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=True, orb_uniform=True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=False, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -408,7 +411,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/80TFET72/'
+    folder = '/quatrex/results/80TFET72/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
