@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-5, -3, 1000, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-15, 10, 6, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -141,8 +141,8 @@ if __name__ == "__main__":
     columns = hamiltonian_obj.columns
 
     # Only keep diagonals of P and Sigma
-    rows = np.arange(hamiltonian_obj.NH, dtype=np.int32)
-    columns = np.arange(hamiltonian_obj.NH, dtype=np.int32)
+    #rows = np.arange(hamiltonian_obj.NH, dtype=np.int32)
+    #columns = np.arange(hamiltonian_obj.NH, dtype=np.int32)
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     epsR = 25
     # DFT Conduction Band Minimum
     #ECmin = -3.5
-    ECmin = -3.7
+    ECmin = -3.447
 
     # Phyiscal Constants -----------
 
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 50
+    max_iter = 2
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -461,7 +461,7 @@ if __name__ == "__main__":
                                                     count,
                                                     disp,
                                                     side='left')
-        ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
+        #ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
         energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 

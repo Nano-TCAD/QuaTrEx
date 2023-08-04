@@ -123,7 +123,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([2, 3])
     Vappl = 0.0
-    energy = np.linspace(-10, 5, 1500, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 5, 5000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -373,12 +373,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.80
+    mem_s = 0.5
     mem_g = 0.0
-    mem_w = 0.80
+    mem_w = 0.0
     # max number of iterations
 
-    max_iter = 10
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -431,7 +431,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/results/CNT_sc/'
+    folder = '/quatrex/results/CNT_sc/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -707,10 +707,15 @@ if __name__ == "__main__":
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                                    hamiltonian_obj, energy_loc,
-                                                                                                    pg_p2w_vec, pl_p2w_vec,
-                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    hamiltonian_obj,
+                                                                                                    energy_loc,
+                                                                                                    pg_p2w_vec, 
+                                                                                                    pl_p2w_vec,
+                                                                                                    pr_p2w_vec, 
+                                                                                                    vh, 
+                                                                                                    dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], 
+                                                                                                    nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                     Idx_e_loc,   
                                                                                                     factor_w_loc,
                                                                                                     comm,

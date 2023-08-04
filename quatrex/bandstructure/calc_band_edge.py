@@ -47,7 +47,8 @@ def get_band_edge_mpi(ECmin_DFT,
                       size,
                       count,
                       disp,
-                      side='left'):
+                      side='left',
+                      mode='regular'):
     nao = Bmax[-1] + 1
 
     # First step: get a first estimate of the CB edge
