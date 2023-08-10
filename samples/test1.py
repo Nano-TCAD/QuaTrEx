@@ -19,7 +19,7 @@ mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_interpol, get_band_edge_mpi_interpol
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -445,22 +445,25 @@ if __name__ == "__main__":
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1, rank], no), dtype=np.complex128), rows,
                                                             columns, nao)
-        ECmin_vec[iter_num + 1] = get_band_edge_mpi(ECmin_vec[iter_num],
-                                                    energy,
-                                                    hamiltonian_obj.Overlap['H_4'],
-                                                    hamiltonian_obj.Hamiltonian['H_4'],
-                                                    sr_h2g_vec,
-                                                    sr_ephn_h2g_vec,
-                                                    rows,
-                                                    columns,
-                                                    bmin,
-                                                    bmax,
-                                                    comm,
-                                                    rank,
-                                                    size,
-                                                    count,
-                                                    disp,
-                                                    side='left')
+        
+        ECmin_vec[iter_num + 1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+                                                            energy,
+                                                            hamiltonian_obj.Overlap['H_4'],
+                                                            hamiltonian_obj.Hamiltonian['H_4'],
+                                                            sr_h2g_vec,
+                                                            sl_h2g_vec,
+                                                            sg_h2g_vec,
+                                                            sr_ephn_h2g_vec,
+                                                            rows,
+                                                            columns,
+                                                            bmin,
+                                                            bmax,
+                                                            comm,
+                                                            rank,
+                                                            size,
+                                                            count,
+                                                            disp,
+                                                            side='left')
         #ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
         energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC

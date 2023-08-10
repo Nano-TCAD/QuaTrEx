@@ -70,7 +70,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
                 V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
         elif(orbA > 1):
             if(orb_uniform):
-                V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat)- np.eye(int(orbA), dtype = np.cfloat))
+                V_atomic[ia,0, 0:orbA, 0:orbA] = Vmax * (np.ones((orbA, orbA), dtype = np.cfloat)- np.eye(int(orbA), dtype = np.cfloat))
             else: 
                 pass #not changing this as it will break the test unfortunately.   
         #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
