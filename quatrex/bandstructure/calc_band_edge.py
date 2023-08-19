@@ -226,6 +226,7 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
         ECmin = Ek[ind_ek_plus]
         # broadcasting the band edge
         comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        print("send rank 1 was: " + str(send_rank_1) + " send rank 2 was: " + str(send_rank_2) + " new band edge: " + str(ECmin))
     else:   
         ECmin = np.empty(1, dtype=np.float64)
         comm.Bcast([ECmin, MPI.DOUBLE], root=0)

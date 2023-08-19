@@ -54,11 +54,11 @@ if __name__ == "__main__":
     # path to solution
     #scratch_path = "/usr/scratch/mont-fort17/dleonard/IEDM/"
 
-    scratch_path = "/usr/scratch2/tortin12/chexia/"
+    scratch_path = "/usr/scratch/mont-fort21/chexia/"
 
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path = os.path.join(scratch_path, "GNR_pd")
-    solution_path = os.path.join(scratch_path, "CNT_evensort48")
+    solution_path = os.path.join(scratch_path, "CNT_evensort48new")
 
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     # no_orb = np.array([3, 3, 3])
     no_orb = np.array([2, 3])
     Vappl = 0
-    energy = np.linspace(-15, 10, 6, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-5, -3, 1000, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -141,8 +141,8 @@ if __name__ == "__main__":
     columns = hamiltonian_obj.columns
 
     # Only keep diagonals of P and Sigma
-    #rows = np.arange(hamiltonian_obj.NH, dtype=np.int32)
-    #columns = np.arange(hamiltonian_obj.NH, dtype=np.int32)
+    rows = np.arange(hamiltonian_obj.NH, dtype=np.int32)
+    columns = np.arange(hamiltonian_obj.NH, dtype=np.int32)
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     epsR = 25
     # DFT Conduction Band Minimum
     #ECmin = -3.5
-    ECmin = -3.447
+    ECmin = -3.5
 
     # Phyiscal Constants -----------
 
@@ -217,7 +217,7 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=False, orb_uniform=True)
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=True, orb_uniform=True)
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
@@ -373,7 +373,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 2
+    max_iter = 30
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -464,9 +464,30 @@ if __name__ == "__main__":
                                                             count,
                                                             disp,
                                                             side='left')
-        #ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
-        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+        
+        # ECmin_vec[iter_num + 1] = get_band_edge_mpi(ECmin_vec[iter_num],
+        #                                                     energy,
+        #                                                     hamiltonian_obj.Overlap['H_4'],
+        #                                                     hamiltonian_obj.Hamiltonian['H_4'],
+        #                                                     sr_h2g_vec,
+        #                                                     sr_ephn_h2g_vec,
+        #                                                     rows,
+        #                                                     columns,
+        #                                                     bmin,
+        #                                                     bmax,
+        #                                                     comm,
+        #                                                     rank,
+        #                                                     size,
+        #                                                     count,
+        #                                                     disp,
+        #                                                     side='left')
+        # ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
+        if iter_num == 0:
+            dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
+            dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
+        else:
+            energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
+            energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
