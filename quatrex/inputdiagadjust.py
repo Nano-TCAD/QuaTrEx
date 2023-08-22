@@ -35,7 +35,7 @@ from quatrex.utils.matrix_creation import get_number_connected_blocks
 
 
 
-bias = 5
+bias = 0
 
 if utils_gpu.gpu_avail():
     try:
