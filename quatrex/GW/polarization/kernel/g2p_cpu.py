@@ -534,6 +534,8 @@ def g2p_fft_mpi_cpu_bare(
     # multiply elementwise
     pg_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
     pr_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    pr_t_new: npt.NDArray[np.complex128] = np.zeros_like(gl_t, dtype=np.complex128)
+    pl_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
 
     for i in range(no):
         for j in range(ne2):
@@ -545,6 +547,8 @@ def g2p_fft_mpi_cpu_bare(
     pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     pr: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pr_new: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pr2: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
     for i in range(no):
         pg[i,:] = fft.ifft(pg_t[i,:])
         pr[i,:] = fft.ifft(pr_t[i,:])
@@ -557,5 +561,24 @@ def g2p_fft_mpi_cpu_bare(
     for i in range(no):
         for j in range(ne2):
             pl[i, j] = -np.conjugate(pg[i, -j])
+
+    # computing pr_new with identity pr(t) = sigma(t) * (pg(t) - pl(t))
+    for i in range(no):
+        pl_t[i, :] = fft.ifft(pl[i,:] / pre_factor)
+
+    for i in range(no):
+        pr_t_new[i, :ne] = (pg_t[i,:] - pl_t[i,:])[:ne]
+
+    for i in range(no):
+        pr_new[i,:] = fft.ifft(pr_t_new[i,:])
+
+    for i in range(no):
+        for j in range(ne2):
+            pr_new[i, j] = pr_new[i, j] * pre_factor
+    
+    # computing pr2 with identity pr(E) = 1j * np.imag(pg(E) - pl(E))/2
+    for i in range(no):
+        pr2[i,:] = 1j * np.imag(pg[i,:] - pl[i,:])/2
+    
 
     return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
