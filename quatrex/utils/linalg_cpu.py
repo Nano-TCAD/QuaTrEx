@@ -141,6 +141,22 @@ def fft_numba(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> np
         out[i, :] = fft.fft(g1[i, :], n=ne2)
     return out
 
+def fft_sequential(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> npt.NDArray[np.complex128]:
+    """Tries to compile scipy fft with numba
+
+    Args:
+        g1 (npt.NDArray[np.complex128]): 2D matrix
+        ne (np.int32): number energy points
+        workers (np.int32): #workers for ifft
+
+    Returns:
+        npt.NDArray[np.complex128]: fft(g1) with padding ne, ne2 = 2*ne
+    """
+    out: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
+    for i in range(no):
+        out[i, :] = fft.fft(g1[i, :], n=ne2)
+    return out
+
 
 @numba.njit("(c16[:,:], c16, i8, i8)", parallel=True, cache=True, nogil=True, error_model="numpy")
 def scalarmul_ifft_cutoff(g1: npt.NDArray[np.complex128], fac: np.complex128, ne: np.int64,
