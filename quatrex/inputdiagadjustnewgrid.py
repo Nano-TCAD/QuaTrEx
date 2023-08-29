@@ -35,7 +35,7 @@ from quatrex.utils.matrix_creation import get_number_connected_blocks
 
 
 
-bias = 4
+bias = 5
 
 if utils_gpu.gpu_avail():
     try:
@@ -135,10 +135,10 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     #energy resolution
     # no_orb = np.array([3, 3, 3])
-    no_orb = np.array([2, 3])
+    no_orb = np.array([1, 1, 0])
     Vappl = 0
-    energy = np.linspace(-25, 11, 9000, endpoint=True, dtype=float)  # Energy Vector
-    # energy = np.linspace(-5, -3, 500, endpoint=True, dtype=float)  # Energy Vector
+    # energy = np.linspace(-25, 11, 9000, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-15, -3, 4500, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, bias_point = bias, rank=rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -191,14 +191,14 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.748185
+    energy_fl = -3.7664141
     # Fermi Level of Right Contact
 
-    energy_fr = -4.248185
+    energy_fr = -4.2664141
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 10
+    epsR = 1.5
     # DFT Conduction Band Minimum
     #ECmin = -3.5
     # ECmin = -3.447
@@ -382,7 +382,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 40
+    max_iter = 200
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     ECminright_vec = np.concatenate((np.array([ECminright]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
@@ -421,7 +421,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/QuaTrEx/quatrex/results/80TFET72/'
+    folder = '/QuaTrEx/quatrex/results/80TFETzerobias/'
     iter_num = 0
     converge = 0
 
@@ -460,8 +460,8 @@ if __name__ == "__main__":
         guessleft = ECmin_vec[iter_num]
         guessright = ECminright_vec[iter_num]
         if iter_num == 1 and epsR < 5:
-            guessleft = ECmin_vec[iter_num] - 0.5
-            guessright = ECminright_vec[iter_num] - 0.5
+            guessleft = ECmin_vec[iter_num] - 0.0
+            guessright = ECminright_vec[iter_num] - 0.0
 
 
 
