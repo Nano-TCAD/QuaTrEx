@@ -75,6 +75,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 3])
     Vappl = 0.4
+    #energy = np.linspace(-20, 40.0, 20001, endpoint=True, dtype=float)  # Energy Vector
     energy = np.linspace(-8, 12.0, 201, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank)
@@ -182,7 +183,8 @@ if __name__ == "__main__":
     factor_g[ne - dnp - 1:ne] = (np.cos(np.pi * np.linspace(0, 1, dnp + 1)) + 1) / 2
     factor_g[0:dnp + 1] = (np.cos(np.pi * np.linspace(1, 0, dnp + 1)) + 1) / 2
 
-    V_sparse = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e)
+    V_sparse = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=False)
+    vh1d = np.asarray(vh[rows, columns].reshape(-1))
 
     assert np.allclose(V_sparse.toarray(), vh.toarray())
 
@@ -509,6 +511,8 @@ if __name__ == "__main__":
         elif args.type in ("cpu"):
             pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, gg_g2p, gl_g2p, gr_g2p,
                                                                      gl_transposed_g2p)
+            # pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_bare(pre_factor, gg_g2p, gl_g2p, gr_g2p,
+            #                                                          gl_transposed_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -622,6 +626,16 @@ if __name__ == "__main__":
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s)
         elif args.type in ("cpu"):
+            vh1d = np.asarray(vh[rows, columns].reshape(-1))
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr_bare(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
+            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
+            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, V_sparse, energy, rows, columns, rank, disp, count)
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr_bare(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
+            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
+            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, V_sparse, energy, rows, columns, rank, disp, count)
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
+            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
+            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s)

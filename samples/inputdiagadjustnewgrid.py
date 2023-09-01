@@ -19,7 +19,7 @@ mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_interpol, get_band_edge_mpi_interpol
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -32,6 +32,10 @@ from quatrex.utils import change_format
 from quatrex.utils import utils_gpu
 from quatrex.utils.bsr import bsr_matrix
 from quatrex.utils.matrix_creation import get_number_connected_blocks
+
+
+
+bias = 5
 
 if utils_gpu.gpu_avail():
     try:
@@ -58,7 +62,9 @@ if __name__ == "__main__":
 
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path = os.path.join(scratch_path, "GNR_pd")
-    solution_path = os.path.join(scratch_path, "CNT_evensort48new")
+    #solution_path = os.path.join(scratch_path, "CNT_evensort48new")
+
+    solution_path = os.path.join(scratch_path, "for_kevin")
 
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
@@ -127,12 +133,14 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
+    #energy resolution
     # no_orb = np.array([3, 3, 3])
-    no_orb = np.array([2, 3])
+    no_orb = np.array([1, 1, 0])
     Vappl = 0
-    energy = np.linspace(-5, -3, 1000, endpoint=True, dtype=float)  # Energy Vector
+    # energy = np.linspace(-25, 11, 9000, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-15, -3, 4500, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, potential_type='atomic')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, bias_point = bias, rank=rank, potential_type='atomic')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -183,18 +191,19 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.748185
+    energy_fl = -3.7664141
     # Fermi Level of Right Contact
 
-    energy_fr = -4.248185
+    energy_fr = -4.2664141
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 25
+    epsR = 1.5
     # DFT Conduction Band Minimum
     #ECmin = -3.5
-    ECmin = -3.5
-
+    # ECmin = -3.447
+    ECmin = -3.7
+    ECminright = -4.22
     # Phyiscal Constants -----------
 
     e = 1.6022e-19
@@ -203,7 +212,7 @@ if __name__ == "__main__":
 
     # Fermi Level to Band Edge Difference
     dEfL_EC = energy_fl - ECmin
-    dEfR_EC = energy_fr - ECmin
+    dEfR_EC = energy_fr - ECminright
 
     # create the corresponding factor to mask
     # number of points to smooth the edges of the Green's Function
@@ -373,8 +382,9 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 2
+    max_iter = 200
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
+    ECminright_vec = np.concatenate((np.array([ECminright]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
 
@@ -411,8 +421,13 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/quatrex/results/80TFET72/'
+    folder = '/QuaTrEx/quatrex/results/80TFETzerobias/'
+    iter_num = 0
+    converge = 0
+
+    # while iter_num < max_iter and converge < 1:
     for iter_num in range(max_iter):
+        
 
         comm.Barrier()
 
@@ -442,52 +457,64 @@ if __name__ == "__main__":
         sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
         sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
+        guessleft = ECmin_vec[iter_num]
+        guessright = ECminright_vec[iter_num]
+        if iter_num == 1 and epsR < 5:
+            guessleft = ECmin_vec[iter_num] - 0.0
+            guessright = ECminright_vec[iter_num] - 0.0
+
+
+
+
+
+
+
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1, rank], no), dtype=np.complex128), rows,
                                                             columns, nao)
-        
-        ECmin_vec[iter_num + 1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
-                                                            energy,
-                                                            hamiltonian_obj.Overlap['H_4'],
-                                                            hamiltonian_obj.Hamiltonian['H_4'],
-                                                            sr_h2g_vec,
-                                                            sl_h2g_vec,
-                                                            sg_h2g_vec,
-                                                            sr_ephn_h2g_vec,
-                                                            rows,
-                                                            columns,
-                                                            bmin,
-                                                            bmax,
-                                                            comm,
-                                                            rank,
-                                                            size,
-                                                            count,
-                                                            disp,
-                                                            side='left')
-        
-        # ECmin_vec[iter_num + 1] = get_band_edge_mpi(ECmin_vec[iter_num],
-        #                                                     energy,
-        #                                                     hamiltonian_obj.Overlap['H_4'],
-        #                                                     hamiltonian_obj.Hamiltonian['H_4'],
-        #                                                     sr_h2g_vec,
-        #                                                     sr_ephn_h2g_vec,
-        #                                                     rows,
-        #                                                     columns,
-        #                                                     bmin,
-        #                                                     bmax,
-        #                                                     comm,
-        #                                                     rank,
-        #                                                     size,
-        #                                                     count,
-        #                                                     disp,
-        #                                                     side='left')
-        ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
-        if iter_num == 0:
-            dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
-            dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
-        else:
+        ECmin_vec[iter_num + 1] = get_band_edge_mpi(guessleft,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_h2g_vec,
+                                                    sr_ephn_h2g_vec,
+                                                    rows,
+                                                    columns,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    side='left')
+        ECminright_vec[iter_num + 1] = get_band_edge_mpi(guessright,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_h2g_vec,
+                                                    sr_ephn_h2g_vec,
+                                                    rows,
+                                                    columns,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    side='right')
+        #ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
+
+
+
+        if iter_num == 0: #if it is the first iteration (no gw), compute the correct bandedge and the bandedge-Fermi difference, do not update fermi level
+             dEfL_EC = energy_fl - ECmin_vec[1]
+             dEfR_EC = energy_fr - ECminright_vec[1]
+        else: #for every other gw iteration, adjust the Fermi level according to the fixed bandedge difference computed from first iteration
             energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+            energy_fr = ECminright_vec[iter_num + 1] + dEfR_EC
+
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
@@ -900,11 +927,13 @@ if __name__ == "__main__":
         alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose)
 
         comm.Barrier()
+        
 
         if rank == 0:
             comm2_time += time.perf_counter()
             print(f"    Comm-2 time: {comm2_time:.3f} s", flush=True)
             gw2s_time = -time.perf_counter()
+        
 
     # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("gpu"):
@@ -971,12 +1000,10 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
-            comm.Reduce(dosw, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
 
         if rank == 0:
@@ -990,14 +1017,34 @@ if __name__ == "__main__":
             np.savetxt(parent_path + folder + 'E.dat', energy)
             np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
             np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(parent_path + folder + 'DOSW_' + str(iter_num) + '.dat', dosw.view(float))
             np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
             np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
             np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+            np.savetxt(parent_path + folder + 'ECminright.dat', ECminright_vec)
+            # iter_num = iter_num + 1
+            # ideT = np.transpose(ide)
+            # idecurrent = np.sum(ide,axis=0)
+            # leftsum = idecurrent[0]
+            # rightsum = idecurrent[-1]
+            # print('left current equal to '+ str(leftsum)+ ' and right current equal to '+str(rightsum))
+            # if abs(leftsum) > 0:
+            #     error = abs((leftsum-rightsum)/leftsum)
+            # else:
+            #     error = 100
+            # # if error < 0.01 and iter_num > 2:
+            # if error < 0.01:
+            #     converge = 1
+            #     print('converged at iteration number ' + str(iter_num) + ' with left current equal to '+ str(leftsum)+ ' and right current equal to '+str(rightsum))
+
+
+
+
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
         np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+        np.savetxt(parent_path + folder + 'ECminright.dat', ECminright_vec)
+    
 
     # free datatypes------------------------------------------------------------
 
