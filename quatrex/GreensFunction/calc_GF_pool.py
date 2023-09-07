@@ -143,13 +143,14 @@ def calc_GF_pool_mpi(
     bmax = DH.Bmax.copy()
 
     for ie in range(ne):
-        SigL[ie] = 1j * np.imag(SigL[ie])
-        SigG[ie] = 1j * np.imag(SigG[ie])
+        #SigL[ie] = 1j * np.imag(SigL[ie])
+        #SigG[ie] = 1j * np.imag(SigG[ie])
 
         SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
         SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
-        SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
-        SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
+        #SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
+        SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
+        #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
         if homogenize:
             SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')

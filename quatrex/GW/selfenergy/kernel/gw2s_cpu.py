@@ -352,11 +352,11 @@ def gw2s_fft_mpi_cpu_3part_sr(
 
     return (sg, sl, sr)
 
-@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+# @numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
+#             parallel=True,
+#             cache=True,
+#             nogil=True,
+#             error_model="numpy")
 def gw2s_fft_mpi_cpu_PI_sr(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
     gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
@@ -517,9 +517,9 @@ def gw2s_fft_mpi_cpu_PI_sr(
     SGmSL_t = linalg_cpu.fft_numba(1j*np.imag(sg-sl), ne2, no)
     rSigmaR_t = np.multiply(SGmSL_t, one_div_by_E_t)
     #rSigmaR_t = linalg_cpu.elementmul(SGmSL_t, one_div_by_E_t)
-    rSigmaR = linalg_cpu.scalarmul_ifft_cutoff(rSigmaR_t, pre_factor, ne2, no)[:, ne:].astype(np.complex128)
+    rSigmaR = linalg_cpu.scalarmul_ifft_cutoff(rSigmaR_t, pre_factor*2, ne2, no)[:, ne-1:-1].astype(np.complex128)
 
-    sr_principale = rSigmaR + (1j*np.imag(sg-sl)/2).astype(np.complex128) + rSigmaRF
+    sr_principale = rSigmaR/2 + (1j*np.imag(sg-sl)/2).astype(np.complex128) + rSigmaRF
     # sr_time = np.real(sr_full[:, ne-1:]) + 1j*np.imag(sg-sl)/2 + rSigmaRF 
     # sr_2part_a = sr_2_part_a_1 + sr_2_part_a_2
     # sr_2part_b = sr_2_part_b_1 + sr_2_part_b_2

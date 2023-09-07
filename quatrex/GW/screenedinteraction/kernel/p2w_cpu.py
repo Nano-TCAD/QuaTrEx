@@ -99,15 +99,15 @@ def p2w_pool_mpi_cpu(
 
     for ie in range(ne):
         # Anti-Hermitian symmetrizing of PL and PG
-        pl[ie] = 1j * np.imag(pl[ie])
+        #pl[ie] = 1j * np.imag(pl[ie])
         pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
 
-        pg[ie] = 1j * np.imag(pg[ie])
+        #pg[ie] = 1j * np.imag(pg[ie])
         pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
 
         # PR has to be derived from PL and PG and then has to be symmetrized
-        pr[ie] = 1j * np.imag(pg[ie] - pl[ie]) / 2
-        pr[ie] = (pr[ie] + pr[ie].T) / 2
+        pr[ie] = (pg[ie] - pl[ie]) / 2
+        #pr[ie] = (pr[ie] + pr[ie].T) / 2
         if homogenize:
             pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
@@ -443,7 +443,7 @@ def p2w_mpi_cpu_alt(
     lb = bmax - bmin + 1
     # fix nbc to 2 for the given solution
     # todo calculate it
-    nbc = 2
+    #nbc = 2
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]

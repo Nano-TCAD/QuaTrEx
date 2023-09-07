@@ -1357,14 +1357,18 @@ def get_dl_obc_alt(xr_d: np.ndarray, lg_d: np.ndarray, lg_o: np.ndarray, ll_d: n
     # case for the left/right (start/end) block
     # differentiates between which block to look at
     if blk == "L":
-        idx_max = np.max([np.max(rows), lb - np.min(cols)])
+        #idx_max = np.max([np.max(rows), lb - np.min(cols)])
+        idx_max = np.max([np.max(rows) + 1, lb - np.min(cols)])
         ip = lb - idx_max
         sl_x = slice(ip, lb)
-        sl_y = slice(0, idx_max + 1)
+        #sl_y = slice(0, idx_max + 1)
+        sl_y = slice(0, idx_max)
     elif blk == "R":
-        idx_max = np.max([np.max(cols), lb - np.min(rows)])
+        #idx_max = np.max([np.max(cols), lb - np.min(rows)])
+        idx_max = np.max([np.max(cols) + 1, lb - np.min(rows)])
         ip = lb - idx_max
-        sl_x = slice(0, idx_max + 1)
+        #sl_x = slice(0, idx_max + 1)
+        sl_x = slice(0, idx_max)
         sl_y = slice(ip, lb)
     else:
         raise ValueError("Argument error, type input not possible")
