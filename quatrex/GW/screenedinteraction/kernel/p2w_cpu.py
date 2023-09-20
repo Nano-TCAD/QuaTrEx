@@ -8,9 +8,9 @@ import mkl
 import typing
 import numpy.typing as npt
 from scipy import sparse
-from utils import matrix_creation
-from utils import change_format
-from utils.matrix_creation import homogenize_matrix
+from quatrex.utils import matrix_creation
+from quatrex.utils import change_format
+from quatrex.utils.matrix_creation import homogenize_matrix
 from quatrex.block_tri_solvers import rgf_W
 #from quatrex.block_tri_solvers import matrix_inversion_w
 from quatrex.OBC import obc_w_cpu

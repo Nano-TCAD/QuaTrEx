@@ -7,10 +7,10 @@ from scipy import sparse
 from cupyx.scipy import sparse as cusparse
 import mkl
 import typing
-from utils import change_format
+from quatrex.utils import change_format
 from block_tri_solvers import matrix_inversion_w
-from OBC import obc_w_gpu
-from OBC import obc_w_cpu
+from quatrex.OBC import obc_w_gpu
+from quatrex.OBC import obc_w_cpu
 import time
 
 

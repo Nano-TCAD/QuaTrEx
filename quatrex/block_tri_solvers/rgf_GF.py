@@ -2,9 +2,9 @@
 
 import numpy as np
 from scipy import sparse
-from utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
-from OBC.beyn_cpu import beyn
-from OBC.sancho import open_boundary_conditions
+from quatrex.utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
+from quatrex.OBC.beyn_cpu import beyn
+from quatrex.OBC.sancho import open_boundary_conditions
 from functools import partial
 
 
@@ -41,7 +41,7 @@ def rgf_GF(M,
 
     beyn_func = beyn
     if use_dace:
-        from OBC import beyn_dace
+        from quatrex.OBC import beyn_dace
         beyn_func = partial(beyn_dace.beyn, validate=validate_dace)
 
     imag_lim = 5e-4

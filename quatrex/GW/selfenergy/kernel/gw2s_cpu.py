@@ -12,7 +12,7 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
 
-from utils import linalg_cpu
+from quatrex.utils import linalg_cpu
 
 
 def gw2s_fft_cpu(

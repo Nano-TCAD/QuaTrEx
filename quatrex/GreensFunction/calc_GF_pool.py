@@ -10,9 +10,9 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
-from GreensFunction.fermi import fermi_function
-from block_tri_solvers.rgf_GF import rgf_GF
+from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
+from quatrex.GreensFunction.fermi import fermi_function
+from quatrex.block_tri_solvers.rgf_GF import rgf_GF
 
 from operator import mul
 

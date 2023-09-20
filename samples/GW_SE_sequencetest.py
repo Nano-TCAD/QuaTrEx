@@ -25,8 +25,6 @@ mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_interpol, get_band_edge_mpi_interpol
-from quatrex.GW.polarization.kernel import g2p_cpu
-from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V
@@ -90,11 +88,11 @@ if __name__ == "__main__":
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
     ne: np.int32 = np.int32(energy.shape[0])
-    no: np.int32 = np.int32(columns.shape[0])
-    nao: np.int64 = np.max(bmax) + 1
+    no: np.int32 = np.int32(columns.shape[0]) # number of elem in GW self energy
+    nao: np.int64 = np.max(bmax) + 1 # number of atomic orbitals (matrix size)
 
     # Analysing an arbitrary iteration
-    iteration = 10
+    iteration = 10 # 0->31 iterations performed
     # Reading GW self-energy
     SigmaR_GW = np.load(os.path.join(self_energy_path, "sigma_R_{}.npy".format(iteration)))
     # Reading left boundary self-energy
@@ -110,9 +108,10 @@ if __name__ == "__main__":
     sr_h2g_vec = change_format.sparse2vecsparse_v2(SigmaR_GW, rows, columns, nao)
 
     # Creating [E - H - SigmaR_GW - SigmaR_B] matrix for an arbitrary energy index
-    idx_e = 500
+    idx_e = 900 # this is the ernergy point (0->999)
 
     # [E - H - SigmaR_GW] matrix
+    # matrix is CSR
     matrix = (energy[idx_e] + 1j * 1e-12) * hamiltonian_obj.Overlap['H_4'] -  hamiltonian_obj.Hamiltonian['H_4'] - sr_h2g_vec[idx_e]
 
     # adding boundary elements
@@ -121,6 +120,14 @@ if __name__ == "__main__":
 
     # Calculating Green's function
     Gr = np.linalg.inv(matrix.toarray())
+
+    import matplotlib.pyplot as plt
+    plt.matshow(np.abs(SigmaR_Bl[idx_e]))
+    plt.matshow(np.abs(SigmaR_Br[idx_e]))
+    #plt.matshow(np.abs(hamiltonian_obj.Hamiltonian['H_4'].toarray()))
+    plt.matshow(np.abs(matrix.toarray()))
+    plt.matshow(np.abs(Gr))
+    plt.show()
 
     print(Gr.shape)
 

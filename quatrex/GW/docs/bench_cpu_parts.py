@@ -14,8 +14,8 @@ parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
 from GW.polarization.initialization import gf_init
-from utils import change_format
-from utils import linalg_cpu
+from quatrex.utils import change_format
+from quatrex.utils import linalg_cpu
 
 if __name__ == "__main__":
     # parse input arguments

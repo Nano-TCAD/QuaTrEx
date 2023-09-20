@@ -16,13 +16,13 @@ sys.path.append(parent_path)
 
 from GW.polarization.kernel import g2p_cpu
 from GW.gold_solution import read_solution
-from utils import utils_gpu
-from utils import change_format
+from quatrex.utils import utils_gpu
+from quatrex.utils import change_format
 
 if utils_gpu.gpu_avail():
     import cupy as cp
     from GW.polarization.kernel import g2p_gpu
-    from utils import linalg_gpu
+    from quatrex.utils import linalg_gpu
 
 if __name__ == "__main__":
     # parse the possible arguments
