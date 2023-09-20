@@ -49,8 +49,8 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
-    solution_path = os.path.join(scratch_path, "InGaAs")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_big_memory0_InAs_0V.mat")
+    solution_path = os.path.join(scratch_path, "InAs")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_big_memory2_InAs_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_finalPI_InAs_0v.mat")
     hamiltonian_path = solution_path
@@ -338,7 +338,7 @@ if __name__ == "__main__":
     mem_w = 0.1
     # max number of iterations
 
-    max_iter = 2
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -405,7 +405,7 @@ if __name__ == "__main__":
         
         # calculate the green's function at every rank------------------------------
         if args.pool:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -423,6 +423,7 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
+                return_sigma_boundary=True,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         else:

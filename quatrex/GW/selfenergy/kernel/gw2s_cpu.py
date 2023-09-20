@@ -352,11 +352,11 @@ def gw2s_fft_mpi_cpu_3part_sr(
 
     return (sg, sl, sr)
 
-# @numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
-#             parallel=True,
-#             cache=True,
-#             nogil=True,
-#             error_model="numpy")
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
 def gw2s_fft_mpi_cpu_PI_sr(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
     gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],

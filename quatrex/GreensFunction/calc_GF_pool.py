@@ -10,9 +10,9 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
-from GreensFunction.fermi import fermi_function
-from block_tri_solvers.rgf_GF import rgf_GF
+from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
+from quatrex.GreensFunction.fermi import fermi_function
+from quatrex.block_tri_solvers.rgf_GF import rgf_GF
 
 from operator import mul
 
@@ -110,6 +110,7 @@ def calc_GF_pool_mpi(
     rank,
     size,
     homogenize=True,
+    return_sigma_boundary = False,
     mkl_threads: int = 1,
     worker_num: int = 1,
     block_inv: bool = False,
@@ -141,6 +142,12 @@ def calc_GF_pool_mpi(
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
+    if(return_sigma_boundary):
+        LBsize = bmax[0] - bmin[0] + 1
+        RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
+
+        SigRBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
+        SigRBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
 
     for ie in range(ne):
         #SigL[ie] = 1j * np.imag(SigL[ie])
@@ -172,7 +179,15 @@ def calc_GF_pool_mpi(
         # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
         #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
         #results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG,
-        executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+        if(return_sigma_boundary):
+            results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+                        DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
+                        repeat(use_dace), repeat(validate_dace))
+            for idx, res in enumerate(results):
+                SigRBL[idx, :, :] = res[0]
+                SigRBR[idx, :, :] = res[1]
+        else:
+            executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
                      DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
                      repeat(use_dace), repeat(validate_dace))
         #for res in results:
@@ -239,7 +254,10 @@ def calc_GF_pool_mpi(
         GG_3D_E[index, :, :, :] = 0
         GGnn1_3D_E[index, :, :, :] = 0
 
-    return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
+    if(return_sigma_boundary):
+        return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, SigRBL, SigRBR
+    else:   
+        return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 
 
 def calc_GF_mpi(

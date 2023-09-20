@@ -55,9 +55,9 @@ import time
 import typing
 
 from functools import partial
-from OBC import beyn_cpu
-from OBC import sancho
-from OBC import dL_OBC_eigenmode_cpu
+from quatrex.OBC import beyn_cpu
+from quatrex.OBC import sancho
+from quatrex.OBC import dL_OBC_eigenmode_cpu
 
 
 def rgf_W(

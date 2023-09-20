@@ -1380,9 +1380,19 @@ def get_dl_obc_alt(xr_d: np.ndarray, lg_d: np.ndarray, lg_o: np.ndarray, ll_d: n
     # eigen values and eigen vectors
     eival, eivec = np.linalg.eig(ar)
 
+    # compute the reduced systems of eigenvalues and eigenvectors
+    ieivec = np.linalg.inv(eivec)
+
+    # Emax = np.max(np.abs(eival))
+    # ind = np.where(np.abs(eival) > Emax / 1e8)[0]
+    # eival = eival[ind]
+    # eivec = eivec[:, ind]
+    # ieivec = ieivec[ind, :]
+
+
     # conjugate/transpose/abs square
     eivec_ct = eivec.conjugate().T
-    ieivec = np.linalg.inv(eivec)
+    #ieivec = np.linalg.inv(eivec)
     ieivec_ct = ieivec.conjugate().T
     eival_sq = np.diag(eival) @ np.diag(eival).conjugate()
 

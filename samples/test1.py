@@ -148,6 +148,10 @@ if __name__ == "__main__":
     bmax = hamiltonian_obj.Bmax - 1
     bmin = hamiltonian_obj.Bmin - 1
 
+    # Left and right Block sizes for boundary self-energy analysis
+    LBsize = bmax[0] - bmin[0] + 1
+    RBsize = bmax[-1] - bmin[-1] + 1
+
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
     ne: np.int32 = np.int32(energy.shape[0])
@@ -222,6 +226,7 @@ if __name__ == "__main__":
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
         vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
 
+    vh1d = np.squeeze(np.asarray(vh[rows, columns].reshape(-1)))
     # calculation of data distribution per rank---------------------------------
 
     # split nnz/energy per rank
@@ -328,6 +333,17 @@ if __name__ == "__main__":
             if rank == 0:
                 outp[:, :] = out_transposed.T
 
+    def gather_master_boundaryblocks(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], block_size):
+        if rank == 0:
+            outp_buff = np.zeros((data_shape[1], block_size, block_size), dtype=np.complex128, order="C")
+        else:
+            outp_buff = None
+        #outp_buff = np.copy(outp, order="C")
+        comm.Gatherv(inp, [outp_buff, count[1, :]*block_size*block_size, disp[1, :]*block_size*block_size, BASE_TYPE], root=0)
+        if rank == 0:
+             outp[:, :, :] = outp_buff
+
+
     def alltoall_g2p(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = False):
         if transpose_net:
             comm.Alltoallw([inp, count[0, :], disp[0, :] * base_size,
@@ -373,7 +389,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 2
+    max_iter = 32
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -481,7 +497,7 @@ if __name__ == "__main__":
         #                                                     count,
         #                                                     disp,
         #                                                     side='left')
-        ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
+        #ECmin_vec[iter_num + 1] = ECmin_vec[iter_num]
         if iter_num == 0:
             dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
             dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
@@ -500,7 +516,7 @@ if __name__ == "__main__":
 
         # calculate the green's function at every rank------------------------------
         if args.pool:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -518,6 +534,7 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
+                return_sigma_boundary=True,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
                 block_inv=args.block_inv,
@@ -912,9 +929,12 @@ if __name__ == "__main__":
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s)
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
+            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
+            #                                                                wg_transposed_gw2s, wl_transposed_gw2s)
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -994,10 +1014,37 @@ if __name__ == "__main__":
             np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
             np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
             np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+
+            sr_mpi = np.zeros((no, energy.shape[0]), dtype=np.complex128)
+            sigRBl_mpi = np.zeros((energy.shape[0], LBsize, LBsize), dtype=np.complex128)
+            sigRBr_mpi = np.zeros((energy.shape[0], RBsize, RBsize), dtype=np.complex128)
+            gather_master(sr_h2g, sr_mpi, transpose_net=args.net_transpose)
+            sr_mpi = sr_mpi.T
+            gather_master_boundaryblocks(sigRBl, sigRBl_mpi, LBsize)
+            gather_master_boundaryblocks(sigRBr, sigRBr_mpi, RBsize)
+
+            with open ('/usr/scratch/mont-fort17/dleonard/QUATREX/results/80TFET72/sigma_R_' + str(iter_num) + '.npy','wb') as f:
+                np.save(f, sr_mpi)
+
+            with open ('/usr/scratch/mont-fort17/dleonard/QUATREX/results/80TFET72/sigma_RBL_' + str(iter_num) + '.npy','wb') as f:
+                np.save(f, sigRBl_mpi)
+
+            with open ('/usr/scratch/mont-fort17/dleonard/QUATREX/results/80TFET72/sigma_RBR_' + str(iter_num) + '.npy','wb') as f:
+                np.save(f, sigRBr_mpi)
+
+        else:
+            gather_master(sr_h2g, None, transpose_net=args.net_transpose)
+            gather_master_boundaryblocks(sigRBl, None, LBsize)
+            gather_master_boundaryblocks(sigRBr, None, RBsize)
+
+            
+
     if rank == 0:
         np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
         np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
         np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+
+
 
     # free datatypes------------------------------------------------------------
 
