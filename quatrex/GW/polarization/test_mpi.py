@@ -19,7 +19,7 @@ sys.path.append(parent_path)
 
 from GW.polarization.kernel import g2p_gpu
 from GW.gold_solution import read_solution
-from utils import change_format
+from quatrex.utils import change_format
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)

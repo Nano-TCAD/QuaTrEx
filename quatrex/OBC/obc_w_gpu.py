@@ -16,9 +16,9 @@ import numpy as np
 import numpy.typing as npt
 import cupy as cp
 from cupyx.scipy import sparse as cusparse
-from OBC import beyn_cpu
-from OBC import sancho
-from OBC import dL_OBC_eigenmode_gpu
+from quatrex.OBC import beyn_cpu
+from quatrex.OBC import sancho
+from quatrex.OBC import dL_OBC_eigenmode_gpu
 import typing
 
 

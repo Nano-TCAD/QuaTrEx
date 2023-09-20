@@ -41,7 +41,7 @@ def rgf_GF(M,
 
     beyn_func = beyn
     if use_dace:
-        from OBC import beyn_dace
+        from quatrex.OBC import beyn_dace
         beyn_func = partial(beyn_dace.beyn, validate=validate_dace)
 
     imag_lim = 5e-4
