@@ -1383,9 +1383,9 @@ def get_dl_obc_alt(xr_d: np.ndarray, lg_d: np.ndarray, lg_o: np.ndarray, ll_d: n
     # compute the reduced systems of eigenvalues and eigenvectors
     ieivec = np.linalg.inv(eivec)
 
-    # Emax = np.max(np.abs(eival))
-    # ind = np.where(np.abs(eival) > Emax / 1e8)[0]
-    # eival = eival[ind]
+    Emax = np.max(np.abs(eival))
+    ind = np.where(np.abs(eival) > Emax / 1e8)[0]
+    eival_red = eival[ind]
     # eivec = eivec[:, ind]
     # ieivec = ieivec[ind, :]
 
@@ -1395,20 +1395,26 @@ def get_dl_obc_alt(xr_d: np.ndarray, lg_d: np.ndarray, lg_o: np.ndarray, ll_d: n
     #ieivec = np.linalg.inv(eivec)
     ieivec_ct = ieivec.conjugate().T
     eival_sq = np.diag(eival) @ np.diag(eival).conjugate()
+    eival_sq_red = np.outer(eival_red,eival_red.conjugate())
 
     # greater component
-    yg_d = np.divide(ieivec @ fg[sl_x, sl_x] @ ieivec_ct, 1 - eival_sq)
-    wg_d = eivec @ yg_d @ eivec_ct
+    yg_d = np.divide(ieivec[ind,:] @ fg[sl_x, sl_x] @ ieivec[ind, :].conjugate().T, 1 - eival_sq_red) - ieivec[ind,:] @ fg[sl_x, sl_x] @ ieivec[ind, :].conjugate().T
+    qg = np.zeros((sl_x.stop - sl_x.start, sl_x.stop - sl_x.start), dtype=np.complex128)
+    qg[:ind.shape[0], :ind.shape[0]] = yg_d
+    wg_d = fg[sl_x, sl_x] +  eivec @ qg @ eivec_ct
     xrmr_dx_s = xr_d[sl_x, :] @ mr_x[:, sl_x]
     mrxr_ct_xd_s = mr_x_ct[sl_x, :] @ xr_d_ct[:, sl_x]
+
     for i in range(ref_iteration):
         wg_d = fg[sl_x, sl_x] + xrmr_dx_s @ wg_d @ mrxr_ct_xd_s
 
     dlg_d = mr_x[:, sl_x] @ wg_d @ mr_x_ct[sl_x, :] - ag_diff
 
     # lesser component
-    yl_d = np.divide(ieivec @ fl[sl_x, sl_x] @ ieivec_ct, 1 - eival_sq)
-    wl_d = eivec @ yl_d @ eivec_ct
+    yl_d = np.divide(ieivec[ind,:] @ fl[sl_x, sl_x] @ ieivec[ind, :].conjugate().T, 1 - eival_sq_red) - ieivec[ind,:] @ fl[sl_x, sl_x] @ ieivec[ind, :].conjugate().T
+    ql = np.zeros((sl_x.stop - sl_x.start, sl_x.stop - sl_x.start), dtype=np.complex128)
+    ql[:ind.shape[0], :ind.shape[0]] = yl_d
+    wl_d = fl[sl_x, sl_x] +  eivec @ ql @ eivec_ct
     for i in range(ref_iteration):
         wl_d = fl[sl_x, sl_x] + xrmr_dx_s @ wl_d @ mrxr_ct_xd_s
 

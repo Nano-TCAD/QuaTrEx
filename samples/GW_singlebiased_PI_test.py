@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "InAs")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_big_memory2_InAs_0V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_dl_memory2_InAs_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_finalPI_InAs_0v.mat")
     hamiltonian_path = solution_path
