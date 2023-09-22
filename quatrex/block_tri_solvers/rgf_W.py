@@ -55,9 +55,9 @@ import time
 import typing
 
 from functools import partial
-from OBC import beyn_cpu
-from OBC import sancho
-from OBC import dL_OBC_eigenmode_cpu
+from quatrex.OBC import beyn_cpu
+from quatrex.OBC import sancho
+from quatrex.OBC import dL_OBC_eigenmode_cpu
 
 
 def rgf_W(
@@ -107,7 +107,7 @@ def rgf_W(
         factor (np.float64, optional): factor to multiply the result with. Defaults to 1.0.
         ref_flag (bool, optional): If reference solution to rgf made by np.linalg.inv should be returned
         sancho_flag (bool, optional): If sancho or beyn should be used. Defaults to False.
-    
+
     Returns:
         typing.Tuple[npt.NDArray[np.complex128], xr from inv
                   npt.NDArray[np.complex128],    wg from inv
@@ -276,7 +276,7 @@ def rgf_W(
     #                                             imag_lim, rr, "L")
     #     if not np.isnan(cond_l):
     #         dvh_sd = mr_sl @ dxr_sd @ vh_su
-    #old wrong version of beyn
+    # old wrong version of beyn
     if not sancho_flag:
         _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn_old(mr_sd.toarray(), mr_su.toarray(), mr_sl.toarray(),
                                                                 imag_lim, rr, "L")
@@ -579,7 +579,7 @@ def rgf_W(
             bg_diff = bg - bg.conjugate().transpose()
             bl_diff = bl - bl.conjugate().transpose()
 
-            #W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
+            # W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
             wg_diag_c = wg_diag_rgf_c + xr_mr @ wg_diag_p @ xr_mr_ct - ag_diff + bg_diff
             wl_diag_c = wl_diag_rgf_c + xr_mr @ wl_diag_p @ xr_mr_ct - al_diff + bl_diff
             wg_diag[idx_ib, :lb_i, :lb_i] = wg_diag_c
@@ -704,7 +704,7 @@ def rgf_w_opt(
         factor (np.float64, optional): factor to multiply the result with. Defaults to 1.0.
         ref_flag (bool, optional): If reference solution to rgf made by np.linalg.inv should be returned
         sancho_flag (bool, optional): If sancho or beyn should be used. Defaults to False.
-    
+
     Returns:
         typing.Tuple[npt.NDArray[np.complex128], xr from inv
                   npt.NDArray[np.complex128],    wg from inv
@@ -750,7 +750,7 @@ def rgf_w_opt(
     imag_lim = 1e-4
     # todo find out what rr/R is
     # (R only is against the style guide)
-    #todo, compare with matlab
+    # todo, compare with matlab
     rr = 1e6
     # copy vh to overwrite it
     vh_cp = vh.copy()
@@ -1225,7 +1225,7 @@ def rgf_w_opt(
             bg_diff = bg - bg.conjugate().transpose()
             bl_diff = bl - bl.conjugate().transpose()
 
-            #W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
+            # W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
             wg_diag_c = wg_diag_rgf_c + xr_mr @ wg_diag_p @ xr_mr_ct - ag_diff + bg_diff
             wl_diag_c = wl_diag_rgf_c + xr_mr @ wl_diag_p @ xr_mr_ct - al_diff + bl_diff
             wg_diag[idx_ib, :lb_i, :lb_i] = wg_diag_c
@@ -1293,12 +1293,12 @@ def rgf_w_opt(
             # last block index
             idx_lb = nb_mm - 1
             #   slice for last block
-            slb_lb = slice(bmin_mm[idx_lb],bmax_mm[idx_lb]+1)
+            slb_lb = slice(bmin_mm[idx_lb], bmax_mm[idx_lb]+1)
 
             # first block index
             idx_fb = 0
             #   slice for first block
-            slb_fb = slice(bmin_mm[idx_fb],bmax_mm[idx_fb]+1)
+            slb_fb = slice(bmin_mm[idx_fb], bmax_mm[idx_fb]+1)
 
             vh_cp[slb_lb, slb_lb] -= dvh_ed
             vh_cp[slb_fb, slb_fb] -= dvh_sd
@@ -1310,7 +1310,7 @@ def rgf_w_opt(
             ll[slb_fb, slb_fb] += dll_sd
 
             # invert m
-            
+
             mr_dense = mr.toarray()
             xr_ref = np.linalg.inv(mr_dense)
             wr_ref = xr_ref @ vh_cp.todense()

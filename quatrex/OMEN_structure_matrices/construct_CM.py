@@ -2,9 +2,10 @@
 
 import numpy as np
 from scipy import sparse
-from utils.read_utils import *
+from quatrex.utils.read_utils import *
 
-def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = False):
+
+def construct_coulomb_matrix(DH, eps_r, eps0, e, diag=False, orb_uniform=False):
     """
     This function computes a placeholder for the 2-index Coulomb matrix. It
     assumes that the atomic orbitals are point charges and computes their 
@@ -21,7 +22,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
         Dielectric permittivity of vacuum
     e   : float
         Elementary charge
-        
+
     Returns
     -------
     V_Col : scipy.sparse.csc matix of type cfloat, same dimension as
@@ -53,27 +54,28 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
 
                 if Vact > Vmax:
                     Vmax = Vact
-                
+
                 if (orb_uniform):
-                    V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.cfloat)
+                    V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype=np.cfloat)
                 else:
                     V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * SF[0:orbA, 0:orbB]
-                
+
     for ia in range(DH.NA):
-        
+
         orbA = DH.orb_per_at[ia+1] - DH.orb_per_at[ia]
-        if(diag):
+        if (diag):
             if (orb_uniform):
-                #V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat) - np.eye(int(orbA), dtype = np.cfloat))
-                V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat))
+                # V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat) - np.eye(int(orbA), dtype = np.cfloat))
+                V_atomic[ia, 0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype=np.cfloat))
             else:
-                V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
-        elif(orbA > 1):
-            if(orb_uniform):
-                V_atomic[ia,0, 0:orbA, 0:orbA] = Vmax * (np.ones((orbA, orbA), dtype = np.cfloat)- np.eye(int(orbA), dtype = np.cfloat))
-            else: 
-                pass #not changing this as it will break the test unfortunately.   
-        #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
+                V_atomic[ia, 0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
+        elif (orbA > 1):
+            if (orb_uniform):
+                V_atomic[ia, 0, 0:orbA, 0:orbA] = Vmax * \
+                    (np.ones((orbA, orbA), dtype=np.cfloat) - np.eye(int(orbA), dtype=np.cfloat))
+            else:
+                pass  # not changing this as it will break the test unfortunately.
+        # V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
 
     V_sparse = map_4D_to_sparse(V_atomic, DH)
     return V_sparse
@@ -81,7 +83,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
 
 def map_4D_to_sparse(V_atomic, DH):
     """
-    
+
 
     Parameters
     ----------

@@ -141,6 +141,7 @@ def fft_numba(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> np
         out[i, :] = fft.fft(g1[i, :], n=ne2)
     return out
 
+
 def fft_sequential(g1: npt.NDArray[np.complex128], ne2: np.int64, no: np.int64) -> npt.NDArray[np.complex128]:
     """Tries to compile scipy fft with numba
 
@@ -526,7 +527,7 @@ def convolve_3D(a: np.ndarray, b: np.ndarray, mode="valid", b_index="ij", method
             "fft" uses scipy.signal.convolve
         n_worker : int
             number of workers used in scipy.fft
-    
+
     Returns
         c : np.ndarray
             convolved matrices

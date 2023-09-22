@@ -17,25 +17,24 @@ mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False    # do not finalize MPI automatically
 from mpi4py import MPI
 
-main_path = os.path.abspath(os.path.dirname(__file__))
-parent_path = os.path.abspath(os.path.join(main_path, ".."))
-sys.path.append(parent_path)
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi
+from quatrex.GW.polarization.kernel import g2p_cpu
+from quatrex.GW.selfenergy.kernel import gw2s_cpu
+from quatrex.GW.gold_solution import read_solution
+from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 
-from bandstructure.calc_band_edge import get_band_edge_mpi
-from GW.polarization.kernel import g2p_cpu
-from GW.selfenergy.kernel import gw2s_cpu
-from GW.gold_solution import read_solution
-from GW.screenedinteraction.kernel import p2w_cpu
-from GW.coulomb_matrix.read_coulomb_matrix import load_V
-from GreensFunction import calc_GF_pool
-from OMEN_structure_matrices import OMENHamClass
-from OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
-from utils import change_format
-from utils import utils_gpu
+from quatrex.GreensFunction import calc_GF_pool
+from quatrex.OMEN_structure_matrices import OMENHamClass
+from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
+from quatrex.utils import change_format
+from quatrex.utils import utils_gpu
 
 if utils_gpu.gpu_avail():
-    from GW.polarization.kernel import g2p_gpu
-    from GW.selfenergy.kernel import gw2s_gpu
+    try:
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    except ImportError:
+        print("Cupy installation error")
 
 if __name__ == "__main__":
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
@@ -775,6 +774,9 @@ if __name__ == "__main__":
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
                                                                 sg_h2g_vec,
+                                                                energy_fl,
+                                                                energy_fr,
+                                                                temp,
                                                                 dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
@@ -904,18 +906,25 @@ if __name__ == "__main__":
 
         # calculate the screened interaction on every rank--------------------------
         if args.pool:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                                hamiltonian_obj, energy_loc,
-                                                                                                pg_p2w_vec, pl_p2w_vec,
-                                                                                                pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                Idx_e_loc,   
-                                                                                                factor_w_loc,
-                                                                                                comm,
-                                                                                                rank,
-                                                                                                size,
-                                                                                                w_mkl_threads,
-                                                                                                w_worker_threads)
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+                hamiltonian_obj,
+                energy_loc,
+                pg_p2w_vec,
+                pl_p2w_vec,
+                pr_p2w_vec,
+                vh,
+                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                Idx_e_loc,
+                factor_w_loc,
+                comm,
+                rank,
+                size,
+                nbc,
+                homogenize=False,
+                mkl_threads=w_mkl_threads,
+                worker_num=w_worker_threads)
         else:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                                                                                                 hamiltonian_obj, energy_loc,

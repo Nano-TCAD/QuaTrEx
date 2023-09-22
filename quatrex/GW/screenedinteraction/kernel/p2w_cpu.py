@@ -8,11 +8,11 @@ import mkl
 import typing
 import numpy.typing as npt
 from scipy import sparse
-from utils import matrix_creation
-from utils import change_format
-from utils.matrix_creation import homogenize_matrix
+from quatrex.utils import matrix_creation
+from quatrex.utils import change_format
+from quatrex.utils.matrix_creation import homogenize_matrix
 from quatrex.block_tri_solvers import rgf_W
-#from quatrex.block_tri_solvers import matrix_inversion_w
+# from quatrex.block_tri_solvers import matrix_inversion_w
 from quatrex.OBC import obc_w_cpu
 import time
 
@@ -80,7 +80,7 @@ def p2w_pool_mpi_cpu(
 
     # fix nbc to 2 for the given solution
     # todo calculate it
-    #nbc = 2
+    # nbc = 2
 
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
@@ -99,15 +99,15 @@ def p2w_pool_mpi_cpu(
 
     for ie in range(ne):
         # Anti-Hermitian symmetrizing of PL and PG
-        #pl[ie] = 1j * np.imag(pl[ie])
+        # pl[ie] = 1j * np.imag(pl[ie])
         pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
 
-        #pg[ie] = 1j * np.imag(pg[ie])
+        # pg[ie] = 1j * np.imag(pg[ie])
         pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
 
         # PR has to be derived from PL and PG and then has to be symmetrized
         pr[ie] = (pg[ie] - pl[ie]) / 2
-        #pr[ie] = (pr[ie] + pr[ie].T) / 2
+        # pr[ie] = (pr[ie] + pr[ie].T) / 2
         if homogenize:
             pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
@@ -122,20 +122,20 @@ def p2w_pool_mpi_cpu(
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         executor.map(
-        #results = executor.map(
-                    rgf_W.rgf_w_opt,
-                    repeat(vh),
-                    pg, pl, pr,
-                    repeat(bmax), repeat(bmin),
-                    wg_diag, wg_upper,
-                    wl_diag, wl_upper,
-                    wr_diag, wr_upper,
-                    xr_diag, dosw, new, npw, repeat(nbc),
-                    idx_e, factor,
-                    repeat(block_inv),
-                    repeat(use_dace),
-                    repeat(validate_dace),repeat(ref_flag))
-        #for res in results:
+            # results = executor.map(
+            rgf_W.rgf_w_opt,
+            repeat(vh),
+            pg, pl, pr,
+            repeat(bmax), repeat(bmin),
+            wg_diag, wg_upper,
+            wl_diag, wl_upper,
+            wr_diag, wr_upper,
+            xr_diag, dosw, new, npw, repeat(nbc),
+            idx_e, factor,
+            repeat(block_inv),
+            repeat(use_dace),
+            repeat(validate_dace), repeat(ref_flag))
+        # for res in results:
         #   assert isinstance(res, np.ndarray)
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
@@ -187,18 +187,192 @@ def p2w_pool_mpi_cpu(
                                        axis=1), [np.max(np.abs(dosw[ne - 1, :] / (buf_recv_r + 1)))]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    flag_zeros = (F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5))
 
     # Remove the identified peaks and errors
-    for index in ind_zeros:
-        wr_diag[index, :, :, :] = 0
-        wr_upper[index, :, :, :] = 0
-        wl_diag[index, :, :, :] = 0
-        wl_upper[index, :, :, :] = 0
-        wg_diag[index, :, :, :] = 0
-        wg_upper[index, :, :, :] = 0
+    # for index in np.where(flag_zeros)[0]:
+    #     wr_diag[index, :, :, :] = 0
+    #     wr_upper[index, :, :, :] = 0
+    #     wl_diag[index, :, :, :] = 0
+    #     wl_upper[index, :, :, :] = 0
+    #     wg_diag[index, :, :, :] = 0
+    #     wg_upper[index, :, :, :] = 0
 
-    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros
+    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, flag_zeros
+
+
+def p2w_pool_mpi_cpu_no_filter(
+    hamiltionian_obj: object,
+    energy: npt.NDArray[np.float64],
+    pg: npt.NDArray[np.complex128],
+    pl: npt.NDArray[np.complex128],
+    pr: npt.NDArray[np.complex128],
+    vh: npt.NDArray[np.complex128],
+    dosw: npt.NDArray[np.complex128],
+    new: npt.NDArray[np.complex128],
+    npw: npt.NDArray[np.complex128],
+    idx_e: npt.NDArray[np.int32],
+    factor: npt.NDArray[np.float64],
+    nbc,
+    homogenize: bool = False,
+    mkl_threads: int = 1,
+    worker_num: int = 1,
+    block_inv: bool = False,
+    use_dace: bool = False,
+    validate_dace: bool = False
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128],
+                  npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128], int, int]:
+    """Calculates the screened interaction on the cpu.
+    Uses mkl threading and pool threads.
+
+    Args:
+        hamiltionian_obj (object): Class containing the hamiltonian information
+        energy (npt.NDArray[np.float64]): energy points
+        pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
+        pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
+        pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
+        vh (npt.NDArray[np.complex128]): Vh sparse matrix
+        dosw (npt.NDArray[np.complex128]): density of state
+        new (npt.NDArray[np.complex128]): density of state
+        npw (npt.NDArray[np.complex128]): density of state
+        factor (npt.NDArray[np.float64]): Smoothing factor
+        mkl_threads (int, optional): Number of mkl threads used. Defaults to 1.
+        worker_num(int, optional): Number of pool workers used. Defaults to 1.
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128],
+                    npt.NDArray[np.complex128],
+                    npt.NDArray[np.complex128],
+                    npt.NDArray[np.complex128],
+                    npt.NDArray[np.complex128],
+                    npt.NDArray[np.complex128],
+                    int, int ]:
+    Diagonal/Upper block tensor (#blocks, blocksize, blocksize) of greater, lesser, retarded screened interaction.
+    Number of blocks and block size after matrix multiplication
+    """
+    # number of energy points
+    ne = energy.shape[0]
+
+    # number of blocks
+    nb = hamiltionian_obj.Bmin.shape[0]
+    # start and end index of each block in python indexing
+    bmax = hamiltionian_obj.Bmax - 1
+    bmin = hamiltionian_obj.Bmin - 1
+
+    # fix nbc to 2 for the given solution
+    # todo calculate it
+    # nbc = 2
+
+    # block sizes after matrix multiplication
+    bmax_mm = bmax[nbc - 1:nb:nbc]
+    bmin_mm = bmin[0:nb:nbc]
+    # number of blocks after matrix multiplication
+    nb_mm = bmax_mm.size
+    # larges block length after matrix multiplication
+    lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
+
+    # create empty buffer for screened interaction
+    # in block format
+    wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
+    xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    # set number of mkl threads
+    mkl.set_num_threads(mkl_threads)
+
+    for ie in range(ne):
+        # Anti-Hermitian symmetrizing of PL and PG
+        # pl[ie] = 1j * np.imag(pl[ie])
+        pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
+
+        # pg[ie] = 1j * np.imag(pg[ie])
+        pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
+
+        # PR has to be derived from PL and PG and then has to be symmetrized
+        pr[ie] = (pg[ie] - pl[ie]) / 2
+        # pr[ie] = (pr[ie] + pr[ie].T) / 2
+        if homogenize:
+            pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                       pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
+            pl[ie] = homogenize_matrix(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                       pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'L')
+            pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                       pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'G')
+
+    # Create a process pool with num_worker workers
+
+    ref_flag = False
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
+        executor.map(
+            # results = executor.map(
+            rgf_W.rgf_w_opt,
+            repeat(vh),
+            pg, pl, pr,
+            repeat(bmax), repeat(bmin),
+            wg_diag, wg_upper,
+            wl_diag, wl_upper,
+            wr_diag, wr_upper,
+            xr_diag, dosw, new, npw, repeat(nbc),
+            idx_e, factor,
+            repeat(block_inv),
+            repeat(use_dace),
+            repeat(validate_dace), repeat(ref_flag))
+
+    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
+
+
+def p2w_observales_mpi(dosw, new, npw, flag_zeros, comm, rank, size):
+    ne = dosw.shape[0]
+
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
+    F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
+    F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
+
+    buf_recv_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_recv_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    buf_send_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    if size > 1:
+        if rank == 0:
+            buf_send_r[:] = dosw[ne - 1, :]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
+
+        elif rank == size - 1:
+            buf_send_l[:] = dosw[0, :]
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
+        else:
+            buf_send_r[:] = dosw[ne - 1, :]
+            buf_send_l[:] = dosw[0, :]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
+
+    # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
+    if size == 1:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne - 1, :] / (dosw[0:ne - 2, :] + 1)),
+                                            axis=1), [np.max(np.abs(dosw[ne - 1, :] / (dosw[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0, :] / (dosw[1, :] + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    elif rank == 0:
+        dDOSm = np.concatenate(([0], np.max(np.abs(dosw[1:ne - 1, :] / (dosw[0:ne - 2, :] + 1)),
+                                            axis=1), [np.max(np.abs(dosw[ne - 1, :] / (dosw[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0, :] / (dosw[1, :] + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[2:ne, :] + 1)),
+                                       axis=1), [np.max(np.abs(dosw[ne - 1, :] / (buf_recv_r + 1)))]))
+    elif rank == size - 1:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0, :] / (buf_recv_l + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[0:ne - 2, :] + 1)),
+                                       axis=1), [np.max(np.abs(dosw[ne - 1, :] / (dosw[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0, :] / (dosw[1, :] + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[2:ne, :] + 1)), axis=1), [0]))
+    else:
+        dDOSm = np.concatenate(([np.max(np.abs(dosw[0, :] / (buf_recv_l + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[0:ne - 2, :] + 1)),
+                                       axis=1), [np.max(np.abs(dosw[ne - 1, :] / (dosw[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(dosw[0, :] / (dosw[1, :] + 1)))],
+                                np.max(np.abs(dosw[1:ne - 1, :] / (dosw[2:ne, :] + 1)),
+                                       axis=1), [np.max(np.abs(dosw[ne - 1, :] / (buf_recv_r + 1)))]))
+
+    # Find indices of elements satisfying the conditions
+    flag_zeros[:] = (F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5))
 
 
 def p2w_mpi_cpu(
@@ -264,7 +438,7 @@ def p2w_mpi_cpu(
 
     # fix nbc to 2 for the given solution
     # todo calculate it
-    #nbc = 2
+    # nbc = 2
 
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
@@ -443,7 +617,7 @@ def p2w_mpi_cpu_alt(
     lb = bmax - bmin + 1
     # fix nbc to 2 for the given solution
     # todo calculate it
-    #nbc = 2
+    # nbc = 2
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]

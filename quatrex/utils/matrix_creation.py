@@ -7,8 +7,8 @@ import json
 import numpy.typing as npt
 import typing
 
-from OMEN_structure_matrices import OMENHamClass
-from utils import change_format
+from quatrex.OMEN_structure_matrices import OMENHamClass
+from quatrex.utils import change_format
 
 
 class NumpyArrayEncoder(JSONEncoder):
@@ -65,7 +65,7 @@ def create_matrices_H(n, n_blocks, sparsity=1):
     From Leo's code.
     Modified.
     Creates a Sparse block-tridiagonal matrix.
-    
+
     Lesser/Greater self-energies should be purely imaginary??
     """
     H00 = sparse.random(n, n, 1, dtype=np.float64)
@@ -73,15 +73,15 @@ def create_matrices_H(n, n_blocks, sparsity=1):
     H01 = sparse.random(n, n, 1)
 
     SL00 = 1j * sparse.random(n, n, 1, dtype=np.float64)
-    SL00 = (SL00 - SL00.T.conj())  #### Make it satisfy lesser/greater hc condition
-    #SL00 = (SL00 + SL00.T)
-    #SL01 = sparse.csc_matrix((n, n))
+    SL00 = (SL00 - SL00.T.conj())  # Make it satisfy lesser/greater hc condition
+    # SL00 = (SL00 + SL00.T)
+    # SL01 = sparse.csc_matrix((n, n))
     SL01 = 1j * sparse.random(n, n, 1, dtype=np.float64)
 
     SG00 = 1j * sparse.random(n, n, 1, dtype=np.float64)
     SG00 = (SG00 - SG00.T.conj())  # Make it satisfy lesser/greater hc condition
-    #SG00 = (SG00 + SG00.T)
-    #SG01 = sparse.csc_matrix((n, n))
+    # SG00 = (SG00 + SG00.T)
+    # SG01 = sparse.csc_matrix((n, n))
     SG01 = 1j * sparse.random(n, n, 1, dtype=np.float64)
 
     n_temp = n
@@ -197,8 +197,8 @@ def negative_hermitian_transpose(A: npt.NDArray[np.complex128]) -> npt.NDArray[n
          A: A matrix.
     Returns:
         The negative hermitian transpose of A.
-    
-   
+
+
    """
     return -A.T.conj()
 
@@ -220,7 +220,7 @@ def homogenize_matrix(M00, M01, NB, type):
 
         M01 = sparse.vstack([sparse.coo_matrix(
             (N, 2 * N)), sparse.hstack([M01, sparse.coo_matrix((N, N))])],
-                            dtype=M00.dtype)
+            dtype=M00.dtype)
 
         N = 2 * N
 
