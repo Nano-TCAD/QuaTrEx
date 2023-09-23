@@ -43,13 +43,20 @@ if __name__ == "__main__":
     name = MPI.Get_processor_name()
     base_type = np.complex128
 
+    if rank == 0:
+        time_startup = -time.perf_counter()
+        time_read_gold = -time.perf_counter()
+
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "InAs")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_big_memory0_InAs_0V.mat")
-    # solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
+    # solution_path_gw = os.path.join(solution_path, "data_GPWS_big_memory0_InAs_0V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_finalPI_InAs_0v.mat")
+    # solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
+
+    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy.mat"
+
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -72,7 +79,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([5, 5])
     Vappl = 0.4
-    energy = np.linspace(-10.0, 5.0, 376, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-10.0, 5.0, 10, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -92,6 +99,10 @@ if __name__ == "__main__":
     energy_in, rows_w, columns_w, wg_gold, wl_gold, wr_gold = read_solution.load_x(solution_path_gw, "w")
     energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x(solution_path_gw, "s")
     rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
+
+    if rank == 0:
+        time_read_gold += time.perf_counter()
+        time_pre_compute = -time.perf_counter()
 
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
@@ -184,16 +195,47 @@ if __name__ == "__main__":
     assert np.allclose(V_sparse.toarray(), vh.toarray())
 
     # calculation of data distribution per rank---------------------------------
+    padding = 0
+    extra_elements = np.zeros_like(data_shape)
+    is_padded = True
+    if is_padded:
+        padding = (size - data_shape % size) % size
+        if rank == size-1:
+            extra_elements[:] = padding
 
-    distribution = TransposeMatrix(comm, data_shape)
+    distribution = TransposeMatrix(comm, data_shape + padding, base_type=base_type)
+    distribution_no_padded = TransposeMatrix(comm, data_shape, base_type=base_type)
+    energy_padded = np.zeros((distribution.shape[1]), dtype=energy.dtype)
+    energy_padded[:data_shape[1]] = energy
+    Idx_e_padded = np.zeros((distribution.shape[1]), dtype=Idx_e.dtype)
+    Idx_e_padded[:data_shape[1]] = Idx_e
+    factor_w_padded = np.zeros((distribution.shape[1]), dtype=factor_w.dtype)
+    factor_w_padded[:data_shape[1]] = factor_w
+    factor_g_padded = np.zeros((distribution.shape[1]), dtype=factor_g.dtype)
+    factor_g_padded[:data_shape[1]] = factor_g
 
     # slice energy vector
-    energy_loc = energy[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
-    Idx_e_loc = Idx_e[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
+    energy_loc = energy_padded[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
+    Idx_e_loc = Idx_e_padded[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
 
     # split up the factor between the ranks
-    factor_w_loc = factor_w[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
-    factor_g_loc = factor_g[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
+    factor_w_loc = factor_w_padded[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
+    factor_g_loc = factor_g_padded[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]]
+
+    # density of states
+    dos = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
+    dosw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
+
+    # occupied states/unoccupied states
+    nE = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
+    nP = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
+
+    # occupied screening/unoccupied screening
+    nEw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
+    nPw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
+
+    # current per energy
+    ide = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
 
     # print rank distribution
     print(f"Rank: {rank} #Energy/rank: {distribution.count[1]} #nnz/rank: {distribution.count[0]}", name)
@@ -216,74 +258,64 @@ if __name__ == "__main__":
     ne_s = 0
     ne_f = 251
 
-    if rank == 0:
-        time_start = -time.perf_counter()
-
     # allocate memory
-
-    # density of states
-    dos = np.zeros(shape=(ne, nb), dtype=base_type)
-    dosw = np.zeros(shape=(ne, nb // nbc), dtype=base_type)
-
-    # occupied states/unoccupied states
-    nE = np.zeros(shape=(ne, nb), dtype=base_type)
-    nP = np.zeros(shape=(ne, nb), dtype=base_type)
-
-    # occupied screening/unoccupied screening
-    nEw = np.zeros(shape=(ne, nb // nbc), dtype=base_type)
-    nPw = np.zeros(shape=(ne, nb // nbc), dtype=base_type)
-
-    # current per energy
-    ide = np.zeros(shape=(ne, nb), dtype=base_type)
+    if rank == 0:
+        time_pre_compute += time.perf_counter()
+        time_alloc_buf = -time.perf_counter()
 
     # create local buffers
-    gg_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    gl_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    gr_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    glt_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    gg_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    gl_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    gr_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    glt_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
+    gg_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    gl_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    gr_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    glt_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    gg_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    gl_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    gr_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    glt_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
 
-    pg_col = np.empty((distribution.count[1], data_shape[0]), dtype=base_type, order="C")
-    pl_col = np.empty((distribution.count[1], data_shape[0]), dtype=base_type, order="C")
-    pr_col = np.empty((distribution.count[1], data_shape[0]), dtype=base_type, order="C")
-    pg_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    pl_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    pr_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
+    pg_col = np.empty((distribution.count[1], distribution.shape[0]), dtype=base_type, order="C")
+    pl_col = np.empty((distribution.count[1], distribution.shape[0]), dtype=base_type, order="C")
+    pr_col = np.empty((distribution.count[1], distribution.shape[0]), dtype=base_type, order="C")
+    pg_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    pl_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    pr_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
 
     # only needed for testing
-    wg_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wl_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wr_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
+    wg_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wl_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wr_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
 
-    wg_col_tmp = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wl_col_tmp = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wr_col_tmp = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wgt_col_tmp = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    wlt_col_tmp = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
+    wg_col_tmp = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wl_col_tmp = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wr_col_tmp = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wgt_col_tmp = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    wlt_col_tmp = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
 
-    wg_row = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wl_row = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wr_row = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wgt_row = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wlt_row = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wg_row_tmp = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wl_row_tmp = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wr_row_tmp = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wgt_row_tmp = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    wlt_row_tmp = np.zeros((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
+    wg_row = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wl_row = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wr_row = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wgt_row = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wlt_row = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wg_row_tmp = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wl_row_tmp = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wr_row_tmp = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wgt_row_tmp = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    wlt_row_tmp = np.zeros((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
 
-    sg_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    sl_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    sr_col = np.zeros((distribution.count[1], data_shape[0]), dtype=base_type)
-    sg_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    sl_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
-    sr_row = np.empty((distribution.count[0], data_shape[1]), dtype=base_type, order="C")
+    sg_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    sl_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    sr_col = np.zeros((distribution.count[1], distribution.shape[0]), dtype=base_type)
+    sg_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    sl_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
+    sr_row = np.empty((distribution.count[0], distribution.shape[1]), dtype=base_type, order="C")
 
-    vh_row = (np.asarray(vh[rows, columns].reshape(-1))
-              [distribution.displacement[0]:distribution.displacement[0]+distribution.count[0]])
+    vh_padded = np.zeros((distribution.shape[0]), dtype=vh.dtype)
+    vh_padded[:data_shape[0]] = np.asarray(vh[rows, columns].reshape(-1))
+    vh_row = vh_padded[distribution.displacement[0]:distribution.displacement[0]+distribution.count[0]]
+
+    if rank == 0:
+        time_alloc_buf += time.perf_counter()
+        time_def_func = -time.perf_counter()
 
     def greens_function_compute(sri_vec, sli_vec, sgi_vec,
                                 energy_loc_batch, dos_loc_batch, nE_loc_batch,
@@ -318,65 +350,65 @@ if __name__ == "__main__":
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
 
         if itern == 0:
-            ggo[:] = change_format.block2sparse_energy_alt(map_diag,
-                                                           map_upper,
-                                                           map_lower,
-                                                           gg_diag,
-                                                           gg_upper,
-                                                           gg_lower,
-                                                           no,
-                                                           distribution.count[1],
-                                                           energy_contiguous=False)
-            glo[:] = change_format.block2sparse_energy_alt(map_diag,
-                                                           map_upper,
-                                                           map_lower,
-                                                           gl_diag,
-                                                           gl_upper,
-                                                           gl_lower,
-                                                           no,
-                                                           distribution.count[1],
-                                                           energy_contiguous=False)
-            gro[:] = change_format.block2sparse_energy_alt(map_diag,
-                                                           map_upper,
-                                                           map_lower,
-                                                           gr_diag,
-                                                           gr_upper,
-                                                           gr_lower,
-                                                           no,
-                                                           distribution.count[1],
-                                                           energy_contiguous=False)
-        else:
-            # add new contribution to the Green's function
-            ggo[:] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+            ggo[:, :data_shape[0]] = change_format.block2sparse_energy_alt(map_diag,
                                                                            map_upper,
                                                                            map_lower,
                                                                            gg_diag,
                                                                            gg_upper,
                                                                            gg_lower,
-                                                                           no,
+                                                                           data_shape[0],
                                                                            distribution.count[1],
-                                                                           energy_contiguous=False) + mem_g * ggo
-            glo[:] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+                                                                           energy_contiguous=False)
+            glo[:, :data_shape[0]] = change_format.block2sparse_energy_alt(map_diag,
                                                                            map_upper,
                                                                            map_lower,
                                                                            gl_diag,
                                                                            gl_upper,
                                                                            gl_lower,
-                                                                           no,
+                                                                           data_shape[0],
                                                                            distribution.count[1],
-                                                                           energy_contiguous=False) + mem_g * glo
-            gro[:] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+                                                                           energy_contiguous=False)
+            gro[:, :data_shape[0]] = change_format.block2sparse_energy_alt(map_diag,
                                                                            map_upper,
                                                                            map_lower,
                                                                            gr_diag,
                                                                            gr_upper,
                                                                            gr_lower,
-                                                                           no,
+                                                                           data_shape[0],
                                                                            distribution.count[1],
-                                                                           energy_contiguous=False) + mem_g * gro
+                                                                           energy_contiguous=False)
+        else:
+            # add new contribution to the Green's function
+            ggo[:, :data_shape[0]] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+                                                                                           map_upper,
+                                                                                           map_lower,
+                                                                                           gg_diag,
+                                                                                           gg_upper,
+                                                                                           gg_lower,
+                                                                                           data_shape[0],
+                                                                                           distribution.count[1],
+                                                                                           energy_contiguous=False) + mem_g * ggo[:, :data_shape[0]]
+            glo[:, :data_shape[0]] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+                                                                                           map_upper,
+                                                                                           map_lower,
+                                                                                           gl_diag,
+                                                                                           gl_upper,
+                                                                                           gl_lower,
+                                                                                           data_shape[0],
+                                                                                           distribution.count[1],
+                                                                                           energy_contiguous=False) + mem_g * glo[:, :data_shape[0]]
+            gro[:, :data_shape[0]] = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+                                                                                           map_upper,
+                                                                                           map_lower,
+                                                                                           gr_diag,
+                                                                                           gr_upper,
+                                                                                           gr_lower,
+                                                                                           data_shape[0],
+                                                                                           distribution.count[1],
+                                                                                           energy_contiguous=False) + mem_g * gro[:, :data_shape[0]]
 
         # calculate the transposed
-        glto[:] = np.copy(glo[:, ij2ji], order="C")
+        glto[:, :data_shape[0]] = np.copy(glo[:, :data_shape[0]][:, ij2ji], order="C")
 
     greens_function_distributions = [distribution, distribution, distribution, distribution]
     greens_function_num_buffer = 4
@@ -390,10 +422,11 @@ if __name__ == "__main__":
 
     def polarization_compute(gri, gli, ggi, glti, pro, plo, pgo):
         if args.type in ("gpu"):
-            pgo[:], plo[:], pro[:] = g2p_gpu.g2p_fft_mpi_gpu(pre_factor, ggi, gli, gri, glti)
+            pgo[:, :data_shape[1]], plo[:, :data_shape[1]], pro[:, :data_shape[1]] = g2p_gpu.g2p_fft_mpi_gpu(
+                pre_factor, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]], glti[:, :data_shape[1]])
         elif args.type in ("cpu"):
-            pgo[:], plo[:], pro[:] = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, ggi, gli, gri,
-                                                                     glti)
+            pgo[:, :data_shape[1]], plo[:, :data_shape[1]], pro[:, :data_shape[1]] = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+                pre_factor, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]], glti[:, :data_shape[1]])
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -414,9 +447,9 @@ if __name__ == "__main__":
 
         ne_loc = energy_loc_batch.shape[0]
         # transform from 2D format to list/vector of sparse arrays format-----------
-        pg_col_vec = change_format.sparse2vecsparse_v2(pgi, rows, columns, nao)
-        pl_col_vec = change_format.sparse2vecsparse_v2(pli, rows, columns, nao)
-        pr_col_vec = change_format.sparse2vecsparse_v2(pri, rows, columns, nao)
+        pg_col_vec = change_format.sparse2vecsparse_v2(pgi[:, :data_shape[0]], rows, columns, nao)
+        pl_col_vec = change_format.sparse2vecsparse_v2(pli[:, :data_shape[0]], rows, columns, nao)
+        pr_col_vec = change_format.sparse2vecsparse_v2(pri[:, :data_shape[0]], rows, columns, nao)
 
         # calculate the screened interaction on every rank--------------------------
         if args.pool:
@@ -445,7 +478,7 @@ if __name__ == "__main__":
         wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
         wr_lower = wr_upper.transpose((0, 1, 3, 2))
 
-        wgo[:] = change_format.block2sparse_energy_alt(
+        wgo[:, :data_shape[0]] = change_format.block2sparse_energy_alt(
             map_diag_mm,
             map_upper_mm,
             map_lower_mm,
@@ -455,7 +488,7 @@ if __name__ == "__main__":
             no,
             ne_loc,
             energy_contiguous=False)
-        wlo[:] = change_format.block2sparse_energy_alt(
+        wlo[:, :data_shape[0]] = change_format.block2sparse_energy_alt(
             map_diag_mm,
             map_upper_mm,
             map_lower_mm,
@@ -465,7 +498,7 @@ if __name__ == "__main__":
             no,
             ne_loc,
             energy_contiguous=False)
-        wro[:] = change_format.block2sparse_energy_alt(
+        wro[:, :data_shape[0]] = change_format.block2sparse_energy_alt(
             map_diag_mm,
             map_upper_mm,
             map_lower_mm,
@@ -479,8 +512,8 @@ if __name__ == "__main__":
         # distribute screened interaction according to gw2s step--------------------
 
         # calculate the transposed
-        wgto[:] = np.copy(wgo[:, ij2ji], order="C")
-        wlto[:] = np.copy(wlo[:, ij2ji], order="C")
+        wgto[:, :data_shape[0]] = np.copy(wgo[:, :data_shape[0]][:, ij2ji], order="C")
+        wlto[:, :data_shape[0]] = np.copy(wlo[:, :data_shape[0]][:, ij2ji], order="C")
 
     screened_interaction_distributions = [distribution, distribution, distribution, distribution, distribution]
     screened_interaction_num_buffer = 5
@@ -496,18 +529,18 @@ if __name__ == "__main__":
     def selfenergy_compute(gri, gli, ggi, wri, wli, wgi, wlti, wgti, vh_pi,  sro, slo, sgo):
         # todo optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("gpu"):
-            sg_tmp, sl_tmp, sr_tmp = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(-pre_factor / 2, ggi, gli, gri,
-                                                                        wgi, wli, wri,
-                                                                        wgti, wlti)
+            sg_tmp, sl_tmp, sr_tmp = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
+                -pre_factor / 2, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]],
+                wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti, wlti)
         elif args.type in ("cpu"):
-            sg_tmp, sl_tmp, sr_tmp = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, ggi, gli, gri,
-                                                                     wgi, wli, wri,
-                                                                     wgti, wlti, vh_pi, energy)
+            sg_tmp, sl_tmp, sr_tmp = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(
+                -pre_factor / 2, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]],
+                wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti[:, :data_shape[1]], wlti[:, :data_shape[1]], vh_pi, energy)
         else:
             raise ValueError("Argument error, input type not possible")
-        sgo[:] = (1.0 - mem_s) * sg_tmp + mem_s * sgo
-        slo[:] = (1.0 - mem_s) * sl_tmp + mem_s * slo
-        sro[:] = (1.0 - mem_s) * sr_tmp + mem_s * sro
+        sgo[:, :data_shape[1]] = (1.0 - mem_s) * sg_tmp + mem_s * sgo[:, :data_shape[1]]
+        slo[:, :data_shape[1]] = (1.0 - mem_s) * sl_tmp + mem_s * slo[:, :data_shape[1]]
+        sro[:, :data_shape[1]] = (1.0 - mem_s) * sr_tmp + mem_s * sro[:, :data_shape[1]]
 
     selfenergy_distributions = [distribution, distribution, distribution]
     selfenergy_num_buffer = 3
@@ -518,6 +551,11 @@ if __name__ == "__main__":
     selfenergy_buffer_row = [sr_row, sl_row, sg_row]
     selfenergy_buffer_col = [sr_col, sl_col, sg_col]
     selfenergy.given_buffer(selfenergy_buffer_row, selfenergy_buffer_col)
+
+    if rank == 0:
+        time_def_func += time.perf_counter()
+        time_startup += time.perf_counter()
+        time_loop = -time.perf_counter()
 
     for iter_num in range(max_iter):
 
@@ -532,9 +570,9 @@ if __name__ == "__main__":
 
         # transform from 2D format to list/vector of sparse arrays format-----------
 
-        sg_col_vec = change_format.sparse2vecsparse_v2(sg_col, rows, columns, nao)
-        sl_col_vec = change_format.sparse2vecsparse_v2(sl_col, rows, columns, nao)
-        sr_col_vec = change_format.sparse2vecsparse_v2(sr_col, rows, columns, nao)
+        sg_col_vec = change_format.sparse2vecsparse_v2(sg_col[:, :data_shape[0]], rows, columns, nao)
+        sl_col_vec = change_format.sparse2vecsparse_v2(sl_col[:, :data_shape[0]], rows, columns, nao)
+        sr_col_vec = change_format.sparse2vecsparse_v2(sr_col[:, :data_shape[0]], rows, columns, nao)
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_col_vec = change_format.sparse2vecsparse_v2(np.zeros((distribution.count[1], no), dtype=base_type), rows,
@@ -580,9 +618,10 @@ if __name__ == "__main__":
                                         nE[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]],
                                         nP[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]],
                                         flag_zeros, comm, rank, size)
-        flag_zeros_global = np.empty(data_shape[1], dtype=flag_zeros.dtype)
+        flag_zeros_global = np.empty(distribution.shape[1], dtype=flag_zeros.dtype)
         distribution.gatherall_col(flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
         memory_mask = np.where(flag_zeros_global)[0]
+
         gg_row[:, memory_mask] = 0.0
         gl_row[:, memory_mask] = 0.0
         gr_row[:, memory_mask] = 0.0
@@ -610,10 +649,11 @@ if __name__ == "__main__":
                                    nEw[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]],
                                    nPw[distribution.displacement[1]:distribution.displacement[1] + distribution.count[1]],
                                    flag_zeros, comm, rank, size)
-        flag_zeros_global = np.empty(data_shape[1], dtype=flag_zeros.dtype)
+        flag_zeros_global = np.empty(distribution.shape[1], dtype=flag_zeros.dtype)
         distribution.gatherall_col(flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
-        memory_mask = np.ones(data_shape[1], dtype=bool)
+        memory_mask = np.ones(distribution.shape[1], dtype=bool)
         memory_mask[np.where(flag_zeros_global)[0]] = False
+
         wg_row[:, memory_mask] = (1.0 - mem_w) * wg_row_tmp[:, memory_mask] + mem_w * wg_row[:, memory_mask]
         wl_row[:, memory_mask] = (1.0 - mem_w) * wl_row_tmp[:, memory_mask] + mem_w * wl_row[:, memory_mask]
         wr_row[:, memory_mask] = (1.0 - mem_w) * wr_row_tmp[:, memory_mask] + mem_w * wr_row[:, memory_mask]
@@ -637,6 +677,10 @@ if __name__ == "__main__":
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
 
+    if rank == 0:
+        time_loop += time.perf_counter()
+        time_end = -time.perf_counter()
+
     # communicate corrected g/w_col since data without filtering is communicated
     distribution.alltoall_r2c(gg_row, gg_col, transpose_net=args.net_transpose)
     distribution.alltoall_r2c(gl_row, gl_col, transpose_net=args.net_transpose)
@@ -649,10 +693,11 @@ if __name__ == "__main__":
     matrices_loc = [gg_col, gl_col, gr_col, pg_col, pl_col, pr_col, wg_col, wl_col, wr_col, sg_col, sl_col, sr_col]
     matrices_gold = [gg_gold, gl_gold, gr_gold, pg_gold, pl_gold,
                      pr_gold, wg_gold, wl_gold, wr_gold, sg_gold, sl_gold, sr_gold]
+
     names = ["Greens Function", "Polarization", "Screened Interaction", "Self-Energy"]
     if rank == 0:
         # create buffers at master
-        matrices_global = [np.empty_like(gg_gold) for _ in range(len(matrices_loc))]
+        matrices_global = [np.empty(distribution.shape, dtype=distribution.base_type) for _ in range(len(matrices_loc))]
         for i in range(len(matrices_loc)):
             distribution.gather_master(matrices_loc[i], matrices_global[i], transpose_net=args.net_transpose)
 
@@ -661,11 +706,16 @@ if __name__ == "__main__":
         for i in range(len(matrices_loc)):
             distribution.gather_master(matrices_loc[i], None, transpose_net=args.net_transpose)
 
+    # if rank == 0:
+    #     save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy.mat"
+    #     read_solution.save_all(energy, rows, columns, *matrices_global, bmax, bmin, save_path)
+
     # test against gold solution------------------------------------------------
     if rank == 0:
         # print difference to given solution
         # use Frobenius norm
-        difference = [np.linalg.norm(matrices_global[i] - matrices_gold[i]) for i in range(len(matrices_loc))]
+        difference = [np.linalg.norm(matrices_global[i][:data_shape[0], :data_shape[1]] -
+                                     matrices_gold[i]) for i in range(len(matrices_loc))]
 
         for i in range(len(matrices_loc)//3):
             print(
@@ -676,12 +726,19 @@ if __name__ == "__main__":
         reltol = 1e-1
         for i in range(len(matrices_loc)):
             assert difference[i] <= abstol + reltol * np.linalg.norm(matrices_gold[i])
-            assert np.allclose(matrices_global[i], matrices_gold[i], atol=1e-3, rtol=1e-3)
+            assert np.allclose(matrices_global[i][:data_shape[0], :data_shape[1]],
+                               matrices_gold[i], atol=1e-3, rtol=1e-3)
         print("The mpi implementation is correct")
 
     # free datatypes------------------------------------------------------------
     distribution.free_datatypes()
 
     if rank == 0:
-        time_start += time.perf_counter()
-        print(f"Time: {time_start:.2f} s")
+        time_end += time.perf_counter()
+        print(f"Time Startup: {time_startup:.2f} s")
+        print(f"Sub-Time Read Gold: {time_read_gold:.2f} s")
+        print(f"Sub-Time Pre Compute: {time_pre_compute:.2f} s")
+        print(f"Sub-Time Alloc Buffers: {time_alloc_buf:.2f} s")
+        print(f"Sub-Time Def Func: {time_def_func:.2f} s")
+        print(f"Time Loop: {time_loop:.2f} s")
+        print(f"Time End: {time_end:.2f} s")

@@ -113,6 +113,7 @@ def load_B(path: str) -> typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int3
     bmin: npt.NDArray[np.int32] = np.squeeze(bmin)
     return (bmax, bmin)
 
+
 def save_all(
     energy: npt.NDArray[np.float64],
     rows: npt.NDArray[np.int32],
@@ -129,7 +130,6 @@ def save_all(
     sg: npt.NDArray[np.complex128],
     sl: npt.NDArray[np.complex128],
     sr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
     bmax: npt.NDArray[np.int32],
     bmin: npt.NDArray[np.int32],
     path: str
@@ -153,7 +153,6 @@ def save_all(
         sg (npt.NDArray[np.complex128]): 2D energy contiguous greater self energy
         sl (npt.NDArray[np.complex128]): 2D energy contiguous lesser self energy
         sr (npt.NDArray[np.complex128]): 2D energy contiguous retarded self energy
-        vh (npt.NDArray[np.complex128]): 2D energy contiguous effective screening
         bmax (npt.NDArray[np.int32]): End indices of blocks
         bmin (npt.NDArray[np.int32]): Start indices of blocks
         path (str): Path+filename where to save
@@ -168,8 +167,8 @@ def save_all(
     group.create_dataset("rows", data=rows+1)
     group.create_dataset("columns", data=columns+1)
     group.create_dataset("E", data=energy)
-    group.create_dataset("realvh", data=np.real(vh))
-    group.create_dataset("imgvh", data=np.imag(vh))
+    # group.create_dataset("realvh", data=np.real(vh))
+    # group.create_dataset("imgvh", data=np.imag(vh))
     group.create_dataset("realgg", data=np.real(gg))
     group.create_dataset("imggg", data=np.imag(gg))
     group.create_dataset("realgl", data=np.real(gl))
