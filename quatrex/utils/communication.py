@@ -246,7 +246,8 @@ class TransposeCompute():
                  num_buffer: int, direction: str, comm_unblock: bool = False,
                  distributions_unblock_row: List[TransposeMatrix] = None,
                  distributions_unblock_col: List[TransposeMatrix] = None,
-                 batchsizes_row: List = None, batchsizes_col: List = None) -> None:
+                 batchsize_row=None, batchsize_col=None,
+                 iterations=None) -> None:
         self.distributions = distributions
         self.function = function
         self.num_buffer = num_buffer
@@ -254,25 +255,20 @@ class TransposeCompute():
         self.comm_unblock = comm_unblock
 
         # addional information for unblocking
-        if (batchsizes_row is None or batchsizes_col is None
+        if (batchsize_row is None or batchsize_col is None
+            or iterations is None
             or distributions_unblock_row is None
                 or distributions_unblock_col is None) and comm_unblock:
-            raise ValueError("If comm_unblock is True, batchsizes must be given and batch distributions must be given")
+            raise ValueError("If comm_unblock is True, all optional inputs must be given")
 
         if comm_unblock:
             if not all(distribution.is_divisible for distribution in distributions):
                 raise ValueError("If comm_unblock is True, all distributions must be divisible by the grid")
             self.distributions_unblock_row = distributions_unblock_row
             self.distributions_unblock_col = distributions_unblock_col
-            self.batchsizes_row = batchsizes_row
-            self.batchsizes_col = batchsizes_col
-            assert self.batchsizes_row.shape[0] == batchsizes_row
-            assert self.batchsizes_col.shape[0] == batchsizes_col
-            self.iterations = [np.ceil(self.distributions[0].shape[0] / self.batchsizes_row[0]),
-                               np.ceil(self.distributions[0].shape[1] // self.batchsizes_col[0])]
-            for i in range(self.num_buffer):
-                assert self.iterations[0] == np.ceil(self.distributions[i].shape[0] / self.batchsizes_row[i])
-                assert self.iterations[1] == np.ceil(self.distributions[i].shape[1] // self.batchsizes_col[i])
+            self.batchsize_row = batchsize_row
+            self.batchsize_col = batchsize_col
+            self.iterations = iterations
 
     def alloc_buffer(self):
         self.buffer_row = [np.zeros((self.distributions[i].count[0], self.distributions[i].shape[1]),
@@ -335,7 +331,13 @@ class TransposeCompute():
             self.buffer_col_send = buffer_col_send
             self.buffer_row_recv = buffer_row_recv
 
-    def compute_communicate(self, inp_block, inp, transpose_net: bool = True):
+            for i in range(self.num_buffer):
+                assert self.buffer_row_compute[i].shape[0] == self.batchsize_row
+                assert self.buffer_row_send[i].shape[0] == self.batchsize_row
+                assert self.buffer_col_compute[i].shape[0] == self.batchsize_col
+                assert self.buffer_col_send[i].shape[0] == self.batchsize_col
+
+    def compute_communicate(self, inp_block, inp, transpose_net: bool = False):
         if self.comm_unblock:
             self.compute_communicate_unblocking(inp_block, inp, transpose_net=transpose_net)
         else:
@@ -355,76 +357,102 @@ class TransposeCompute():
 
     def compute_communicate_unblocking(self, inp_block, inp, transpose_net: bool = False):
         if self.direction == "r2c":
+            for distribution in self.distributions:
+                # same number of columns to be able to batch over them
+                assert distribution.shape[0] == self.distributions[0].shape[0]
+                assert distribution.count[0] == self.distributions[0].count[0]
+                assert distribution.comm_size == self.distributions[0].comm_size
+                assert distribution.comm_rank == self.distributions[0].comm_rank
+                assert distribution.is_divisible_row
+                for j in range(distribution.comm_size):
+                    assert distribution.displacements[0, j] == self.distributions[0].displacements[0, j]
+
             for i in range(0, self.iterations[0]):
+
+                idx_batch_start = i*self.batchsize_row
+                idx_batch_end = min((i+1)*self.batchsize_row, self.distributions[0].shape[0])
+
                 # slice a range of the input
-                inp_block_slice = [inp_block_i[..., i*self.batchsizes_row[i]:(i+1)*self.batchsizes_row[i]] for inp_block_i in inp_block]
+                inp_block_slice = [inp_block_i[idx_batch_start:idx_batch_end, ...] for inp_block_i in inp_block]
+
                 self.function(*inp_block_slice, *inp, *self.buffer_row_compute)
+                for k in range(self.num_buffer):
+                    # todo replace with pointer swap
+                    self.buffer_row_send[k][:] = self.buffer_row_compute[k]
                 if i > 0:
                     MPI.Request.Waitall(requests)
-                    for k in range(self.num_buffer):
-                        # todo replace with pointer swap
-                        self.buffer_row_send[k][:] = self.buffer_row_compute[k]
-                        # writing to larger buffer could be hidden with communication (with extra buffer)
-                        for j in range(self.distributions[k].comm_size):
-                            idx_start_large = self.distributions[k].displacements[0, j] + \
-                                (i-1) * self.distributions_unblock_row[k].counts[0, j]
-                            idx_start_small = self.distributions_unblock_row[k].displacements[0, j]
-                            idx_range = self.distributions_unblock_row[k].counts[0, j]
-                            self.buffer_col[k][:, idx_start_large:idx_start_large+idx_range] = \
-                                self.buffer_col_recv[k][:, idx_start_small:idx_start_small + idx_range]
+                    for j in range(self.distributions[k].comm_size):
+                        idx_start = self.distributions[0].displacements[0, j] + \
+                            (i-1) * self.batchsize_row
+                        idx_range = self.batchsize_row
+                        for k in range(self.num_buffer):
+                            self.buffer_col[k][:, idx_start:idx_start+idx_range] = \
+                                self.buffer_col_recv[k][:, j*self.batchsize_row:j*self.batchsize_row+idx_range]
 
                 requests = []
                 for k in range(self.num_buffer):
-                    requests.append(self.distributions[k].ialltoall_r2c(
+                    requests.append(self.distributions_unblock_row[k].ialltoall_r2c(
                         self.buffer_row_send[k], self.buffer_col_recv[k], transpose_net=transpose_net))
 
             MPI.Request.Waitall(requests)
-            for k in range(self.num_buffer):
-                # todo replace with pointer swap
-                self.buffer_row_send[k][:] = self.buffer_row_compute[k]
-                # writing to larger buffer could be hidden with communication (with extra buffer)
-                for j in range(self.distributions[k].comm_size):
-                    idx_start_large = self.distributions[k].displacements[0, j] + \
-                        (self.iterations[0]-1) * self.distributions_unblock_row[k].counts[0, j]
-                    idx_start_small = self.distributions_unblock_row[k].displacements[0, j]
-                    idx_range = self.distributions_unblock_row[k].counts[0, j]
-                    self.buffer_col[k][:, idx_start_large:idx_start_large+idx_range] = \
-                        self.buffer_col_recv[k][:, idx_start_small:idx_start_small + idx_range]
+            for j in range(self.distributions[k].comm_size):
+                idx_start = self.distributions[0].displacements[0, j] + \
+                    (self.iterations[0]-1) * self.batchsize_row
+                if self.distributions[0].count[0] % self.batchsize_row == 0:
+                    idx_range = self.batchsize_row
+                else:
+                    idx_range = self.distributions[0].count[0] % self.batchsize_row
+                for k in range(self.num_buffer):
+                    self.buffer_col[k][:, idx_start:idx_start+idx_range] = \
+                        self.buffer_col_recv[k][:, j*self.batchsize_row:j*self.batchsize_row+idx_range]
         elif self.direction == "c2r":
+            for distribution in self.distributions:
+                # same number of columns to be able to batch over them
+                assert distribution.shape[1] == self.distributions[0].shape[1]
+                assert distribution.count[1] == self.distributions[0].count[1]
+                assert distribution.comm_size == self.distributions[0].comm_size
+                assert distribution.comm_rank == self.distributions[0].comm_rank
+                assert distribution.is_divisible_col
+                for j in range(distribution.comm_size):
+                    assert distribution.displacements[1, j] == self.distributions[0].displacements[1, j]
+
             for i in range(0, self.iterations[1]):
+
+                idx_batch_start = i*self.batchsize_col
+                idx_batch_end = min((i+1)*self.batchsize_col, self.distributions[0].shape[1])
+
                 # slice a range of the input
-                inp_block_slice = [inp_block_i[..., i*self.batchsizes_col[i]:(i+1)*self.batchsizes_col[i]] for inp_block_i in inp_block]
+                inp_block_slice = [inp_block_i[idx_batch_start:idx_batch_end, ...] for inp_block_i in inp_block]
                 self.function(*inp_block_slice, *inp, *self.buffer_col_compute)
+
+                for k in range(self.num_buffer):
+                    # todo replace with pointer swap
+                    self.buffer_col_send[k][:] = self.buffer_col_compute[k]
                 if i > 0:
                     MPI.Request.Waitall(requests)
-                    for k in range(self.num_buffer):
-                        # todo replace with pointer swap
-                        self.buffer_col_send[k][:] = self.buffer_col_compute[k]
-                        # writing to larger buffer could be hidden with communication (with extra buffer)
-                        for j in range(self.distributions[k].comm_size):
-                            idx_start_large = self.distributions[k].displacements[0, j] + \
-                                (i-1) * self.distributions_unblock_col[k].counts[0, j]
-                            idx_start_small = self.distributions_unblock_col[k].displacements[0, j]
-                            idx_range = self.distributions_unblock_col[k].counts[0, j]
-                            self.buffer_row[k][:, idx_start_large:idx_start_large+idx_range] = \
-                                self.buffer_row_recv[k][:, idx_start_small:idx_start_small + idx_range]
+                    for j in range(self.distributions[k].comm_size):
+                        idx_start = self.distributions[0].displacements[1, j] + \
+                            (i-1) * self.batchsize_col
+                        idx_range = self.batchsize_col
+                        for k in range(self.num_buffer):
+                            self.buffer_row[k][:, idx_start:idx_start+idx_range] = \
+                                self.buffer_row_recv[k][:, j*self.batchsize_col:j*self.batchsize_col+idx_range]
 
                 requests = []
                 for k in range(self.num_buffer):
-                    requests.append(self.distributions[k].ialltoall_r2c(
+                    requests.append(self.distributions_unblock_col[k].ialltoall_c2r(
                         self.buffer_col_send[k], self.buffer_row_recv[k], transpose_net=transpose_net))
 
             MPI.Request.Waitall(requests)
-            for k in range(self.num_buffer):
-                # todo replace with pointer swap
-                self.buffer_col_send[k][:] = self.buffer_col_compute[k]
-                # writing to larger buffer could be hidden with communication (with extra buffer)
-                for j in range(self.distributions[k].comm_size):
-                    idx_start_large = self.distributions[k].displacements[0, j] + \
-                        (self.iterations[1]-1) * self.distributions_unblock_col[k].counts[0, j]
-                    idx_start_small = self.distributions_unblock_col[k].displacements[0, j]
-                    idx_range = self.distributions_unblock_col[k].counts[0, j]
-                    self.buffer_row[k][:, idx_start_large:idx_start_large+idx_range] = \
-                        self.buffer_row_recv[k][:, idx_start_small:idx_start_small + idx_range]
+            for j in range(self.distributions[k].comm_size):
+                idx_start = self.distributions[0].displacements[1, j] + \
+                    (self.iterations[1]-1) * self.batchsize_col
+                if self.distributions[0].count[1] % self.batchsize_col == 0:
+                    idx_range = self.batchsize_col
+                else:
+                    idx_range = self.distributions[0].count[1] % self.batchsize_col
+                for k in range(self.num_buffer):
+                    self.buffer_row[k][:, idx_start:idx_start+idx_range] = \
+                        self.buffer_row_recv[k][:, j*self.batchsize_col:j*self.batchsize_col+idx_range]
         else:
             raise ValueError("Direction must be either r2c or c2r")
