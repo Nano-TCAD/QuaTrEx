@@ -105,7 +105,7 @@ if __name__ == "__main__":
     start_iter = 0
     stop_iter  = 32
     
-    start_energy = 0
+    start_energy = 500
     stop_energy  = 1000
     
     l_iterations = []
@@ -114,80 +114,116 @@ if __name__ == "__main__":
     l_cond_Aim1xAi = []
     
     
-    idx_e = 0
+    for idx_e in range(start_energy, stop_energy):
+        # this is the ernergy point (0->999)
+        
     
-    iteration = 0
-    
-    
-    # Get and invert matrix at iteration i
-    # Reading GW self-energy
-    SigmaR_GW = np.load(os.path.join(self_energy_path, "sigma_R_{}.npy".format(iteration)))
-    # Reading left boundary self-energy
-    SigmaR_Bl = np.load(os.path.join(self_energy_path, "sigma_RBL_{}.npy".format(iteration)))
-    # Reading right boundary self-energy
-    SigmaR_Br = np.load(os.path.join(self_energy_path, "sigma_RBR_{}.npy".format(iteration)))
+        # Get and invert matrix at iteration i=0
+        # Reading GW self-energy
+        SigmaR_GW = np.load(os.path.join(self_energy_path, "sigma_R_{}.npy".format(0)))
+        # Reading left boundary self-energy
+        SigmaR_Bl = np.load(os.path.join(self_energy_path, "sigma_RBL_{}.npy".format(0)))
+        # Reading right boundary self-energy
+        SigmaR_Br = np.load(os.path.join(self_energy_path, "sigma_RBR_{}.npy".format(0)))
 
-    # Printing shapes
-    #print("SigmaR_GW shape: ", SigmaR_GW.shape)
-    #print("SigmaR_Bl shape: ", SigmaR_Bl.shape)
+        # Bringing GW self-energies to sparse format
+        sr_h2g_vec = change_format.sparse2vecsparse_v2(SigmaR_GW, rows, columns, nao)
 
-    # Bringing GW self-energies to sparse format
-    sr_h2g_vec = change_format.sparse2vecsparse_v2(SigmaR_GW, rows, columns, nao)
+        # Creating [E - H - SigmaR_GW - SigmaR_B] matrix for an arbitrary energy index
+        # [E - H - SigmaR_GW] matrix is CSR
+        E = (energy[idx_e] + 1j * 1e-12) * hamiltonian_obj.Overlap['H_4']
+        H = hamiltonian_obj.Hamiltonian['H_4']
+        SigmaR = sr_h2g_vec[idx_e]
+        
+        # Printing shapes
+        #print("SigmaR_GW shape: ", SigmaR_GW.shape)
+        #print("SigmaR_Bl shape: ", SigmaR_Bl.shape)
+        
+        matrix = E - H - SigmaR
 
-    # Creating [E - H - SigmaR_GW - SigmaR_B] matrix for an arbitrary energy index
-    # [E - H - SigmaR_GW] matrix is CSR
-    E = (energy[idx_e] + 1j * 1e-12) * hamiltonian_obj.Overlap['H_4']
-    H = hamiltonian_obj.Hamiltonian['H_4']
-    SigmaR = sr_h2g_vec[idx_e]
-    
-    matrix = E - H - SigmaR
+        # adding boundary elements
+        matrix[:LBsize, :LBsize] -= SigmaR_Bl[idx_e]
+        matrix[-RBsize:, -RBsize:] -= SigmaR_Br[idx_e]
+        
+        G_i0 = np.linalg.inv(matrix.toarray())
+        
+        
+        
+        # 0->31 iterations performed
+        for iteration in range(start_iter+1, stop_iter):
+            # this is the ernergy point (0->999)
+            l_iterations.append(iteration)
+            l_energies.append(idx_e)
+            
+            # Get and invert matrix at iteration i
+            # Reading GW self-energy
+            SigmaR_GW = np.load(os.path.join(self_energy_path, "sigma_R_{}.npy".format(iteration)))
+            # Reading left boundary self-energy
+            SigmaR_Bl = np.load(os.path.join(self_energy_path, "sigma_RBL_{}.npy".format(iteration)))
+            # Reading right boundary self-energy
+            SigmaR_Br = np.load(os.path.join(self_energy_path, "sigma_RBR_{}.npy".format(iteration)))
 
-    # adding boundary elements
-    matrix[:LBsize, :LBsize] -= SigmaR_Bl[idx_e]
-    matrix[-RBsize:, -RBsize:] -= SigmaR_Br[idx_e]
-    
-    A = matrix.toarray()
-    
-    Gi_ref = np.linalg.inv(A)
-    
-    #cond_A = np.linalg.cond(A)
-    
-    #A_conditionned = G_im1 @ A
-    
-    #cond_Aim1xAi = np.linalg.cond(A_conditionned)
-    
-    """ 
-    from scipy import linalg
-    
-    I = np.eye(A.shape[0])
-    
-    # Use GMRES to invert
-    X_i, info = sparse.linalg.gmres(A, I[:,0], 
-                                    tol=1e-12, restart=1000, maxiter=100000, callback=print_maxiter)
-    
-    print("GMRES info: ", info)
-    assert np.allclose(X_i, Xi_ref[:,0]) """
-    
-    #l_cond_Ai.append(cond_A)
-    #l_cond_Aim1xAi.append(cond_Aim1xAi)
+            # Printing shapes
+            #print("SigmaR_GW shape: ", SigmaR_GW.shape)
+            #print("SigmaR_Bl shape: ", SigmaR_Bl.shape)
 
-    # Calculating Green's function
-    #Gr = np.linalg.inv(matrix.toarray())
+            # Bringing GW self-energies to sparse format
+            sr_h2g_vec = change_format.sparse2vecsparse_v2(SigmaR_GW, rows, columns, nao)
 
-    import matplotlib.pyplot as plt
-    plt.matshow(np.abs(SigmaR_Bl[idx_e]))
-    plt.matshow(np.abs(SigmaR_Br[idx_e]))
-    #plt.matshow(np.abs(hamiltonian_obj.Hamiltonian['H_4'].toarray()))
-    plt.matshow(np.abs(matrix.toarray()))
-    plt.matshow(np.abs(Gi_ref))
-    plt.show()
+            # Creating [E - H - SigmaR_GW - SigmaR_B] matrix for an arbitrary energy index
+            # [E - H - SigmaR_GW] matrix is CSR
+            E = (energy[idx_e] + 1j * 1e-12) * hamiltonian_obj.Overlap['H_4']
+            H = hamiltonian_obj.Hamiltonian['H_4']
+            SigmaR = sr_h2g_vec[idx_e]
+            
+            matrix = E - H - SigmaR
 
-    #print("i = " + str(iteration) + ", E = " + str(idx_e) + " Cond_A = " +  str(cond_A) + " Cond_Aim1xAi = " + str(cond_Aim1xAi))
+            # adding boundary elements
+            matrix[:LBsize, :LBsize] -= SigmaR_Bl[idx_e]
+            matrix[-RBsize:, -RBsize:] -= SigmaR_Br[idx_e]
+            
+            A = matrix.toarray()
+            
+            #Xi_ref = np.linalg.inv(A)
+            
+            cond_A = np.linalg.cond(A)
+            
+            A_conditionned = G_i0 @ A
+            
+            cond_Aim1xAi = np.linalg.cond(A_conditionned)
+            
+            """ 
+            from scipy import linalg
+            
+            I = np.eye(A.shape[0])
+            
+            # Use GMRES to invert
+            X_i, info = sparse.linalg.gmres(A, I[:,0], 
+                                            tol=1e-12, restart=1000, maxiter=100000, callback=print_maxiter)
+            
+            print("GMRES info: ", info)
+            assert np.allclose(X_i, Xi_ref[:,0]) """
+            
+            l_cond_Ai.append(cond_A)
+            l_cond_Aim1xAi.append(cond_Aim1xAi)
+
+            # Calculating Green's function
+            #Gr = np.linalg.inv(matrix.toarray())
+
+            """ import matplotlib.pyplot as plt
+            plt.matshow(np.abs(SigmaR_Bl[idx_e]))
+            plt.matshow(np.abs(SigmaR_Br[idx_e]))
+            #plt.matshow(np.abs(hamiltonian_obj.Hamiltonian['H_4'].toarray()))
+            plt.matshow(np.abs(matrix.toarray()))
+            plt.matshow(np.abs(Gr))
+            plt.show() """
+
+            print("i = " + str(iteration) + ", E = " + str(idx_e) + " Cond_A = " +  str(cond_A) + " Cond_Aim1xAi = " + str(cond_Aim1xAi))
 
 
     # Write results to a csv file but use ; as delimiter
     import csv
-    with open('conditionning.csv', 'w', newline='') as file:
+    with open('conditionning_from_first_500to1000.csv', 'w', newline='') as file:
         writer = csv.writer(file, delimiter=';')
         writer.writerow(["Iterations", "Energies", "cond(Ai)", "cond(Ai-1 @ Ai)"])
         for i in range(len(l_iterations)):
