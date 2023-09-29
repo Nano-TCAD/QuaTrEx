@@ -41,7 +41,7 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
-    gw_num_iter = 2
+    gw_num_iter = 1
     is_padded = True
     comm_unblock = True
 
@@ -59,10 +59,10 @@ if __name__ == "__main__":
         solution_path, "data_Vh_finalPI_InAs_0v.mat")
 
     # gw matrices path
-    solution_path_gw = os.path.join(
-        solution_path, "data_GPWS_big_memory1_InAs_0V.mat")
+    #solution_path_gw = os.path.join(
+    #    solution_path, "data_GPWS_big_memory1_InAs_0V.mat")
     # solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy.mat"
-    # solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2.mat"
+    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1.mat"
 
     parser = argparse.ArgumentParser(
         description="Reference test of GW iterations with MPI+CUDA")
@@ -141,7 +141,7 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    energy = np.linspace(-10.0, 5.0, 376, endpoint=True,
+    energy = np.linspace(-10.0, 5.0, 31, endpoint=True,
                          dtype=float)
     denergy = energy[1] - energy[0]
     pre_factor = -1.0j * denergy / (np.pi)

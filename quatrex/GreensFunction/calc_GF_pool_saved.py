@@ -14,8 +14,6 @@ from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.block_tri_solvers.rgf_GF import rgf_GF
 
-from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
-
 from operator import mul
 
 import copy
@@ -167,9 +165,6 @@ def calc_GF_pool_mpi(
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
-
-
-
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
@@ -311,25 +306,11 @@ def calc_GF_pool_mpi_no_filter(
             SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigG[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'G')
 
-    blocksize = np.max(DH.Bmax - DH.Bmin + 1)
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
     rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
-
-
-    """     greens_function_solver(GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                                                    DH.Hamiltonian['H_4'],
-                                                    DH.Overlap['H_4'],
-                                                    SigR,
-                                                    SigL,
-                                                    SigG,
-                                                    energy,
-                                                    Efl,
-                                                    Efr,
-                                                    blocksize)
-    """
 
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
@@ -342,7 +323,7 @@ def calc_GF_pool_mpi_no_filter(
                      DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
                      repeat(use_dace), repeat(validate_dace))
         # for res in results:
-        #    assert res == 0 
+        #    assert res == 0
 
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 

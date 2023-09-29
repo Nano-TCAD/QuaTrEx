@@ -80,6 +80,7 @@ def rgf_GF(M,
     # _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
+    
         _, condL, _, SigRBL, min_dEkL = beyn_func(M[:LBsize, :LBsize].toarray(),
                                                   M[:LBsize, LBsize:2 * LBsize].toarray(),
                                                   M[LBsize:2 * LBsize, :LBsize].toarray(),
@@ -88,6 +89,12 @@ def rgf_GF(M,
                                                   'L',
                                                   function='G',
                                                   block=block_inv)
+        import matplotlib.pyplot as plt
+        plt.matshow(np.abs(M[:LBsize, :LBsize].toarray()))
+        plt.matshow(np.abs(M[:LBsize, LBsize: 2*LBsize].toarray()))
+        plt.matshow(np.abs(M[LBsize:2*LBsize, :LBsize].toarray()))
+        plt.show()
+
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(),
