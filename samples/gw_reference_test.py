@@ -42,12 +42,17 @@ if __name__ == "__main__":
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
     gw_num_iter = 1
-    is_padded = True
-    comm_unblock = True
+    is_padded = False
+    comm_unblock = False
+    save_result = False
+    num_energy = 31
+
 
     if rank == 0:
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
+
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_no_filter.mat"
 
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
@@ -59,10 +64,11 @@ if __name__ == "__main__":
         solution_path, "data_Vh_finalPI_InAs_0v.mat")
 
     # gw matrices path
-    #solution_path_gw = os.path.join(
+    # solution_path_gw = os.path.join(
     #    solution_path, "data_GPWS_big_memory1_InAs_0V.mat")
     # solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy.mat"
     solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1.mat"
+    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_no_filter.mat"
 
     parser = argparse.ArgumentParser(
         description="Reference test of GW iterations with MPI+CUDA")
@@ -141,7 +147,7 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    energy = np.linspace(-10.0, 5.0, 31, endpoint=True,
+    energy = np.linspace(-10.0, 5.0, num_energy, endpoint=True,
                          dtype=float)
     denergy = energy[1] - energy[0]
     pre_factor = -1.0j * denergy / (np.pi)
@@ -635,20 +641,20 @@ if __name__ == "__main__":
 
         # only take part of the greens function
 
-        # filter out peaks
-        calc_GF_pool.h2g_observales_mpi(dos[range_local_no_padding[1]],
-                                        nE[range_local_no_padding[1]],
-                                        nP[range_local_no_padding[1]],
-                                        flag_zeros[0:flag_end],
-                                        comm, rank, size)
-        flag_zeros_global = np.empty(
-            distribution.shape[1], dtype=flag_zeros.dtype)
-        distribution.gatherall_col(
-            flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
-        memory_mask = np.where(flag_zeros_global)[0]
+        # # filter out peaks
+        # calc_GF_pool.h2g_observales_mpi(dos[range_local_no_padding[1]],
+        #                                 nE[range_local_no_padding[1]],
+        #                                 nP[range_local_no_padding[1]],
+        #                                 flag_zeros[0:flag_end],
+        #                                 comm, rank, size)
+        # flag_zeros_global = np.empty(
+        #     distribution.shape[1], dtype=flag_zeros.dtype)
+        # distribution.gatherall_col(
+        #     flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
+        # memory_mask = np.where(flag_zeros_global)[0]
 
-        for i in range(g_num_buffer):
-            g_row[i][:, memory_mask] = 0.0
+        # for i in range(g_num_buffer):
+        #     g_row[i][:, memory_mask] = 0.0
 
         if rank == 0:
             time_g += time.perf_counter()
@@ -676,18 +682,18 @@ if __name__ == "__main__":
                              screened_interaction_inp)
 
         # filter out peaks
-        flag_zeros = np.zeros(distribution.count[1])
-        p2w_cpu.p2w_observales_mpi(dosw[range_local_no_padding[1]],
-                                   nEw[range_local_no_padding[1]],
-                                   nPw[range_local_no_padding[1]],
-                                   flag_zeros[0:flag_end],
-                                   comm, rank, size)
-        flag_zeros_global = np.empty(
-            distribution.shape[1], dtype=flag_zeros.dtype)
-        distribution.gatherall_col(
-            flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
+        # flag_zeros = np.zeros(distribution.count[1])
+        # p2w_cpu.p2w_observales_mpi(dosw[range_local_no_padding[1]],
+        #                            nEw[range_local_no_padding[1]],
+        #                            nPw[range_local_no_padding[1]],
+        #                            flag_zeros[0:flag_end],
+        #                            comm, rank, size)
+        # flag_zeros_global = np.empty(
+        #     distribution.shape[1], dtype=flag_zeros.dtype)
+        # distribution.gatherall_col(
+        #     flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
         memory_mask = np.ones(distribution.shape[1], dtype=bool)
-        memory_mask[np.where(flag_zeros_global)[0]] = False
+        # memory_mask[np.where(flag_zeros_global)[0]] = False
 
         for i in range(w_num_buffer):
             w_row[i][:, memory_mask] = (
@@ -761,11 +767,15 @@ if __name__ == "__main__":
         print(f"Sub-Time Self Energy: {time_s:.2f} s")
         print(f"Time End: {time_end:.2f} s")
 
-    # if rank == 0:
-    #     save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2.mat"
-    #     # todo remove padding from data to save
-    #     read_solution.save_all(energy, rows, columns, bmax,
-    #                            bmin, save_path, **matrices_global)
+    if rank == 0 and save_result:
+        # todo remove padding from data to save
+        matrices_global_save = {}
+        for item in matrices_global.items():
+            matrices_global_save[item[0]
+                                 ] = item[1][:data_shape[0], :data_shape[1]]
+        read_solution.save_all(energy, rows, columns, bmax,
+                               bmin, save_path, **matrices_global_save)
+
 
     # test against gold solution------------------------------------------------
     if rank == 0:

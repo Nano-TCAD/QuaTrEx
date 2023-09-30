@@ -319,30 +319,56 @@ def calc_GF_pool_mpi_no_filter(
     bmax = DH.Bmax.copy()
 
 
-    """     greens_function_solver(GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                                                    DH.Hamiltonian['H_4'],
-                                                    DH.Overlap['H_4'],
-                                                    SigR,
-                                                    SigL,
-                                                    SigG,
-                                                    energy,
-                                                    Efl,
-                                                    Efr,
-                                                    blocksize)
-    """
+    greens_function_solver(GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+                                            DH.Hamiltonian['H_4'],
+                                            DH.Overlap['H_4'],
+                                            SigR,
+                                            SigL,
+                                            SigG,
+                                            energy,
+                                            Efl,
+                                            Efr,
+                                            blocksize)
 
-    # Create a process pool with 4 workers
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        # Use partial function application to bind the constant arguments to inv_matrices
-        # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
-        # results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
-        # results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG,
-        executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                     DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
-                     repeat(use_dace), repeat(validate_dace))
-        # for res in results:
-        #    assert res == 0 
+
+    # # Create a process pool with 4 workers
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
+    #     # Use partial function application to bind the constant arguments to inv_matrices
+    #     # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
+    #     # results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
+    #     # results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG,
+    #     executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+    #                  DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
+    #                  repeat(use_dace), repeat(validate_dace))
+    #     # for res in results:
+    #     #    assert res == 0 
+
+
+    # for ie in range(ne):
+    #     rgf_GF(next(rgf_M),
+    #            next(rgf_H),
+    #            SigL[ie],
+    #            SigG[ie],
+    #            GR_3D_E[ie],
+    #            GRnn1_3D_E[ie],
+    #            GL_3D_E[ie],
+    #            GLnn1_3D_E[ie],
+    #            GG_3D_E[ie],
+    #            GGnn1_3D_E[ie],
+    #            DOS[ie],
+    #            nE,
+    #            nP,
+    #            idE,
+    #            fL[ie],
+    #            fR[ie],
+    #            bmin,
+    #            bmax,
+    #            factor[ie],
+    #            index_e[ie],
+    #            block_inv=block_inv,
+    #            use_dace=use_dace,
+    #            validate_dace=validate_dace)
 
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 

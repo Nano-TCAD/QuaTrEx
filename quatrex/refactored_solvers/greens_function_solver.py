@@ -50,52 +50,51 @@ def greens_function_solver(
         fermi_level_right : float,
         blocksize : int
     ):
+
+    G_retarded : csr_matrix
+    G_lesser : csr_matrix
+    G_greater : csr_matrix
+
+    for i, energy in enumerate(energy_array):
+
+        M = (energy + 1j * 1e-12)*Overlap_matrix - Hamiltonian - Self_energy_retarded[i]
     
-        G_retarded : csr_matrix
-        G_lesser : csr_matrix
-        G_greater : csr_matrix
+        Self_energy_retarded_left_boundary, Self_energy_retarded_right_boundary = compute_open_boundary_condition(M, blocksize)
         
-        for i, energy in enumerate(energy_array):
+        apply_boundary_conditions(M, 
+                                    Self_energy_lesser[i],
+                                    Self_energy_greater[i],
+                                    Self_energy_retarded_left_boundary,
+                                    Self_energy_retarded_right_boundary,
+                                    fermi_level_left,
+                                    fermi_level_right,
+                                    blocksize)
+        
+        G_retarded = np.linalg.inv(M.toarray())
+        
+        number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
+        
+        # Delete elements of G_retarded that are outside of the tridiagonal block structure
+        zero_block = np.zeros((blocksize, blocksize))
+        for row in range(number_of_blocks):
+            for col in range(number_of_blocks):
+                if col < row - 1 or col > row + 1:
+                    G_retarded[row*blocksize:(row+1)*blocksize, col*blocksize:(col+1)*blocksize] = zero_block
+                    
 
-            M = (energy + 1j * 1e-12)*Overlap_matrix - Hamiltonian - Self_energy_retarded[i]
-        
-            Self_energy_retarded_left_boundary, Self_energy_retarded_right_boundary = compute_open_boundary_condition(M, blocksize)
-            
-            apply_boundary_conditions(M, 
-                                      Self_energy_lesser[i], 
-                                      Self_energy_greater[i], 
-                                      Self_energy_retarded_left_boundary, 
-                                      Self_energy_retarded_right_boundary, 
-                                      fermi_level_left, 
-                                      fermi_level_right, 
-                                      blocksize)
-            
-            G_retarded = np.linalg.inv(M.toarray())
-            
-            number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
-            
-            # Delete elements of G_retarded that are outside of the tridiagonal block structure
-            zero_block = np.zeros((blocksize, blocksize))
-            for row in range(number_of_blocks):
-                for col in range(number_of_blocks):
-                    if col < row - 1 or col > row + 1:
-                        G_retarded[row*blocksize:(row+1)*blocksize, col*blocksize:(col+1)*blocksize] = zero_block
-                        
-            
-            G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser, Self_energy_greater)
-        
-        
-            # Extract the blocks from G_retarded, G_lesser, G_greater and store them in the corresponding arrays
-            for j in range(number_of_blocks):
-                G_retarded_diagblocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
-                G_retarded_upper_blocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
-                
-                G_lesser_diagblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
-                G_lesser_upperblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
-                
-                G_greater_diagblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
-                G_greater_upperblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+        G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i])
 
+
+        # Extract the blocks from G_retarded, G_lesser, G_greater and store them in the corresponding arrays
+        for j in range(number_of_blocks):
+            G_retarded_diagblocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+            G_lesser_diagblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+            G_greater_diagblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+
+        for j in range(number_of_blocks-1):
+            G_retarded_upper_blocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+            G_lesser_upperblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+            G_greater_upperblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
 
 
 def compute_open_boundary_condition(
@@ -108,13 +107,13 @@ def compute_open_boundary_condition(
     
     left_boundary_size  = blocksize
     
-    import matplotlib.pyplot as plt
-    plt.matshow(np.abs(M[:left_boundary_size, :left_boundary_size].toarray()))
-    plt.matshow(np.abs(M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray()))
-    plt.matshow(np.abs(M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray()))
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # plt.matshow(np.abs(M[:left_boundary_size, :left_boundary_size].toarray()))
+    # plt.matshow(np.abs(M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray()))
+    # plt.matshow(np.abs(M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray()))
+    # plt.show()
     
-    _, succes, _, self_energy_left_boundary, _ = beyn(M[:left_boundary_size, :left_boundary_size].toarray(),
+    _, success, _, self_energy_left_boundary, _ = beyn(M[:left_boundary_size, :left_boundary_size].toarray(),
                                                       M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray(),
                                                       M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray(),
                                                       imaginary_limit,
@@ -122,14 +121,14 @@ def compute_open_boundary_condition(
                                                       'L',
                                                       function='G')
 
-    if succes == 0:
+    if np.isnan(success):
         print('Error: Beyn algorithm failed to compute the self-energy at the left boundary')
         exit()
 
 
     right_boundary_size = blocksize
 
-    _, succes, _, self_energy_right_boundary, _ = beyn(M[-right_boundary_size:, -right_boundary_size:].toarray(),
+    _, success, _, self_energy_right_boundary, _ = beyn(M[-right_boundary_size:, -right_boundary_size:].toarray(),
                                                        M[-2*right_boundary_size:-right_boundary_size, -right_boundary_size:].toarray(),
                                                        M[-right_boundary_size:, -2*right_boundary_size: -right_boundary_size].toarray(),
                                                        imaginary_limit,
@@ -137,7 +136,7 @@ def compute_open_boundary_condition(
                                                        'R',
                                                        function='G')
 
-    if succes == 0:
+    if np.isnan(success):
         print('Error: Beyn algorithm failed to compute the self-energy at the right boundary')
         exit()
         

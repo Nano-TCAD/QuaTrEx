@@ -89,11 +89,11 @@ def rgf_GF(M,
                                                   'L',
                                                   function='G',
                                                   block=block_inv)
-        import matplotlib.pyplot as plt
-        plt.matshow(np.abs(M[:LBsize, :LBsize].toarray()))
-        plt.matshow(np.abs(M[:LBsize, LBsize: 2*LBsize].toarray()))
-        plt.matshow(np.abs(M[LBsize:2*LBsize, :LBsize].toarray()))
-        plt.show()
+        # import matplotlib.pyplot as plt
+        # plt.matshow(np.abs(M[:LBsize, :LBsize].toarray()))
+        # plt.matshow(np.abs(M[:LBsize, LBsize: 2*LBsize].toarray()))
+        # plt.matshow(np.abs(M[LBsize:2*LBsize, :LBsize].toarray()))
+        # plt.show()
 
 
     if np.isnan(condL) or sancho:
