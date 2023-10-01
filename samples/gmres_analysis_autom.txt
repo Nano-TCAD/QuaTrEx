@@ -1,0 +1,5 @@
+It: 5, IdxE: 0 Cond_A_2: 1182.1340897420425 Cond_A_2_preconditionned: 1.0092061720592864
+Matrix size: 3456x3456
+Np inversion mean time: 74.63201566000001 [ms]
+GMRES precond run: 0 starting..
+GMRES precond run: 1 starting..

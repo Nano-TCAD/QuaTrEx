@@ -18,6 +18,7 @@ import argparse
 import pickle
 import mpi4py
 from scipy import sparse
+from scipy import linalg
 import time
 
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
@@ -49,21 +50,20 @@ parent_path = os.path.abspath(os.path.join(main_path, ".."))
 global max_iter
 max_iter = 0
 
-
 def print_maxiter(args):
     global max_iter
     max_iter += 1
-    print("Current iter: ", max_iter, " of ", args)
+
     
-
-
-if __name__ == "__main__":
-    MPI.Init_thread(required=MPI.THREAD_FUNNELED)
-    comm = MPI.COMM_WORLD
-    size = comm.Get_size()
-    rank = comm.Get_rank()
-    name = MPI.Get_processor_name()
-
+    
+    
+    
+def get_Hamiltonian(
+    
+):    
+    """
+    Return Hamiltonian object, energy vector, energy index vector and path to self-energy files.
+    """
     scratch_path = "/usr/scratch/mont-fort21/chexia/"
     hamiltonian_path = os.path.join(scratch_path, "CNT_evensort48new")
 
@@ -78,18 +78,34 @@ if __name__ == "__main__":
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
+    
+    return hamiltonian_obj, energy, Idx_e, self_energy_path
 
+
+
+def get_A(
+    Hamiltonian_obj : OMENHamClass.Hamiltonian,
+    self_energy_path : str,
+    energy : npt.NDArray[np.double],
+    iteration : int,
+    idx_energy : int
+):
+    """
+    Return A = [E - H - SigmaR_GW - SigmaR_B] CSR matrix for an arbitrary energy 
+    index and iteration number.
+    """
+    
     # Extract neighbor indices
-    rows = hamiltonian_obj.rows
-    columns = hamiltonian_obj.columns
+    rows = Hamiltonian_obj.rows
+    columns = Hamiltonian_obj.columns
 
     # Only keep diagonals of P and Sigma
-    rows = np.arange(hamiltonian_obj.NH, dtype=np.int32)
-    columns = np.arange(hamiltonian_obj.NH, dtype=np.int32)
+    rows = np.arange(Hamiltonian_obj.NH, dtype=np.int32)
+    columns = np.arange(Hamiltonian_obj.NH, dtype=np.int32)
 
     # hamiltonian object has 1-based indexing, block sizes
-    bmax = hamiltonian_obj.Bmax - 1
-    bmin = hamiltonian_obj.Bmin - 1
+    bmax = Hamiltonian_obj.Bmax - 1
+    bmin = Hamiltonian_obj.Bmin - 1
 
     # Left and right Block sizes for boundary self-energy analysis
     LBsize = bmax[0] - bmin[0] + 1
@@ -101,25 +117,7 @@ if __name__ == "__main__":
     ne: np.int32 = np.int32(energy.shape[0])
     no: np.int32 = np.int32(columns.shape[0]) # number of elem in GW self energy
     nao: np.int64 = np.max(bmax) + 1 # number of atomic orbitals (matrix size)
-
-    start_iter = 0
-    stop_iter  = 32
     
-    start_energy = 0
-    stop_energy  = 1000
-    
-    l_iterations = []
-    l_energies   = []
-    l_cond_Ai      = []
-    l_cond_Aim1xAi = []
-    
-    
-    idx_e = 0
-    
-    iteration = 0
-    
-    
-    # Get and invert matrix at iteration i
     # Reading GW self-energy
     SigmaR_GW = np.load(os.path.join(self_energy_path, "sigma_R_{}.npy".format(iteration)))
     # Reading left boundary self-energy
@@ -127,69 +125,95 @@ if __name__ == "__main__":
     # Reading right boundary self-energy
     SigmaR_Br = np.load(os.path.join(self_energy_path, "sigma_RBR_{}.npy".format(iteration)))
 
-    # Printing shapes
-    #print("SigmaR_GW shape: ", SigmaR_GW.shape)
-    #print("SigmaR_Bl shape: ", SigmaR_Bl.shape)
-
     # Bringing GW self-energies to sparse format
     sr_h2g_vec = change_format.sparse2vecsparse_v2(SigmaR_GW, rows, columns, nao)
 
-    # Creating [E - H - SigmaR_GW - SigmaR_B] matrix for an arbitrary energy index
-    # [E - H - SigmaR_GW] matrix is CSR
-    E = (energy[idx_e] + 1j * 1e-12) * hamiltonian_obj.Overlap['H_4']
-    H = hamiltonian_obj.Hamiltonian['H_4']
-    SigmaR = sr_h2g_vec[idx_e]
+    # Creating A = [E - H - SigmaR_GW - SigmaR_B] CSR matrix for an arbitrary energy index
+    E = (energy[idx_energy] + 1j * 1e-12) * Hamiltonian_obj.Overlap['H_4']
+    H = Hamiltonian_obj.Hamiltonian['H_4']
+    SigmaR = sr_h2g_vec[idx_energy]
     
-    matrix = E - H - SigmaR
+    A = E - H - SigmaR
 
-    # adding boundary elements
-    matrix[:LBsize, :LBsize] -= SigmaR_Bl[idx_e]
-    matrix[-RBsize:, -RBsize:] -= SigmaR_Br[idx_e]
+    # Adding boundary elements
+    A[:LBsize, :LBsize] -= SigmaR_Bl[idx_energy]
+    A[-RBsize:, -RBsize:] -= SigmaR_Br[idx_energy]
     
-    A = matrix.toarray()
-    
-    Gi_ref = np.linalg.inv(A)
-    
-    #cond_A = np.linalg.cond(A)
-    
-    #A_conditionned = G_im1 @ A
-    
-    #cond_Aim1xAi = np.linalg.cond(A_conditionned)
-    
-    """ 
-    from scipy import linalg
-    
-    I = np.eye(A.shape[0])
-    
-    # Use GMRES to invert
-    X_i, info = sparse.linalg.gmres(A, I[:,0], 
-                                    tol=1e-12, restart=1000, maxiter=100000, callback=print_maxiter)
-    
-    print("GMRES info: ", info)
-    assert np.allclose(X_i, Xi_ref[:,0]) """
-    
-    #l_cond_Ai.append(cond_A)
-    #l_cond_Aim1xAi.append(cond_Aim1xAi)
-
-    # Calculating Green's function
-    #Gr = np.linalg.inv(matrix.toarray())
-
-    import matplotlib.pyplot as plt
-    plt.matshow(np.abs(SigmaR_Bl[idx_e]))
-    plt.matshow(np.abs(SigmaR_Br[idx_e]))
-    #plt.matshow(np.abs(hamiltonian_obj.Hamiltonian['H_4'].toarray()))
-    plt.matshow(np.abs(matrix.toarray()))
-    plt.matshow(np.abs(Gi_ref))
-    plt.show()
-
-    #print("i = " + str(iteration) + ", E = " + str(idx_e) + " Cond_A = " +  str(cond_A) + " Cond_Aim1xAi = " + str(cond_Aim1xAi))
-
-
-    # Write results to a csv file but use ; as delimiter
-    import csv
-    with open('conditionning.csv', 'w', newline='') as file:
-        writer = csv.writer(file, delimiter=';')
-        writer.writerow(["Iterations", "Energies", "cond(Ai)", "cond(Ai-1 @ Ai)"])
-        for i in range(len(l_iterations)):
-            writer.writerow([l_iterations[i], l_energies[i], l_cond_Ai[i], l_cond_Aim1xAi[i]])
+    return A
             
+            
+            
+if __name__ == "__main__":
+    MPI.Init_thread(required=MPI.THREAD_FUNNELED)
+    comm = MPI.COMM_WORLD
+    size = comm.Get_size()
+    rank = comm.Get_rank()
+    name = MPI.Get_processor_name()
+
+    hamiltonian_obj, energy, Idx_e, self_energy_path = get_Hamiltonian()
+
+    iteration = 0
+    idx_energy = 0
+
+    A_1 = get_A(hamiltonian_obj, self_energy_path, energy, iteration, idx_energy)
+    A_2 = get_A(hamiltonian_obj, self_energy_path, energy, iteration+1, idx_energy)
+
+    A_1_dense = A_1.toarray()
+    A_2_dense = A_2.toarray()
+    
+    matrice_size = A_2_dense.shape[0]
+    
+    A_1_inv = np.linalg.inv(A_1_dense)
+    
+    A_2_preconditionned = A_1_inv @ A_2_dense
+    
+    cond_A_2 = np.linalg.cond(A_2_dense)
+    cond_A_2_preconditionned = np.linalg.cond(A_2_preconditionned)
+    
+    print("It: " + str(iteration) + ", IdxE: " + str(idx_energy) + " Cond_A_2: " + str(cond_A_2) + " Cond_A_2_preconditionned: " + str(cond_A_2_preconditionned))
+
+    print("Matrix size: " + str(matrice_size) + "x" + str(matrice_size))
+
+    n_runs = 5
+    # Benchmark numpy timing
+    start_time = time.time_ns()
+    for run in range(n_runs):
+        X_2 = np.linalg.inv(A_2_dense)
+    end_time = time.time_ns()
+    mean_time = (end_time - start_time) / n_runs
+    
+    print("Np inversion mean time: " + str(mean_time/10e6) + " [ms]")
+    
+    
+    
+    # Benchmark GMRES with pre-conditionning
+    start_time = time.time_ns()
+    
+    I = np.eye(matrice_size)
+    for run in range(n_runs):
+        print("GMRES precond run: " + str(run) + " starting..")
+        X_2, info = sparse.linalg.gmres(A_2, 
+                                        b = I[:,0],
+                                        x0 = A_1_inv[:,0],
+                                        M = A_1_inv,
+                                        tol=1e-12, 
+                                        restart=1000, 
+                                        maxiter=matrice_size, 
+                                        callback=print_maxiter)
+            
+    end_time = time.time_ns()
+    mean_time = (end_time - start_time) * matrice_size / n_runs
+    
+    mean_iter_per_run = max_iter / n_runs
+    max_iter = 0
+    
+    print("GMRES with preconditioning inversion mean time: " + str(mean_time/10e6) + " [ms] + taking " + str(mean_iter_per_run) + " mean_iter_per_run")
+    
+    
+    
+
+    
+    
+
+    
+    

@@ -1,0 +1,21 @@
+# Iter: 0 E:0
+Np inversion mean time: 77.71308203 [ms],(456 faster than GMRES-precond)
+GMRES with preconditioning inversion mean time: 35476.741981440005 [ms], total_iter_per_run = 34560.0
+GMRES without preconditioning inversion mean time: 8582220.59387904 [ms], total_iter_per_run = 11943936.0
+
+# Iter: 10 E:0
+Np inversion mean time: 78.64601826 [ms],(270x faster than GMRES-precond)
+GMRES with preconditioning inversion mean time: 21067.87684608 [ms], total_iter_per_run = 10368.0
+GMRES without preconditioning inversion mean time: 8691577.53293952 [ms], total_iter_per_run = 11943936.0
+
+# Iter: 0, E:0, A is dense, with preconditioner, no initial rhs, (means 5 runs)
+Np inversion mean time: 191.52524204000002 [ms]
+GMRES with preconditioning inversion mean time: 67762.20181248001 [ms] + taking 10.0 mean_iter_per_run
+
+# Iter: 0, E:0, A is sparse, with preconditioner, no initial rhs, (means 5 runs)
+Np inversion mean time: 201.50317342 [ms]
+GMRES with preconditioning inversion mean time: 38557.84854528 [ms] + taking 10.0 mean_iter_per_run
+
+# Iter: 0, E:0, A is sparse, with preconditioner, initial rhs, (means 5 runs)
+Np inversion mean time: 198.83734922 [ms]
+GMRES with preconditioning inversion mean time: 36337.44284928 [ms] + taking 9.0 mean_iter_per_run

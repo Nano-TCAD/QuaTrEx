@@ -105,7 +105,7 @@ if __name__ == "__main__":
     start_iter = 0
     stop_iter  = 32
     
-    start_energy = 500
+    start_energy = 0
     stop_energy  = 1000
     
     l_iterations = []
@@ -113,6 +113,7 @@ if __name__ == "__main__":
     l_cond_Ai      = []
     l_cond_Aim1xAi = []
     
+    print("Iterations;Energies;cond(Ai);cond(A0 @ Ai)")
     
     for idx_e in range(start_energy, stop_energy):
         # this is the ernergy point (0->999)
@@ -218,12 +219,13 @@ if __name__ == "__main__":
             plt.matshow(np.abs(Gr))
             plt.show() """
 
-            print("i = " + str(iteration) + ", E = " + str(idx_e) + " Cond_A = " +  str(cond_A) + " Cond_Aim1xAi = " + str(cond_Aim1xAi))
+            #print("i = " + str(iteration) + ", E = " + str(idx_e) + " Cond_A = " +  str(cond_A) + " Cond_Aim1xAi = " + str(cond_Aim1xAi))
+            print(str(iteration) + ";" + str(idx_e) + ";" +  str(cond_A) + ";" + str(cond_Aim1xAi))
 
 
     # Write results to a csv file but use ; as delimiter
     import csv
-    with open('conditionning_from_first_500to1000.csv', 'w', newline='') as file:
+    with open('conditionning_from_first_0to178.csv', 'w', newline='') as file:
         writer = csv.writer(file, delimiter=';')
         writer.writerow(["Iterations", "Energies", "cond(Ai)", "cond(Ai-1 @ Ai)"])
         for i in range(len(l_iterations)):
