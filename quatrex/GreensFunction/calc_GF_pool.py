@@ -318,7 +318,8 @@ def calc_GF_pool_mpi_no_filter(
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
-
+    import time
+    time_rgf = -time.perf_counter()
     greens_function_solver(GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
                                             DH.Hamiltonian['H_4'],
                                             DH.Overlap['H_4'],
@@ -326,8 +327,8 @@ def calc_GF_pool_mpi_no_filter(
                                             SigL,
                                             SigG,
                                             energy,
-                                            Efl,
-                                            Efr,
+                                            fL,
+                                            fR,
                                             blocksize)
 
 
@@ -369,7 +370,10 @@ def calc_GF_pool_mpi_no_filter(
     #            block_inv=block_inv,
     #            use_dace=use_dace,
     #            validate_dace=validate_dace)
+        
+    time_rgf += time.perf_counter()
 
+    print("Total Time for rgf section: " + "%.2f" % (time_rgf) + " [s]")
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 
 

@@ -137,6 +137,7 @@ def rgf_GF(M,
 
     min_dEk = np.min((min_dEkL, min_dEkR))
 
+
     if not (np.isnan(condL) or np.isnan(condR)):
         # First step of iteration
         NN = Bmax[-1] - Bmin[-1] + 1

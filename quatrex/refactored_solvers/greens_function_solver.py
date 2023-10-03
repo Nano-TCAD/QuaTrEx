@@ -46,8 +46,8 @@ def greens_function_solver(
         Self_energy_lesser : csr_matrix,
         Self_energy_greater : csr_matrix,
         energy_array : np.ndarray,
-        fermi_level_left : float,
-        fermi_level_right : float,
+        fermi_distribution_left : np.ndarray,
+        fermi_distribution_right : np.ndarray,
         blocksize : int
     ):
 
@@ -61,31 +61,39 @@ def greens_function_solver(
     
         Self_energy_retarded_left_boundary, Self_energy_retarded_right_boundary = compute_open_boundary_condition(M, blocksize)
         
+
+        
         apply_boundary_conditions(M, 
                                     Self_energy_lesser[i],
                                     Self_energy_greater[i],
                                     Self_energy_retarded_left_boundary,
                                     Self_energy_retarded_right_boundary,
-                                    fermi_level_left,
-                                    fermi_level_right,
+                                    fermi_distribution_left[i],
+                                    fermi_distribution_right[i],
                                     blocksize)
         
         G_retarded = np.linalg.inv(M.toarray())
         
-        number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
-        
-        # Delete elements of G_retarded that are outside of the tridiagonal block structure
-        zero_block = np.zeros((blocksize, blocksize))
-        for row in range(number_of_blocks):
-            for col in range(number_of_blocks):
-                if col < row - 1 or col > row + 1:
-                    G_retarded[row*blocksize:(row+1)*blocksize, col*blocksize:(col+1)*blocksize] = zero_block
+
+        #cut_to_tridiag(G_retarded, blocksize)
                     
 
-        G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i])
+        
 
+        G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i], blocksize)
 
+        # plt.matshow(np.abs(Self_energy_lesser[i].toarray()))          
+        # plt.matshow(np.abs(Self_energy_greater[i].toarray()))
+        # plt.matshow(np.abs(G_lesser))          
+        # plt.matshow(np.abs(G_greater))
+        # plt.show()            
+        
+        # while True:
+        #     pass
+        
         # Extract the blocks from G_retarded, G_lesser, G_greater and store them in the corresponding arrays
+        number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
+        
         for j in range(number_of_blocks):
             G_retarded_diagblocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
             G_lesser_diagblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
@@ -151,8 +159,8 @@ def apply_boundary_conditions(
     Self_energy_greater : csr_matrix,
     Self_energy_retarded_left_boundary : csr_matrix,
     Self_energy_retarded_right_boundary : csr_matrix,
-    fermi_level_left : float,
-    fermi_level_right : float,
+    fermi_distribution_left_at_current_energy : float,
+    fermi_distribution_right_at_current_energy : float,
     blocksize : int
 ):
     
@@ -163,24 +171,49 @@ def apply_boundary_conditions(
     M[-right_boundary_size:,-right_boundary_size:] -= Self_energy_retarded_right_boundary
     
     Gamma_left = 1j * (Self_energy_retarded_left_boundary - Self_energy_retarded_left_boundary.conj().T)
-    Self_energy_lesser_left_boundary  = 1j * fermi_level_left * Gamma_left
-    Self_energy_greater_left_boundary = 1j * (fermi_level_left - 1) * Gamma_left
+    Self_energy_lesser_left_boundary  = 1j * fermi_distribution_left_at_current_energy * Gamma_left
+    Self_energy_greater_left_boundary = 1j * (fermi_distribution_left_at_current_energy - 1) * Gamma_left
     Self_energy_lesser[:left_boundary_size, :left_boundary_size]  += Self_energy_lesser_left_boundary
     Self_energy_greater[:left_boundary_size, :left_boundary_size] += Self_energy_greater_left_boundary
     
     Gamma_right = 1j * (Self_energy_retarded_right_boundary - Self_energy_retarded_right_boundary.conj().T)
-    Self_energy_lesser_right_boundary = 1j * fermi_level_right * Gamma_right
-    Self_energy_greater_right_boundary = 1j * (fermi_level_right - 1) * Gamma_right
+    Self_energy_lesser_right_boundary = 1j * fermi_distribution_right_at_current_energy * Gamma_right
+    Self_energy_greater_right_boundary = 1j * (fermi_distribution_right_at_current_energy - 1) * Gamma_right
     Self_energy_lesser[-right_boundary_size:,-right_boundary_size:]  += Self_energy_lesser_right_boundary
     Self_energy_greater[-right_boundary_size:,-right_boundary_size:] += Self_energy_greater_right_boundary
+    
+
+
+
+def cut_to_tridiag(
+    A: np.ndarray,
+    blocksize : int
+):
+    # Delete elements of G_retarded that are outside of the tridiagonal block structure
+    number_of_blocks = int(A.shape[0] / blocksize)
+    zero_block = np.zeros((blocksize, blocksize))
+    for row in range(number_of_blocks):
+        for col in range(number_of_blocks):
+            if col < row - 1 or col > row + 1:
+                A[row*blocksize:(row+1)*blocksize, col*blocksize:(col+1)*blocksize] = zero_block
     
 
 
 def compute_greens_function_lesser_and_greater(
     G_retarded : np.ndarray, 
     Self_energy_lesser : np.ndarray, 
-    Self_energy_greater : np.ndarray
+    Self_energy_greater : np.ndarray,
+    blocksize : int
 ):
+    
+    """ G_lesser = G_retarded @ Self_energy_lesser
+    #cut_to_tridiag(G_lesser, blocksize)
+    G_lesser = G_lesser @ G_retarded.conj().T
+    
+    G_greater = G_retarded @ Self_energy_greater
+    #cut_to_tridiag(G_greater, blocksize)
+    G_greater = G_greater @ G_retarded.conj().T """
+    
     
     G_lesser = G_retarded @ Self_energy_lesser @ G_retarded.conj().T
     G_greater = G_retarded @ Self_energy_greater @ G_retarded.conj().T
