@@ -12,8 +12,8 @@ class Solver:
         number_of_energy_point : int,
         current_convergence_threshold : float,
     ):
-        # __init_greens_function_storage()
-        # __compute_energy_array(energy_range, number_of_energy_point)
+        # _init_greens_function_storage()
+        # _compute_energy_array(energy_range, number_of_energy_point)
         
         pass
     
@@ -26,10 +26,10 @@ class Solver:
         
         G_retarded, G_lesser, G_greater = greens_function_solver.greens_function_solver(Hamiltonian, Overlap_matrix, 0)
         
-        # __compute_current()
-        # __compute_electron_density()
-        # __compute_hole_density()
-        # __compute_density_of_states()
+        # _compute_current()
+        # _compute_electron_density()
+        # _compute_hole_density()
+        # _compute_density_of_states()
         
         # return status
     
@@ -41,7 +41,7 @@ class Solver:
     ):  
         pass
         
-        # __init_memory()
+        # _init_memory()
         
         # if gw:
         #   Pre-computation related to GW
@@ -49,7 +49,7 @@ class Solver:
         # Self_energy : np.ndarray
     
         # current_iteration = 0
-        # While(not __current_converged() or current_iteration >= max_iterations):
+        # While(not _current_converged() or current_iteration >= max_iterations):
             # Gr, G<, G> = compute_greens_functions(Hamiltonian, Overlap_matrix, Self_energy)
             
             # if gw:
@@ -69,10 +69,10 @@ class Solver:
             # if phonon:
             #   Self_energy += compute_phonon_self_energy()
             
-        # __compute_current()
-        # __compute_electron_density()
-        # __compute_hole_density()
-        # __compute_density_of_states()
+        # _compute_current()
+        # _compute_electron_density()
+        # _compute_hole_density()
+        # _compute_density_of_states()
         
         # return status
         
@@ -109,32 +109,32 @@ class Solver:
     
     
     # ----- Private methods -----
-    def __set_communications(
+    def _set_communications(
         self
     ):
         pass
     
-    def __compute_current(
+    def _compute_current(
         self
     ):
         pass
     
-    def __compute_electron_density(
+    def _compute_electron_density(
         self
     ):
         pass
     
-    def __compute_hole_density(
+    def _compute_hole_density(
         self
     ):
         pass
     
-    def __compute_density_of_states(
+    def _compute_density_of_states(
         self
     ):
         pass
     
-    def __current_converged(
+    def _current_converged(
         self,
         current_convergence_threshold : float
     ) -> bool:
@@ -152,12 +152,12 @@ class Solver:
         # return False
         pass
     
-    def __init_greens_function_storage(
+    def _init_greens_function_storage(
         self
     ):
         pass
     
-    def __compute_energy_array(
+    def _compute_energy_array(
         self,
         energy_range : [float, float],
         number_of_energy_point : int
