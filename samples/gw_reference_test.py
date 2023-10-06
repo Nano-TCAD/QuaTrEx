@@ -29,6 +29,8 @@ from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
 # Import because of refactoring
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
+from quatrex.refactored_solvers.polarization_solver import compute_polarization
+
 
 
 # Refactored functions
@@ -487,16 +489,29 @@ if __name__ == "__main__":
 
 
 
-    def polarization_compute(ggi, gli, gri, glti, pgo, plo, pro):
-        no_loc = gri.shape[0]
-        if args.type in ("gpu"):
-            pgo[:no_loc, :data_shape[1]], plo[:no_loc, :data_shape[1]], pro[:no_loc, :data_shape[1]] = g2p_gpu.g2p_fft_mpi_gpu(
-                pre_factor, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]], glti[:, :data_shape[1]])
-        elif args.type in ("cpu"):
-            pgo[:no_loc, :data_shape[1]], plo[:no_loc, :data_shape[1]], pro[:no_loc, :data_shape[1]] = g2p_cpu.g2p_fft_mpi_cpu_inlined(
-                pre_factor, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]], glti[:, :data_shape[1]])
-        else:
-            raise ValueError("Argument error, input type not possible")
+    def polarization_compute(
+        G_greater, 
+        G_lesser, 
+        G_retarded, 
+        glti, 
+        Polarization_greater, 
+        Polarization_lesser, 
+        Polarization_retarded
+    ):
+        
+        number_of_orbitals = G_retarded.shape[0]
+        
+        (Polarization_greater[:number_of_orbitals, :data_shape[1]],
+        Polarization_lesser[:number_of_orbitals, :data_shape[1]],
+        Polarization_retarded[:number_of_orbitals, :data_shape[1]]) = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+            pre_factor, G_greater[:, :data_shape[1]], G_lesser[:, :data_shape[1]], G_retarded[:, :data_shape[1]], glti[:, :data_shape[1]])
+        
+        
+        """ Polarization_greater[:number_of_orbitals, :data_shape[1]], 
+        Polarization_lesser[:number_of_orbitals, :data_shape[1]], 
+        Polarization_retarded[:number_of_orbitals, :data_shape[1]] = compute_polarization(
+            G_greater[:, :data_shape[1]], G_lesser[:, :data_shape[1]], G_retarded[:, :data_shape[1]], denergy) """
+        
 
 
 
@@ -602,24 +617,24 @@ if __name__ == "__main__":
         wlto[:ne_loc, :data_shape[0]] = np.copy(
             wlo[:ne_loc, :data_shape[0]][:, ij2ji], order="C")
 
-    def selfenergy_compute(ggi, gli, gri, wgi, wli, wri, wgti, wlti, vh_pi,  sgo, slo, sro):
+    def selfenergy_compute(G_greater, G_lesser, G_retarded, wgi, wli, wri, wgti, wlti, vh_pi,  sgo, slo, sro):
         # todo optimize and not load two time green's function to gpu and do twice the fft
-        no_loc = gri.shape[0]
+        number_of_orbitals = G_retarded.shape[0]
         if args.type in ("gpu"):
             sg_tmp, sl_tmp, sr_tmp = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
-                -pre_factor / 2, ggi[:, :data_shape[1]], gli[:,
-                                                             :data_shape[1]], gri[:, :data_shape[1]],
+                -pre_factor / 2, G_greater[:, :data_shape[1]], G_lesser[:,
+                                                             :data_shape[1]], G_retarded[:, :data_shape[1]],
                 wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti, wlti)
         elif args.type in ("cpu"):
             sg_tmp, sl_tmp, sr_tmp = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(
-                -pre_factor / 2, ggi[:, :data_shape[1]], gli[:,
-                                                             :data_shape[1]], gri[:, :data_shape[1]],
+                -pre_factor / 2, G_greater[:, :data_shape[1]], G_lesser[:,
+                                                             :data_shape[1]], G_retarded[:, :data_shape[1]],
                 wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti[:, :data_shape[1]], wlti[:, :data_shape[1]], vh_pi, energy)
         else:
             raise ValueError("Argument error, input type not possible")
-        sgo[:no_loc, :data_shape[1]] = sg_tmp
-        slo[:no_loc, :data_shape[1]] = sl_tmp
-        sro[:no_loc, :data_shape[1]] = sr_tmp
+        sgo[:number_of_orbitals, :data_shape[1]] = sg_tmp
+        slo[:number_of_orbitals, :data_shape[1]] = sl_tmp
+        sro[:number_of_orbitals, :data_shape[1]] = sr_tmp
 
     # create communication wrapped functions
     greens_function = CommunicateCompute(distributions[:g_num_buffer],

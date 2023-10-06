@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from quatrex.refactored_solvers.polarization_solver import compute_polarization
+
 
 
 # gw_solver.py
@@ -16,7 +18,7 @@ def gw_solver(
 
     # prepare_greens_function_for_polarization(G_retarded, G_lesser, G_greater)
             
-    # Polarization = compute_polarization(G_retarded, G_lesser, G_greater)
+    Polarization = compute_polarization(G_retarded, G_lesser, G_greater)
     
     # Symettrizing polarization
         
