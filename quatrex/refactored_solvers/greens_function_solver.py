@@ -3,7 +3,7 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from quatrex.OBC.beyn_cpu import beyn
+from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 
 
 
@@ -58,9 +58,10 @@ def greens_function_solver(
 
         M = (energy + 1j * 1e-12)*Overlap_matrix - Hamiltonian - Self_energy_retarded[i]
     
-        Self_energy_retarded_left_boundary, Self_energy_retarded_right_boundary = compute_open_boundary_condition(M, blocksize)
-        
-
+        Self_energy_retarded_left_boundary, Self_energy_retarded_right_boundary = compute_open_boundary_condition(M,
+                                                                                                                  imaginary_limit=5e-4,
+                                                                                                                  contour_integration_radius=1000, 
+                                                                                                                  blocksize=blocksize)
         
         apply_boundary_conditions(M, 
                                   Self_energy_lesser[i],
@@ -73,7 +74,7 @@ def greens_function_solver(
         
         G_retarded = np.linalg.inv(M.toarray())
         
-        G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i], blocksize)
+        G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i])
 
         
         # Extract the blocks from G_retarded, G_lesser, G_greater and store them in the corresponding arrays
@@ -90,54 +91,6 @@ def greens_function_solver(
             G_greater_upperblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
 
 
-
-def compute_open_boundary_condition(
-    M : csr_matrix,
-    blocksize : int,
-):
-    
-    imaginary_limit = 5e-4
-    contour_integration_radius = 1000
-    
-    left_boundary_size  = blocksize
-    
-    # import matplotlib.pyplot as plt
-    # plt.matshow(np.abs(M[:left_boundary_size, :left_boundary_size].toarray()))
-    # plt.matshow(np.abs(M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray()))
-    # plt.matshow(np.abs(M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray()))
-    # plt.show()
-    
-    _, success, _, self_energy_left_boundary, _ = beyn(M[:left_boundary_size, :left_boundary_size].toarray(),
-                                                      M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray(),
-                                                      M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray(),
-                                                      imaginary_limit,
-                                                      contour_integration_radius,
-                                                      'L',
-                                                      function='G')
-
-    if np.isnan(success):
-        print('Error: Beyn algorithm failed to compute the self-energy at the left boundary')
-        exit()
-
-
-    right_boundary_size = blocksize
-
-    _, success, _, self_energy_right_boundary, _ = beyn(M[-right_boundary_size:, -right_boundary_size:].toarray(),
-                                                       M[-2*right_boundary_size:-right_boundary_size, -right_boundary_size:].toarray(),
-                                                       M[-right_boundary_size:, -2*right_boundary_size: -right_boundary_size].toarray(),
-                                                       imaginary_limit,
-                                                       contour_integration_radius,
-                                                       'R',
-                                                       function='G')
-
-    if np.isnan(success):
-        print('Error: Beyn algorithm failed to compute the self-energy at the right boundary')
-        exit()
-        
-        
-    return self_energy_left_boundary, self_energy_right_boundary
-        
-        
         
 def apply_boundary_conditions(
     M : csr_matrix,
@@ -188,18 +141,8 @@ def cut_to_tridiag(
 def compute_greens_function_lesser_and_greater(
     G_retarded : np.ndarray, 
     Self_energy_lesser : np.ndarray, 
-    Self_energy_greater : np.ndarray,
-    blocksize : int
+    Self_energy_greater : np.ndarray
 ):
-    
-    """ G_lesser = G_retarded @ Self_energy_lesser
-    #cut_to_tridiag(G_lesser, blocksize)
-    G_lesser = G_lesser @ G_retarded.conj().T
-    
-    G_greater = G_retarded @ Self_energy_greater
-    #cut_to_tridiag(G_greater, blocksize)
-    G_greater = G_greater @ G_retarded.conj().T """
-    
     
     G_lesser = G_retarded @ Self_energy_lesser @ G_retarded.conj().T
     G_greater = G_retarded @ Self_energy_greater @ G_retarded.conj().T

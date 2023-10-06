@@ -94,9 +94,5 @@ def calc_W_pool(DH, E, PG, PL, PR, V, w_mask, mkl_threads=1, worker_num=1):
         WG_3D_E[index, :, :, :] = 0
         WGnn1_3D_E[index, :, :, :] = 0
 
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     executor.map(assemble_full_G_smoothing, GR, factor, GR_3D_E, GRnn1_3D_E, repeat(DH.Bmin), repeat(DH.Bmax), repeat('sparse'), repeat('R'))
-    #     executor.map(assemble_full_G_smoothing, GL, factor, GL_3D_E, GLnn1_3D_E, repeat(DH.Bmin), repeat(DH.Bmax), repeat('sparse'), repeat('L'))
-    #     executor.map(assemble_full_G_smoothing, GG, factor, GG_3D_E, GGnn1_3D_E, repeat(DH.Bmin), repeat(DH.Bmax), repeat('sparse'), repeat('G'))
 
     return WR_3D_E, WRnn1_3D_E, WL_3D_E, WLnn1_3D_E, WG_3D_E, WGnn1_3D_E, nb_mm, lb_max_mm

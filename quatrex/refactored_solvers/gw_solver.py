@@ -14,13 +14,13 @@ def gw_solver(
     coulomb_potential
 ):
 
-    # prepare_greens_function_for_polarisation(G_retarded, G_lesser, G_greater)
+    # prepare_greens_function_for_polarization(G_retarded, G_lesser, G_greater)
             
-    # Polarisation = compute_polarisation(G_retarded, G_lesser, G_greater)
+    # Polarization = compute_polarization(G_retarded, G_lesser, G_greater)
     
     # Symettrizing polarization
         
-    # Screened_interactions = compute_screened_interactions(Polarisation, Screened_interactions)
+    # Screened_interactions = compute_screened_interactions(Polarization, Screened_interactions)
         
     # prepare_greens_function_for_gw_self_energy(Screened_interactions)
 
@@ -31,7 +31,7 @@ def gw_solver(
     pass 
     
     
-def prepare_greens_function_for_polarisation(
+def prepare_greens_function_for_polarization(
     G_retarded,
     G_lesser,
     G_greater
@@ -39,7 +39,7 @@ def prepare_greens_function_for_polarisation(
     pass    
     
     
-def compute_polarisation(
+def compute_polarization(
     G_retarded,
     G_lesser,
     G_greater
@@ -48,7 +48,7 @@ def compute_polarisation(
     
     
 def compute_screened_interactions(
-    Polarisation
+    Polarization
 ):
     pass
 

@@ -19,7 +19,6 @@ from quatrex.utils import utils_gpu
 from quatrex.utils import change_format
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.OMEN_structure_matrices import OMENHamClass
-from quatrex.GreensFunction import calc_GF_pool
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
@@ -380,41 +379,42 @@ if __name__ == "__main__":
 
 
 
-    def greens_function_compute(Sigma_greater, 
-                                Sigma_lesser, 
-                                Sigma_retarded,
-                                energy_loc_batch,
-                                energy_fermi_left, 
-                                energy_fermi_right,
-                                G_greater, 
-                                G_lesser, 
-                                G_retarded, 
-                                G_lesser_transposed
+    def compute_greens_function(
+        Sigma_greater, 
+        Sigma_lesser, 
+        Sigma_retarded,
+        energy_loc_batch,
+        energy_fermi_left, 
+        energy_fermi_right,
+        G_greater, 
+        G_lesser, 
+        G_retarded, 
+        G_lesser_transposed
     ):
         # calculate the green's function at every rank------------------------------
         ne_loc = energy_loc_batch.shape[0]
         
+        
+        # TODO: Move out in config file
         kB = 1.38e-23
         q = 1.6022e-19
-
         UT = kB * temperature_Kelvin / q
-
+        
         vfermi = np.vectorize(fermi_function)
-        fL = vfermi(energy, energy_fermi_left, UT)
-        fR = vfermi(energy, energy_fermi_right, UT)
+        fL = vfermi(energy_loc_batch, energy_fermi_left, UT)
+        fR = vfermi(energy_loc_batch, energy_fermi_right, UT)
         
 
         # initialize the Green's function in block format with zero
-        # number of energy points
-        ne = energy.shape[0]
+
         # number of blocks
         nb = hamiltonian_obj.Bmin.shape[0]
         # length of the largest block
         lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
         # init
-        (gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper) = initialize_block_G(ne, nb, lb)
+        (gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper) = initialize_block_G(ne_loc, nb, lb)
 
-        for ie in range(ne):
+        for ie in range(ne_loc):
             Sigma_lesser[ie] = (Sigma_lesser[ie] - Sigma_lesser[ie].T.conj()) / 2
             Sigma_greater[ie] = (Sigma_greater[ie] - Sigma_greater[ie].T.conj()) / 2
             Sigma_retarded[ie] = np.real(Sigma_retarded[ie]) + (Sigma_greater[ie] - Sigma_lesser[ie]) / 2
@@ -430,7 +430,7 @@ if __name__ == "__main__":
                                                 Sigma_retarded,
                                                 Sigma_lesser,
                                                 Sigma_greater,
-                                                energy,
+                                                energy_loc_batch,
                                                 fL,
                                                 fR,
                                                 blocksize)
@@ -500,10 +500,22 @@ if __name__ == "__main__":
 
 
 
-    def screened_interaction_compute(pgi, pli, pri, energy_loc_batch,
-                                     dosw_loc_batch, nEw_loc_batch, nPw_loc_batch,
-                                     Idx_e_loc_batch, factor_w_loc_batch,
-                                     wgo, wlo, wro, wgto, wlto):
+    def screened_interaction_compute(
+        pgi, 
+        pli, 
+        pri, 
+        energy_loc_batch,
+        dosw_loc_batch, 
+        nEw_loc_batch, 
+        nPw_loc_batch,
+        Idx_e_loc_batch, 
+        factor_w_loc_batch,
+        wgo, 
+        wlo, 
+        wro, 
+        wgto, 
+        wlto
+    ):
 
         ne_loc = energy_loc_batch.shape[0]
         # transform from 2D format to list/vector of sparse arrays format-----------
@@ -515,8 +527,8 @@ if __name__ == "__main__":
             pri[:, :data_shape[0]], rows, columns, nao)
         
         
-        # Symmetrization of Polarisation (TODO: check if this is needed)
-        for ie in range(ne):
+        # Symmetrization of Polarization (TODO: check if this is needed)
+        for ie in range(ne_loc):
             # Anti-Hermitian symmetrizing of PL and PG
             # pl[ie] = 1j * np.imag(pl[ie])
             pl_col_vec[ie] = (pl_col_vec[ie] - pl_col_vec[ie].conj().T) / 2
@@ -620,7 +632,7 @@ if __name__ == "__main__":
                                          comm_unblock=comm_unblock,
                                          distributions_unblock=distributions_unblock_col[:g_num_buffer],
                                          batchsize=batchsize_col,
-                                         iterations=iterations_unblock[1])(greens_function_compute)
+                                         iterations=iterations_unblock[1])(compute_greens_function)
 
     polarization = CommunicateCompute(distributions[:p_num_buffer],
                                       p_num_buffer, "r2c",
