@@ -27,6 +27,16 @@ from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
 
 
+# Import because of refactoring
+from quatrex.GreensFunction.fermi import fermi_function
+from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
+
+
+# Refactored functions
+from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
+
+
+
 if utils_gpu.gpu_avail():
     try:
         from quatrex.GW.polarization.kernel import g2p_gpu
@@ -132,7 +142,7 @@ if __name__ == "__main__":
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
-    temp = 300
+    temperature_Kelvin = 300
     # relative permittivity
     epsR = 2.5
     # DFT Conduction Band Minimum
@@ -367,53 +377,89 @@ if __name__ == "__main__":
         time_alloc_buf += time.perf_counter()
         time_def_func = -time.perf_counter()
 
-    def greens_function_compute(sgi_vec, sli_vec, sri_vec,
-                                energy_loc_batch, dos_loc_batch, nE_loc_batch,
-                                nP_loc_batch, ide_loc_batch, factor_g_loc_batch,
-                                energy_fermi_left, energy_fermi_right,
-                                ggo, glo, gro, glto):
+
+
+
+    def greens_function_compute(Sigma_greater, 
+                                Sigma_lesser, 
+                                Sigma_retarded,
+                                energy_loc_batch,
+                                energy_fermi_left, 
+                                energy_fermi_right,
+                                G_greater, 
+                                G_lesser, 
+                                G_retarded, 
+                                G_lesser_transposed
+    ):
         # calculate the green's function at every rank------------------------------
         ne_loc = energy_loc_batch.shape[0]
-        if args.pool:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi_no_filter(
-                hamiltonian_obj,
-                energy_loc_batch,
-                sri_vec, sli_vec, sgi_vec,
-                energy_fermi_left,
-                energy_fermi_right,
-                temp,
-                dos_loc_batch,
-                nE_loc_batch,
-                nP_loc_batch,
-                ide_loc_batch,
-                factor_g_loc_batch,
-                homogenize=False,
-                mkl_threads=g_mkl_threads,
-                worker_num=g_worker_threads)
-        else:
-            raise ValueError(
-                "Argument error, I will remake this the other option later")
+        
+        kB = 1.38e-23
+        q = 1.6022e-19
 
+        UT = kB * temperature_Kelvin / q
+
+        vfermi = np.vectorize(fermi_function)
+        fL = vfermi(energy, energy_fermi_left, UT)
+        fR = vfermi(energy, energy_fermi_right, UT)
+        
+
+        # initialize the Green's function in block format with zero
+        # number of energy points
+        ne = energy.shape[0]
+        # number of blocks
+        nb = hamiltonian_obj.Bmin.shape[0]
+        # length of the largest block
+        lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+        # init
+        (gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper) = initialize_block_G(ne, nb, lb)
+
+        for ie in range(ne):
+            Sigma_lesser[ie] = (Sigma_lesser[ie] - Sigma_lesser[ie].T.conj()) / 2
+            Sigma_greater[ie] = (Sigma_greater[ie] - Sigma_greater[ie].T.conj()) / 2
+            Sigma_retarded[ie] = np.real(Sigma_retarded[ie]) + (Sigma_greater[ie] - Sigma_lesser[ie]) / 2
+
+
+        blocksize = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+
+        import time
+        time_rgf = -time.perf_counter()
+        greens_function_solver(gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper,
+                                                hamiltonian_obj.Hamiltonian['H_4'],
+                                                hamiltonian_obj.Overlap['H_4'],
+                                                Sigma_retarded,
+                                                Sigma_lesser,
+                                                Sigma_greater,
+                                                energy,
+                                                fL,
+                                                fR,
+                                                blocksize)
+
+        time_rgf += time.perf_counter()
+
+        print("Total Time for rgf section: " + "%.2f" % (time_rgf) + " [s]")
+        
+        
         # lower diagonal blocks from physics identity
         gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
         gl_lower = -gl_upper.conjugate().transpose((0, 1, 3, 2))
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
 
-        ggo[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
+        G_greater[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
                                                                              gg_diag,
                                                                              gg_upper,
                                                                              gg_lower,
                                                                              data_shape[0],
                                                                              ne_loc,
                                                                              energy_contiguous=False)
-        glo[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
+        G_lesser[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
                                                                              gl_diag,
                                                                              gl_upper,
                                                                              gl_lower,
                                                                              data_shape[0],
                                                                              ne_loc,
                                                                              energy_contiguous=False)
-        gro[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
+        G_retarded[:ne_loc, :data_shape[0]] = change_format.block2sparse_energy_alt(*map_,
                                                                              gr_diag,
                                                                              gr_upper,
                                                                              gr_lower,
@@ -421,9 +467,23 @@ if __name__ == "__main__":
                                                                              ne_loc,
                                                                              energy_contiguous=False)
 
-        # calculate the transposed
-        glto[:ne_loc, :data_shape[0]] = np.copy(
-            glo[:ne_loc, :data_shape[0]][:, ij2ji], order="C")
+        # TODO: Remove transposed
+        G_lesser_transposed[:ne_loc, :data_shape[0]] = np.copy(
+            G_lesser[:ne_loc, :data_shape[0]][:, ij2ji], order="C")
+
+
+
+    # TODO: Delete/remove/replace
+    def generator_rgf_Hamiltonian(E, DH, SigR):
+        for i in range(E.shape[0]):
+            yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
+
+    # TODO: Delete/remove/replace
+    def generator_rgf_currentdens_Hamiltonian(E, DH):
+        for i in range(E.shape[0]):
+            yield DH.Hamiltonian['H_4'] - (E[i]) * DH.Overlap['H_4']
+
+
 
 
 
@@ -648,32 +708,13 @@ if __name__ == "__main__":
         EFR_vec[iter_num + 1] = energy_fr
 
         greens_function_inp_block = [*s_col_vec,
-                                     energy_loc,
-                                     dos[distribution.range_local[1]],
-                                     nE[distribution.range_local[1]],
-                                     nP[distribution.range_local[1]],
-                                     ide[distribution.range_local[1]],
-                                     factor_g_loc]
+                                     energy_loc]
         greens_function_inp = [energy_fl, energy_fr]
         # greens_function.compute_communicate(greens_function_inp_block, greens_function_inp)
         greens_function(greens_function_inp_block, greens_function_inp)
 
         # only take part of the greens function
 
-        # # filter out peaks
-        # calc_GF_pool.h2g_observales_mpi(dos[range_local_no_padding[1]],
-        #                                 nE[range_local_no_padding[1]],
-        #                                 nP[range_local_no_padding[1]],
-        #                                 flag_zeros[0:flag_end],
-        #                                 comm, rank, size)
-        # flag_zeros_global = np.empty(
-        #     distribution.shape[1], dtype=flag_zeros.dtype)
-        # distribution.gatherall_col(
-        #     flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
-        # memory_mask = np.where(flag_zeros_global)[0]
-
-        # for i in range(g_num_buffer):
-        #     g_row[i][:, memory_mask] = 0.0
 
         if rank == 0:
             time_g += time.perf_counter()
@@ -700,23 +741,10 @@ if __name__ == "__main__":
         screened_interaction(screened_interaction_inp_block,
                              screened_interaction_inp)
 
-        # filter out peaks
-        # flag_zeros = np.zeros(distribution.count[1])
-        # p2w_cpu.p2w_observales_mpi(dosw[range_local_no_padding[1]],
-        #                            nEw[range_local_no_padding[1]],
-        #                            nPw[range_local_no_padding[1]],
-        #                            flag_zeros[0:flag_end],
-        #                            comm, rank, size)
-        # flag_zeros_global = np.empty(
-        #     distribution.shape[1], dtype=flag_zeros.dtype)
-        # distribution.gatherall_col(
-        #     flag_zeros, flag_zeros_global, otype=flag_zeros.dtype)
-        memory_mask = np.ones(distribution.shape[1], dtype=bool)
-        # memory_mask[np.where(flag_zeros_global)[0]] = False
 
         for i in range(w_num_buffer):
-            w_row[i][:, memory_mask] = (
-                1.0 - mem_w) * w_row_tmp[i][:, memory_mask] + mem_w * w_row[i][:, memory_mask]
+            w_row[i][:, :] = (
+                1.0 - mem_w) * w_row_tmp[i] + mem_w * w_row[i]
 
         if rank == 0:
             time_w += time.perf_counter()
