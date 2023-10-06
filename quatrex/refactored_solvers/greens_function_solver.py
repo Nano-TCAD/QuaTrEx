@@ -32,7 +32,6 @@ def compute_observables(
 
 
 
-# greens_function_solver.py
 def greens_function_solver(
         G_retarded_diagblocks : np.ndarray, 
         G_retarded_upper_blocks : np.ndarray, 
@@ -64,32 +63,18 @@ def greens_function_solver(
 
         
         apply_boundary_conditions(M, 
-                                    Self_energy_lesser[i],
-                                    Self_energy_greater[i],
-                                    Self_energy_retarded_left_boundary,
-                                    Self_energy_retarded_right_boundary,
-                                    fermi_distribution_left[i],
-                                    fermi_distribution_right[i],
-                                    blocksize)
+                                  Self_energy_lesser[i],
+                                  Self_energy_greater[i],
+                                  Self_energy_retarded_left_boundary,
+                                  Self_energy_retarded_right_boundary,
+                                  fermi_distribution_left[i],
+                                  fermi_distribution_right[i],
+                                  blocksize)
         
         G_retarded = np.linalg.inv(M.toarray())
         
-
-        #cut_to_tridiag(G_retarded, blocksize)
-                    
-
-        
-
         G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i], blocksize)
 
-        # plt.matshow(np.abs(Self_energy_lesser[i].toarray()))          
-        # plt.matshow(np.abs(Self_energy_greater[i].toarray()))
-        # plt.matshow(np.abs(G_lesser))          
-        # plt.matshow(np.abs(G_greater))
-        # plt.show()            
-        
-        # while True:
-        #     pass
         
         # Extract the blocks from G_retarded, G_lesser, G_greater and store them in the corresponding arrays
         number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
@@ -103,6 +88,7 @@ def greens_function_solver(
             G_retarded_upper_blocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
             G_lesser_upperblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
             G_greater_upperblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+
 
 
 def compute_open_boundary_condition(

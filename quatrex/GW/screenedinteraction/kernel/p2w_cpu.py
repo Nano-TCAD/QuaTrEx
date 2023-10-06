@@ -214,7 +214,6 @@ def p2w_pool_mpi_cpu_no_filter(
     idx_e: npt.NDArray[np.int32],
     factor: npt.NDArray[np.float64],
     nbc,
-    homogenize: bool = False,
     mkl_threads: int = 1,
     worker_num: int = 1,
     block_inv: bool = False,
@@ -250,6 +249,8 @@ def p2w_pool_mpi_cpu_no_filter(
     Diagonal/Upper block tensor (#blocks, blocksize, blocksize) of greater, lesser, retarded screened interaction.
     Number of blocks and block size after matrix multiplication
     """
+    
+    
     # number of energy points
     ne = energy.shape[0]
 
@@ -273,32 +274,21 @@ def p2w_pool_mpi_cpu_no_filter(
 
     # create empty buffer for screened interaction
     # in block format
-    wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
+    
+    Screened_interactions_retarded_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_retarded_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_lesser_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_lesser_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_greater_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_greater_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    
+    
     xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
     # set number of mkl threads
     mkl.set_num_threads(mkl_threads)
 
-    for ie in range(ne):
-        # Anti-Hermitian symmetrizing of PL and PG
-        # pl[ie] = 1j * np.imag(pl[ie])
-        pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
-
-        # pg[ie] = 1j * np.imag(pg[ie])
-        pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
-
-        # PR has to be derived from PL and PG and then has to be symmetrized
-        pr[ie] = (pg[ie] - pl[ie]) / 2
-        # pr[ie] = (pr[ie] + pr[ie].T) / 2
-        if homogenize:
-            pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
-            pl[ie] = homogenize_matrix(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'L')
-            pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'G')
 
     # Create a process pool with num_worker workers
-
     ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
@@ -308,16 +298,16 @@ def p2w_pool_mpi_cpu_no_filter(
             repeat(vh),
             pg, pl, pr,
             repeat(bmax), repeat(bmin),
-            wg_diag, wg_upper,
-            wl_diag, wl_upper,
-            wr_diag, wr_upper,
+            Screened_interactions_greater_diag, Screened_interactions_greater_upper,
+            Screened_interactions_lesser_diag, Screened_interactions_lesser_upper,
+            Screened_interactions_retarded_diag, Screened_interactions_retarded_upper,
             xr_diag, dosw, new, npw, repeat(nbc),
             idx_e, factor,
             repeat(block_inv),
             repeat(use_dace),
             repeat(validate_dace), repeat(ref_flag))
 
-    return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm
+    return Screened_interactions_greater_diag, Screened_interactions_greater_upper, Screened_interactions_lesser_diag, Screened_interactions_lesser_upper, Screened_interactions_retarded_diag, Screened_interactions_retarded_upper, nb_mm, lb_max_mm
 
 
 def p2w_observales_mpi(dosw, new, npw, flag_zeros, comm, rank, size):

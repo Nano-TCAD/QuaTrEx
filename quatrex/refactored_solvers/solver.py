@@ -23,13 +23,12 @@ class Solver:
         Hamiltonian : np.ndarray,
         Overlap_matrix : np.ndarray,
     ):
+        pass
+        #System_matrix = compute_obc(Hamiltonian, Overlap_matrix)
         
-        G_retarded, G_lesser, G_greater = greens_function_solver.greens_function_solver(Hamiltonian, Overlap_matrix, 0)
+        #RHS = compute_rhs(System_matrix, energy_array)
         
-        # _compute_current()
-        # _compute_electron_density()
-        # _compute_hole_density()
-        # _compute_density_of_states()
+        #observables = solve_linear_system(System_matrix, RHS)
         
         # return status
     
@@ -76,18 +75,6 @@ class Solver:
         
         # return status
         
-        
-    # Getters for computed observables
-    def get_current(
-        self
-    ) -> np.ndarray:
-        
-        current : np.ndarray
-    
-        # Compute current
-    
-        return current
-    
     
     def get_electron_density(
         self
@@ -174,3 +161,18 @@ class Solver:
     
     energy_array : np.ndarray
     
+    
+    
+    
+    
+class utility_interface:
+    
+    def computing_connectivity_matrix(
+        self,
+        Atoms_positions,
+        radius,
+    ):
+        """ Connectivity matrix contains information about which intereactions 
+        between wich elements are considered.
+        """
+        pass

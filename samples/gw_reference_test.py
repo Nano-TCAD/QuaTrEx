@@ -425,6 +425,8 @@ if __name__ == "__main__":
         glto[:ne_loc, :data_shape[0]] = np.copy(
             glo[:ne_loc, :data_shape[0]][:, ij2ji], order="C")
 
+
+
     def polarization_compute(ggi, gli, gri, glti, pgo, plo, pro):
         no_loc = gri.shape[0]
         if args.type in ("gpu"):
@@ -435,6 +437,8 @@ if __name__ == "__main__":
                 pre_factor, ggi[:, :data_shape[1]], gli[:, :data_shape[1]], gri[:, :data_shape[1]], glti[:, :data_shape[1]])
         else:
             raise ValueError("Argument error, input type not possible")
+
+
 
     def screened_interaction_compute(pgi, pli, pri, energy_loc_batch,
                                      dosw_loc_batch, nEw_loc_batch, nPw_loc_batch,
@@ -449,7 +453,21 @@ if __name__ == "__main__":
             pli[:, :data_shape[0]], rows, columns, nao)
         pr_col_vec = change_format.sparse2vecsparse_v2(
             pri[:, :data_shape[0]], rows, columns, nao)
+        
+        
+        # Symmetrization of Polarisation (TODO: check if this is needed)
+        for ie in range(ne):
+            # Anti-Hermitian symmetrizing of PL and PG
+            # pl[ie] = 1j * np.imag(pl[ie])
+            pl_col_vec[ie] = (pl_col_vec[ie] - pl_col_vec[ie].conj().T) / 2
 
+            # pg[ie] = 1j * np.imag(pg[ie])
+            pg_col_vec[ie] = (pg_col_vec[ie] - pg_col_vec[ie].conj().T) / 2
+            
+            # PR has to be derived from PL and PG and then has to be symmetrized
+            pr_col_vec[ie] = (pg_col_vec[ie] - pl_col_vec[ie]) / 2      
+        
+        
         # calculate the screened interaction on every rank--------------------------
         if args.pool:
             wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu_no_filter(
@@ -465,15 +483,16 @@ if __name__ == "__main__":
                 Idx_e_loc_batch,
                 factor_w_loc_batch,
                 nbc,
-                homogenize=False,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads)
         else:
             raise ValueError(
                 "Argument error, I will remake this the other option later")
 
-        # transform from block format to 2D format-----------------------------------
-        # lower diagonal blocks from physics identity
+        # Flattening from [E, bblocks, blocksize, blocksize] -> [ij, E]
+        
+        # Production of lower blocks through symmetry from upper blocks computed 
+        # in RGF
         wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
         wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
         wr_lower = wr_upper.transpose((0, 1, 3, 2))
