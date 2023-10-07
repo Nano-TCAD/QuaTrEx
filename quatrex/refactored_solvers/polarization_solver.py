@@ -6,9 +6,9 @@ from numpy import fft
 
 
 def compute_polarization(
-    G_lesser,
-    G_greater,
-    delta_energy,
+    G_lesser: np.ndarray,
+    G_greater: np.ndarray,
+    delta_energy: float,
 ):
     scaling_factor = -1.0j * delta_energy / (np.pi)
     number_of_energy_points = G_greater.shape[1]
