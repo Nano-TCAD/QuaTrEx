@@ -18,8 +18,8 @@ def load_x(
 
     Args:
         path (str): filepath to .mat file
-        tensor_name (str): can be either "g"/"p"/"w"/"s" to read 
-        Green's Function, Polarization, W, Sigma
+        tensor_name (str): can be either "g"/"p"/"w"/"s"
+        Green's Function, Polarization, W, Sigma respectively
 
     Returns:
         typing.Tuple[ 

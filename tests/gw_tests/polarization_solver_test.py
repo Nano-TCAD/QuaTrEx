@@ -7,13 +7,13 @@ import numpy as np
 import pytest
 
 @pytest.mark.parametrize(
-    ", path_reference_solution",
+    "path_reference_solution",
     [
         ("/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_no_filter.mat"),
         ("/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2_no_filter.mat"),
     ]
 )
-def test_polarization(
+def test_compute_polarization(
     path_reference_solution: str
 ):
     # load reference solution

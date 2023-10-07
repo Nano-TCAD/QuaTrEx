@@ -420,7 +420,6 @@ def gw2s_fft_mpi_cpu_PI_sr(
     wg_full_t = linalg_cpu.fft_numba(wg_full, ne2_full, no)
     wl_t = linalg_cpu.fft_numba(wl, ne2, no)
     wl_full_t = linalg_cpu.fft_numba(wl_full, ne2_full, no)
-    wr_t = linalg_cpu.fft_numba(wr, ne2, no)
     wg_transposed_t = linalg_cpu.fft_numba(wg_transposed, ne2, no)
     wl_transposed_t = linalg_cpu.fft_numba(wl_transposed, ne2, no)
 
@@ -436,8 +435,8 @@ def gw2s_fft_mpi_cpu_PI_sr(
     # sr_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gl_t, wr_t) + linalg_cpu.elementmul(gr_t, wr_t)
     # sr_2part_a_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gg_t, wr_t)
     # sr_2part_b_t_1 = linalg_cpu.elementmul(gr_t, wg_t) + linalg_cpu.elementmul(gl_t, wr_t)
-    # time reverse
-    wr_t_mod = linalg_cpu.reversal(wr_t)
+
+
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation

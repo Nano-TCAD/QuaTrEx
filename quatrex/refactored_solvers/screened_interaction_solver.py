@@ -7,7 +7,7 @@ from quatrex.refactored_solvers.open_boundary_conditions import compute_open_bou
 
 
 
-def screened_interactions_solver(
+def screened_interaction_solver(
     Coulomb_matrix: csr_matrix,
     Polarization_greater: csr_matrix,
     Polarization_lesser: csr_matrix,

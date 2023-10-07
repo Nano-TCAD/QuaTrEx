@@ -30,6 +30,7 @@ from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
 from quatrex.refactored_solvers.polarization_solver import compute_polarization
+from quatrex.refactored_solvers.gw_self_energy_solver import compute_gw_self_energy
 
 
 
@@ -52,18 +53,20 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
-    gw_num_iter = 1
+    gw_num_iter = 2
     is_padded = False
     comm_unblock = False
     save_result = False
     num_energy = 31
-
+    # memory factors for Self-Energy, Green's Function and Screened interaction
+    mem_s = 0.5
+    mem_w = 0.1
 
     if rank == 0:
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
 
-    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2_no_filter.mat"
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_.mat"
 
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
@@ -195,12 +198,6 @@ if __name__ == "__main__":
     # energy depenedent pre-factors
     factor_w = np.ones(ne)
     factor_g = np.ones(ne)
-
-    # memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.5
-    # todo
-    # mem_g = 0.0
-    mem_w = 0.1
 
     # maps to transform after rgf for g and w
     map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(
@@ -427,8 +424,6 @@ if __name__ == "__main__":
 
         blocksize = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
 
-        import time
-        time_rgf = -time.perf_counter()
         greens_function_solver(gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper,
                                                 hamiltonian_obj.Hamiltonian['H_4'],
                                                 hamiltonian_obj.Overlap['H_4'],
@@ -440,9 +435,6 @@ if __name__ == "__main__":
                                                 fR,
                                                 blocksize)
 
-        time_rgf += time.perf_counter()
-
-        print("Total Time for rgf section: " + "%.2f" % (time_rgf) + " [s]")
         
         
         # lower diagonal blocks from physics identity
@@ -501,14 +493,7 @@ if __name__ == "__main__":
     ):
         
         number_of_orbitals = G_retarded.shape[0]
-        
-        # (Polarization_greater[:number_of_orbitals, :number_of_energy_points],
-        # Polarization_lesser[:number_of_orbitals, :number_of_energy_points],
-        # Polarization_retarded[:number_of_orbitals, :number_of_energy_points]) = g2p_cpu.g2p_fft_mpi_cpu_inlined(
-        #     pre_factor,
-        #     G_greater[:, :number_of_energy_points], G_lesser[:, :number_of_energy_points],
-        #     G_retarded[:, :number_of_energy_points], glti[:, :number_of_energy_points])
-        
+
         # Input matrices can be padded, but the output matrices are not padded
         # Output matrices could be bigger for nonblocking communication than input matrices
         (Polarization_greater[:number_of_orbitals, :number_of_energy_points],
@@ -518,22 +503,20 @@ if __name__ == "__main__":
                                                             delta_energy)
         
 
-
-
     def screened_interaction_compute(
-        pgi, 
-        pli, 
-        pri, 
+        pgi,
+        pli,
+        pri,
         energy_loc_batch,
-        dosw_loc_batch, 
-        nEw_loc_batch, 
+        dosw_loc_batch,
+        nEw_loc_batch,
         nPw_loc_batch,
-        Idx_e_loc_batch, 
+        Idx_e_loc_batch,
         factor_w_loc_batch,
-        wgo, 
-        wlo, 
-        wro, 
-        wgto, 
+        wgo,
+        wlo,
+        wro,
+        wgto,
         wlto
     ):
 
@@ -622,24 +605,36 @@ if __name__ == "__main__":
         wlto[:ne_loc, :data_shape[0]] = np.copy(
             wlo[:ne_loc, :data_shape[0]][:, ij2ji], order="C")
 
-    def selfenergy_compute(G_greater, G_lesser, G_retarded, wgi, wli, wri, wgti, wlti, vh_pi,  sgo, slo, sro):
+    def selfenergy_compute(
+            G_greater,
+            G_lesser,
+            G_retarded,
+            Screened_interaction_greater,
+            Screened_interaction_lesser,
+            Screened_interaction_retarded,
+            wgti,
+            wlti,
+            Coulomb_matrix,
+            number_of_energy_points,
+            Sigma_greater,
+            Sigma_lesser,
+            Sigma_retarded
+    ):
         # todo optimize and not load two time green's function to gpu and do twice the fft
         number_of_orbitals = G_retarded.shape[0]
-        if args.type in ("gpu"):
-            sg_tmp, sl_tmp, sr_tmp = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
-                -pre_factor / 2, G_greater[:, :data_shape[1]], G_lesser[:,
-                                                             :data_shape[1]], G_retarded[:, :data_shape[1]],
-                wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti, wlti)
-        elif args.type in ("cpu"):
-            sg_tmp, sl_tmp, sr_tmp = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(
-                -pre_factor / 2, G_greater[:, :data_shape[1]], G_lesser[:,
-                                                             :data_shape[1]], G_retarded[:, :data_shape[1]],
-                wgi[:, :data_shape[1]], wli[:, :data_shape[1]], wri[:, :data_shape[1]], wgti[:, :data_shape[1]], wlti[:, :data_shape[1]], vh_pi, energy)
-        else:
-            raise ValueError("Argument error, input type not possible")
-        sgo[:number_of_orbitals, :data_shape[1]] = sg_tmp
-        slo[:number_of_orbitals, :data_shape[1]] = sl_tmp
-        sro[:number_of_orbitals, :data_shape[1]] = sr_tmp
+
+        (Sigma_greater[:number_of_orbitals, :number_of_energy_points],
+         Sigma_lesser[:number_of_orbitals, :number_of_energy_points],
+         Sigma_retarded[:number_of_orbitals, :number_of_energy_points]) = compute_gw_self_energy(
+            G_lesser[:, :number_of_energy_points],
+            G_greater[:, :number_of_energy_points],
+            Screened_interaction_lesser[:, :number_of_energy_points],
+            Screened_interaction_greater[:, :number_of_energy_points],
+            Coulomb_matrix,
+            delta_energy)
+
+
+
 
     # create communication wrapped functions
     greens_function = CommunicateCompute(distributions[:g_num_buffer],
@@ -739,11 +734,10 @@ if __name__ == "__main__":
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
 
-        greens_function_inp_block = [*s_col_vec,
+        greens_function_inputs_to_slice = [*s_col_vec,
                                      energy_loc]
-        greens_function_inp = [energy_fl, energy_fr]
-        # greens_function.compute_communicate(greens_function_inp_block, greens_function_inp)
-        greens_function(greens_function_inp_block, greens_function_inp)
+        greens_function_inputs = [energy_fl, energy_fr]
+        greens_function(greens_function_inputs_to_slice, greens_function_inputs)
 
         # only take part of the greens function
 
@@ -753,25 +747,25 @@ if __name__ == "__main__":
             time_p = -time.perf_counter()
 
         # calculate and communicate the polarization----------------------------------
-        polarization_inp_block = [*g_row]
-        polarization_inp = [data_shape[1]]
-        polarization(polarization_inp_block, polarization_inp)
+        polarization_inputs_to_slice = [*g_row]
+        polarization_inputs = [data_shape[1]]
+        polarization(polarization_inputs_to_slice, polarization_inputs)
 
         if rank == 0:
             time_p += time.perf_counter()
             time_w = -time.perf_counter()
 
         # calculate and communicate the screened interaction----------------------------------
-        screened_interaction_inp_block = [*p_col,
+        screened_interaction_inputs_to_slice = [*p_col,
                                           energy_loc,
                                           dosw[distribution.range_local[1]],
                                           nEw[distribution.range_local[1]],
                                           nPw[distribution.range_local[1]],
                                           Idx_e_loc,
                                           factor_w_loc]
-        screened_interaction_inp = []
-        screened_interaction(screened_interaction_inp_block,
-                             screened_interaction_inp)
+        screened_interaction_inputs = []
+        screened_interaction(screened_interaction_inputs_to_slice,
+                             screened_interaction_inputs)
 
 
         for i in range(w_num_buffer):
@@ -783,9 +777,9 @@ if __name__ == "__main__":
             time_s = -time.perf_counter()
 
         # compute and communicate the self-energy------------------------------------
-        selfenergy_inp_block = [*g_row[:gw_num_buffer], *w_row, vh_loc]
-        selfenergy_inp = []
-        selfenergy(selfenergy_inp_block, selfenergy_inp)
+        selfenergy_inputs_to_slice = [*g_row[:gw_num_buffer], *w_row, vh_loc]
+        selfenergy_inputs = [data_shape[1]]
+        selfenergy(selfenergy_inputs_to_slice, selfenergy_inputs)
 
         # only take part of the self energy
         for i in range(gw_num_buffer):
@@ -852,6 +846,7 @@ if __name__ == "__main__":
         for item in matrices_global.items():
             matrices_global_save[item[0]
                                  ] = item[1][:data_shape[0], :data_shape[1]]
+        matrices_global_save["vh"] = vh1d
         read_solution.save_all(energy, rows, columns, bmax,
                                bmin, save_path, **matrices_global_save)
 
