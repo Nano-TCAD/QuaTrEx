@@ -9,11 +9,11 @@ class Solver:
     def __init__(
         self,
         energy_range : [float, float],
-        number_of_energy_point : int,
+        number_of_energy_points : int,
         current_convergence_threshold : float,
     ):
         # _init_greens_function_storage()
-        # _compute_energy_array(energy_range, number_of_energy_point)
+        # _compute_energy_array(energy_range, number_of_energy_points)
         
         pass
     
@@ -147,7 +147,7 @@ class Solver:
     def _compute_energy_array(
         self,
         energy_range : [float, float],
-        number_of_energy_point : int
+        number_of_energy_points : int
     ):
         # Compute energy_array
         # Log to user: energy resoltion

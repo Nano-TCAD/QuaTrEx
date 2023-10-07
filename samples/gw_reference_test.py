@@ -63,7 +63,7 @@ if __name__ == "__main__":
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
 
-    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_no_filter.mat"
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2_no_filter.mat"
 
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
@@ -77,9 +77,7 @@ if __name__ == "__main__":
     # gw matrices path
     # solution_path_gw = os.path.join(
     #    solution_path, "data_GPWS_big_memory1_InAs_0V.mat")
-    # solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy.mat"
-    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1.mat"
-    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_no_filter.mat"
+    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter" + str(gw_num_iter) + "_no_filter.mat"
 
     parser = argparse.ArgumentParser(
         description="Reference test of GW iterations with MPI+CUDA")
@@ -160,8 +158,8 @@ if __name__ == "__main__":
 
     energy = np.linspace(-10.0, 5.0, num_energy, endpoint=True,
                          dtype=float)
-    denergy = energy[1] - energy[0]
-    pre_factor = -1.0j * denergy / (np.pi)
+    delta_energy = energy[1] - energy[0]
+    pre_factor = -1.0j * delta_energy / (np.pi)
     hamiltonian_obj = OMENHamClass.Hamiltonian(
         args.file_hm, no_orb, Vappl=Vappl, rank=rank)
     # broadcast hamiltonian object
@@ -379,7 +377,12 @@ if __name__ == "__main__":
         time_def_func = -time.perf_counter()
 
 
-
+    # define functions------------------------------------------------------------
+    # in the following functions which will be wrapped with Communications
+    # input argument order matters:
+    #  1. input matrices which are ij/E sized (have to be sliced for nonblocking communication)
+    #  2. other inputs which are "static" (not sliced for nonblocking communication)
+    #  3. output matrices which are communicated
 
     def compute_greens_function(
         Sigma_greater, 
@@ -486,31 +489,33 @@ if __name__ == "__main__":
             yield DH.Hamiltonian['H_4'] - (E[i]) * DH.Overlap['H_4']
 
 
-
-
-
     def polarization_compute(
-        G_greater, 
-        G_lesser, 
-        G_retarded, 
-        glti, 
-        Polarization_greater, 
-        Polarization_lesser, 
-        Polarization_retarded
+        G_greater,
+        G_lesser,
+        G_retarded,
+        glti,
+        number_of_energy_points,
+        Polarization_greater,
+        Polarization_lesser,
+        Polarization_retarded,
     ):
         
         number_of_orbitals = G_retarded.shape[0]
         
-        (Polarization_greater[:number_of_orbitals, :data_shape[1]],
-        Polarization_lesser[:number_of_orbitals, :data_shape[1]],
-        Polarization_retarded[:number_of_orbitals, :data_shape[1]]) = g2p_cpu.g2p_fft_mpi_cpu_inlined(
-            pre_factor, G_greater[:, :data_shape[1]], G_lesser[:, :data_shape[1]], G_retarded[:, :data_shape[1]], glti[:, :data_shape[1]])
+        # (Polarization_greater[:number_of_orbitals, :number_of_energy_points],
+        # Polarization_lesser[:number_of_orbitals, :number_of_energy_points],
+        # Polarization_retarded[:number_of_orbitals, :number_of_energy_points]) = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+        #     pre_factor,
+        #     G_greater[:, :number_of_energy_points], G_lesser[:, :number_of_energy_points],
+        #     G_retarded[:, :number_of_energy_points], glti[:, :number_of_energy_points])
         
-        
-        """ Polarization_greater[:number_of_orbitals, :data_shape[1]], 
-        Polarization_lesser[:number_of_orbitals, :data_shape[1]], 
-        Polarization_retarded[:number_of_orbitals, :data_shape[1]] = compute_polarization(
-            G_greater[:, :data_shape[1]], G_lesser[:, :data_shape[1]], G_retarded[:, :data_shape[1]], denergy) """
+        # Input matrices can be padded, but the output matrices are not padded
+        # Output matrices could be bigger for nonblocking communication than input matrices
+        (Polarization_greater[:number_of_orbitals, :number_of_energy_points],
+        Polarization_lesser[:number_of_orbitals, :number_of_energy_points]) = compute_polarization(
+                                                            G_lesser[:, :number_of_energy_points],
+                                                            G_greater[:, :number_of_energy_points],
+                                                            delta_energy)
         
 
 
@@ -749,7 +754,7 @@ if __name__ == "__main__":
 
         # calculate and communicate the polarization----------------------------------
         polarization_inp_block = [*g_row]
-        polarization_inp = []
+        polarization_inp = [data_shape[1]]
         polarization(polarization_inp_block, polarization_inp)
 
         if rank == 0:
@@ -866,6 +871,9 @@ if __name__ == "__main__":
         reltol = 1e-1
         for gw_type in gw_types:
             for gw_name in gw_names:
+                if gw_name + gw_type == "pr":
+                    # is not computed anymore, but only derived from greater and lesser polarization
+                    continue
                 assert difference[gw_name + gw_type] <= abstol + reltol * \
                     np.linalg.norm(matrices_gold[gw_name + gw_type])
                 assert np.allclose(matrices_global[gw_name + gw_type][:data_shape[0], :data_shape[1]],
