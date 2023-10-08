@@ -10,35 +10,35 @@ from quatrex.refactored_solvers.open_boundary_conditions import compute_open_bou
 
 # To move into solver method
 def compute_observables(
-    G_retarded_diagblocks : np.ndarray, 
-    G_lesser_diagblocks : np.ndarray,  
-    G_greater_diagblocks : np.ndarray
+    G_retarded_diag_blocks : np.ndarray, 
+    G_lesser_diag_blocks : np.ndarray,  
+    G_greater_diag_blocks : np.ndarray
 ):
-    number_of_blocks = G_retarded_diagblocks.shape[1]
-    number_of_energy_points = G_retarded_diagblocks.shape[0]
+    number_of_blocks = G_retarded_diag_blocks.shape[1]
+    number_of_energy_points = G_retarded_diag_blocks.shape[0]
     
-    density_of_states = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diagblocks.dtype)
-    electron_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diagblocks.dtype)
-    hole_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diagblocks.dtype)
-    current_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diagblocks.dtype)
+    density_of_states = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
+    electron_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
+    hole_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
+    current_density = np.zeros((number_of_energy_points,number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
     
     for i in range(number_of_energy_points):
         for j in range(number_of_blocks):
-            density_of_states[i,j] = 1j * np.trace(G_retarded_diagblocks[i,j] - G_retarded_diagblocks[i,j].T.conj())
-            electron_density[i,j] = -1j * np.trace(G_lesser_diagblocks[i,j])
-            hole_density[i,j] = 1j * np.trace(G_greater_diagblocks[i,j])
-            # current_density[i,j] = np.real(np.trace(G_lesser_diagblocks[i,j] - G_greater_diagblocks[i,j])) TODO Correct this formula
+            density_of_states[i,j] = 1j * np.trace(G_retarded_diag_blocks[i,j] - G_retarded_diag_blocks[i,j].T.conj())
+            electron_density[i,j] = -1j * np.trace(G_lesser_diag_blocks[i,j])
+            hole_density[i,j] = 1j * np.trace(G_greater_diag_blocks[i,j])
+            # current_density[i,j] = np.real(np.trace(G_lesser_diag_blocks[i,j] - G_greater_diag_blocks[i,j])) TODO Correct this formula
 
 
 
 
 def greens_function_solver(
-        G_retarded_diagblocks : np.ndarray, 
-        G_retarded_upper_blocks : np.ndarray, 
-        G_lesser_diagblocks : np.ndarray, 
-        G_lesser_upperblocks : np.ndarray, 
-        G_greater_diagblocks : np.ndarray, 
-        G_greater_upperblocks : np.ndarray,
+        G_retarded_diag_blocks : np.ndarray,
+        G_retarded_upper_blocks : np.ndarray,
+        G_lesser_diag_blocks : np.ndarray,
+        G_lesser_upper_blocks : np.ndarray,
+        G_greater_diag_blocks : np.ndarray,
+        G_greater_upper_blocks : np.ndarray,
         Hamiltonian : csr_matrix,
         Overlap_matrix : csr_matrix,
         Self_energy_retarded : csr_matrix,
@@ -81,14 +81,14 @@ def greens_function_solver(
         number_of_blocks = int(Hamiltonian.shape[0] / blocksize)
         
         for j in range(number_of_blocks):
-            G_retarded_diagblocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
-            G_lesser_diagblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
-            G_greater_diagblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+            G_retarded_diag_blocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+            G_lesser_diag_blocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+            G_greater_diag_blocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
 
         for j in range(number_of_blocks-1):
             G_retarded_upper_blocks[i,j] = G_retarded[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
-            G_lesser_upperblocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
-            G_greater_upperblocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+            G_lesser_upper_blocks[i,j] = G_lesser[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
+            G_greater_upper_blocks[i,j] = G_greater[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
 
 
         
