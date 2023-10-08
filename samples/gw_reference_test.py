@@ -382,15 +382,15 @@ if __name__ == "__main__":
     #  3. output matrices which are communicated
 
     def compute_greens_function(
-        Sigma_greater, 
-        Sigma_lesser, 
+        Sigma_greater,
+        Sigma_lesser,
         Sigma_retarded,
         energy_loc_batch,
-        energy_fermi_left, 
+        energy_fermi_left,
         energy_fermi_right,
-        G_greater, 
-        G_lesser, 
-        G_retarded, 
+        G_greater,
+        G_lesser,
+        G_retarded,
         G_lesser_transposed
     ):
         # calculate the green's function at every rank------------------------------
@@ -416,7 +416,9 @@ if __name__ == "__main__":
         # init
         (gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper) = initialize_block_G(ne_loc, nb, lb)
 
+        # cannot be put into the self-energy kernel because transposed is needed
         for ie in range(ne_loc):
+            # symmetrize (lesser and greater have to be skewed symmetric)
             Sigma_lesser[ie] = (Sigma_lesser[ie] - Sigma_lesser[ie].T.conj()) / 2
             Sigma_greater[ie] = (Sigma_greater[ie] - Sigma_greater[ie].T.conj()) / 2
             Sigma_retarded[ie] = np.real(Sigma_retarded[ie]) + (Sigma_greater[ie] - Sigma_lesser[ie]) / 2
@@ -545,7 +547,7 @@ if __name__ == "__main__":
         
         # calculate the screened interaction on every rank--------------------------
         if args.pool:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w_pool_mpi_cpu_no_filter(
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, _, _ = p2w_cpu.p2w(
                 hamiltonian_obj,
                 energy_loc_batch,
                 pg_col_vec,
@@ -557,9 +559,7 @@ if __name__ == "__main__":
                 nPw_loc_batch,
                 Idx_e_loc_batch,
                 factor_w_loc_batch,
-                nbc,
-                mkl_threads=w_mkl_threads,
-                worker_num=w_worker_threads)
+                nbc)
         else:
             raise ValueError(
                 "Argument error, I will remake this the other option later")
