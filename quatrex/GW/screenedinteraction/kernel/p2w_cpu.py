@@ -6,6 +6,8 @@ import typing
 import numpy.typing as npt
 from quatrex.block_tri_solvers import rgf_W
 
+from quatrex.refactored_solvers.screened_interaction_solver import screened_interaction_solver
+
 def p2w(
     hamiltionian_obj: object,
     energy: npt.NDArray[np.float64],

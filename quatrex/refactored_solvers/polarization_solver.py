@@ -15,6 +15,7 @@ def compute_polarization(
 
     # fft
     G_greater_fourier = fft.fft(G_greater, n=2*number_of_energy_points)
+
     # G_lesser is skewed symmetric
     G_lesser_transposed_fourier = fft.fft(-G_lesser.conj(), n=2*number_of_energy_points)
 
@@ -28,6 +29,7 @@ def compute_polarization(
 
     # ifft
     Polarization_greater = fft.ifft(Polarization_greater_fourier)
+
     # multiply with scaling factor
     Polarization_greater = scaling_factor * Polarization_greater
 

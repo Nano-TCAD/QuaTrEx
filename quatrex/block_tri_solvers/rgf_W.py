@@ -371,300 +371,301 @@ def rgf_w(
 
         # add OBC corrections to the start and end block
         M_retarded[-blocksize_after_mm:, -blocksize_after_mm:] += M_retarded_right_BC_block
-        L_greater[-blocksize_after_mm:, -blocksize_after_mm:] += L_greater_right_BC_block
-        L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] += L_lesser_right_BC_block
-        Coulomb_matrix_copy[-blocksize_after_mm:, -blocksize_after_mm:] -= Coulomb_matrix_right_BC_block
-
-        L_greater[:blocksize_after_mm, :blocksize_after_mm] += L_greater_left_BC_block
-        L_lesser[:blocksize_after_mm, :blocksize_after_mm] += L_lesser_left_BC_block
-        Coulomb_matrix_copy[:blocksize_after_mm, :blocksize_after_mm] -= Coulomb_matrix_left_BC_block
         M_retarded[:blocksize_after_mm, :blocksize_after_mm] += M_retarded_left_BC_block
 
+        L_greater[:blocksize_after_mm, :blocksize_after_mm] += L_greater_left_BC_block
+        L_greater[-blocksize_after_mm:, -blocksize_after_mm:] += L_greater_right_BC_block
+        
+        L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] += L_lesser_right_BC_block
+        L_lesser[:blocksize_after_mm, :blocksize_after_mm] += L_lesser_left_BC_block
+        
+        Coulomb_matrix_copy[-blocksize_after_mm:, -blocksize_after_mm:] -= Coulomb_matrix_right_BC_block
+        Coulomb_matrix_copy[:blocksize_after_mm, :blocksize_after_mm] -= Coulomb_matrix_left_BC_block
+        
+
+        # System_matrix_invert = np.linalg.inv(M_retarded.toarray())
+        # Screened_interaction_retarded = System_matrix_invert @ Coulomb_matrix_copy
+        # Screened_interaction_lesser = System_matrix_invert @ L_lesser @ System_matrix_invert.conjugate().transpose()
+        # Screened_interaction_greater = System_matrix_invert @ L_greater @ Screened_interaction_retarded.conjugate().transpose()
+
+        # # extract the diagonal and upper diagonal blocks from the screened interaction retarded, lesser and greater
+        # # and store them in the corresponding arrays
+        # for j in range(number_of_blocks_after_mm):
+        #     wr_diag[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+        #     wl_diag[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+        #     wg_diag[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+
+        # for j in range(number_of_blocks_after_mm-1):
+        #     wr_upper[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
+        #     wl_upper[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
+        #     wg_upper[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
 
 
-        System_matrix_invert = np.linalg.inv(M_retarded.toarray())
-        Screened_interaction_retarded = System_matrix_invert @ Coulomb_matrix
-        Screened_interaction_lesser = System_matrix_invert @ L_lesser @ System_matrix_invert.conjugate().transpose()
-        Screened_interaction_greater = System_matrix_invert @ L_greater @ Screened_interaction_retarded.conjugate().transpose()
-
-        # extract the diagonal and upper diagonal blocks from the screened interaction retarded, lesser and greater
-        # and store them in the corresponding arrays
-        for j in range(number_of_blocks_after_mm):
-            wr_diag[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
-            wl_diag[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
-            wg_diag[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
-
-        for j in range(number_of_blocks_after_mm-1):
-            wr_upper[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
-            wl_upper[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
-            wg_upper[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
-
-
-        # # create buffer for results
-        # # not true inverse, but build up inverses from either corner
-        # xr_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
-        # wg_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
-        # wl_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
-        # wr_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+        # create buffer for results
+        # not true inverse, but build up inverses from either corner
+        xr_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+        wg_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+        wl_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+        wr_diag_rgf = np.zeros((number_of_blocks_after_mm, blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
 
 
 
-        # desc = """
-        # Meaning of variables:
-        # _lb: last block
-        # _c:  current or center
-        # _p:  previous
-        # _n:  next
-        # _r:  right
-        # _l:  left
-        # _d:  down
-        # _u:  up
-        # """
+        desc = """
+        Meaning of variables:
+        _lb: last block
+        _c:  current or center
+        _p:  previous
+        _n:  next
+        _r:  right
+        _l:  left
+        _d:  down
+        _u:  up
+        """
 
-        # # first step of iteration
+        # first step of iteration
 
-        # # first iteration starts at last block
-        # # then goes upward
-
-
-        # # x^{r}_E_nn = M_E_nn^{-1}
-        # xr_lb = np.linalg.inv(M_retarded[-blocksize_after_mm:, -blocksize_after_mm:].toarray())
-        # xr_lb_ct = xr_lb.conjugate().transpose()
-        # xr_diag_rgf[number_of_blocks_after_mm - 1] = xr_lb
-
-        # # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
-        # wg_lb = xr_lb @ L_greater[-blocksize_after_mm:, -blocksize_after_mm:] @ xr_lb_ct
-        # wg_diag_rgf[number_of_blocks_after_mm - 1] = wg_lb
-
-        # # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
-        # wl_lb = xr_lb @ L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] @ xr_lb_ct
-        # wl_diag_rgf[number_of_blocks_after_mm - 1] = wl_lb
-
-        # # wR_E_nn = xR_E_nn * V_nn
-        # wr_lb = xr_lb @ Coulomb_matrix_copy[-blocksize_after_mm:, -blocksize_after_mm:]
-        # wr_diag_rgf[number_of_blocks_after_mm - 1] = wr_lb
-
-        # # save the diagonal blocks from the previous step
-        # xr_c = xr_lb
-        # wg_c = wg_lb
-        # wl_c = wl_lb
-
-        # # loop over all blocks from last to first
-        # for idx_ib in reversed(range(0, number_of_blocks_after_mm - 1)):
-        #     # block length i
-        #     lb_i = lb_vec_mm[idx_ib]
-        #     # diagonal blocks from previous step
-        #     # avoids a read out operation
-        #     xr_p = xr_c
-        #     wg_p = wg_c
-        #     wl_p = wl_c
-
-        #     # slice of current and previous block
-        #     slb_c = slice(bmin_mm[idx_ib], bmax_mm[idx_ib] + 1)
-        #     slb_p = slice(bmin_mm[idx_ib + 1], bmax_mm[idx_ib + 1] + 1)
-
-        #     # read out blocks needed
-        #     M_retarded_c = M_retarded[slb_c, slb_c].toarray()
-        #     M_retarded_r = M_retarded[slb_c, slb_p].toarray()
-        #     M_retarded_d = M_retarded[slb_p, slb_c].toarray()
-        #     Coulomb_matrix_c = Coulomb_matrix_copy[slb_c, slb_c].toarray()
-        #     Coulomb_matrix_d = Coulomb_matrix_copy[slb_p, slb_c].toarray()
-        #     L_greater_c = L_greater[slb_c, slb_c].toarray()
-        #     L_greater_d = L_greater[slb_p, slb_c].toarray()
-        #     L_leser_c = L_lesser[slb_c, slb_c].toarray()
-        #     L_leser_d = L_lesser[slb_p, slb_c].toarray()
+        # first iteration starts at last block
+        # then goes upward
 
 
-        #     # MxR = M_E_kk+1 * xR_E_k+1k+1
-        #     M_retarded_xr = M_retarded_r @ xr_p
+        # x^{r}_E_nn = M_E_nn^{-1}
+        xr_lb = np.linalg.inv(M_retarded[-blocksize_after_mm:, -blocksize_after_mm:].toarray())
+        xr_lb_ct = xr_lb.conjugate().transpose()
+        xr_diag_rgf[number_of_blocks_after_mm - 1] = xr_lb
 
-        #     # xR_E_kk = (M_E_kk - M_E_kk+1*xR_E_k+1k+1*M_E_k+1k)^{-1}
-        #     xr_c = np.linalg.inv(M_retarded_c - M_retarded_xr @ M_retarded_d)
-        #     xr_diag_rgf[idx_ib, :lb_i, :lb_i] = xr_c
+        # w^{>}_E_nn = x^{r}_E_nn * L^{>}_E_nn * (x^{r}_E_nn).H
+        wg_lb = xr_lb @ L_greater[-blocksize_after_mm:, -blocksize_after_mm:] @ xr_lb_ct
+        wg_diag_rgf[number_of_blocks_after_mm - 1] = wg_lb
 
-        #     # conjugate and transpose
-        #     M_retarded_r_ct = M_retarded_r.conjugate().transpose()
-        #     xr_c_ct = xr_c.conjugate().transpose()
+        # w^{<}_E_nn = x^{r}_E_nn * L^{<}_E_nn * (x^{r}_E_nn).H
+        wl_lb = xr_lb @ L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] @ xr_lb_ct
+        wl_diag_rgf[number_of_blocks_after_mm - 1] = wl_lb
 
-        #     # A^{\lessgtr} = M_E_kk+1 * xR_E_k+1k+1 * L^{\lessgtr}_E_k+1k
-        #     ag = M_retarded_xr @ L_greater_d
-        #     al = M_retarded_xr @ L_leser_d
-        #     ag_diff = ag - ag.conjugate().transpose()
-        #     al_diff = al - al.conjugate().transpose()
+        # wR_E_nn = xR_E_nn * V_nn
+        wr_lb = xr_lb @ Coulomb_matrix_copy[-blocksize_after_mm:, -blocksize_after_mm:]
+        wr_diag_rgf[number_of_blocks_after_mm - 1] = wr_lb
 
-        #     # w^{\lessgtr}_E_kk = xR_E_kk * (L^{\lessgtr}_E_kk + M_E_kk+1*w^{\lessgtr}_E_k+1k+1*M_E_kk+1.H - (A^{\lessgtr} - A^{\lessgtr}.H)) * xR_E_kk.H
-        #     wg_c = xr_c @ (L_greater_c + M_retarded_r @ wg_p @ M_retarded_r_ct - ag_diff) @ xr_c_ct
-        #     wg_diag_rgf[idx_ib, :lb_i, :lb_i] = wg_c
+        # save the diagonal blocks from the previous step
+        xr_c = xr_lb
+        wg_c = wg_lb
+        wl_c = wl_lb
 
-        #     wl_c = xr_c @ (L_leser_c + M_retarded_r @ wl_p @ M_retarded_r_ct - al_diff) @ xr_c_ct
-        #     wl_diag_rgf[idx_ib, :lb_i, :lb_i] = wl_c
+        # loop over all blocks from last to first
+        for idx_ib in reversed(range(0, number_of_blocks_after_mm - 1)):
+            # block length i
+            lb_i = lb_vec_mm[idx_ib]
+            # diagonal blocks from previous step
+            # avoids a read out operation
+            xr_p = xr_c
+            wg_p = wg_c
+            wl_p = wl_c
 
-        #     # wR_E_kk = xR_E_kk * (V_kk - M_E_kk+1 * xR_E_k+1k+1 * V_k+1k)
-        #     wr_c = xr_c @ (Coulomb_matrix_c - M_retarded_xr @ Coulomb_matrix_d)
-        #     wr_diag_rgf[idx_ib, :lb_i, :lb_i] = wr_c
+            # slice of current and previous block
+            slb_c = slice(bmin_mm[idx_ib], bmax_mm[idx_ib] + 1)
+            slb_p = slice(bmin_mm[idx_ib + 1], bmax_mm[idx_ib + 1] + 1)
 
-        # # block length 0
-        # lb_f = lb_vec_mm[0]
-        # lb_p = lb_vec_mm[1]
+            # read out blocks needed
+            M_retarded_c = M_retarded[slb_c, slb_c].toarray()
+            M_retarded_r = M_retarded[slb_c, slb_p].toarray()
+            M_retarded_d = M_retarded[slb_p, slb_c].toarray()
+            Coulomb_matrix_c = Coulomb_matrix_copy[slb_c, slb_c].toarray()
+            Coulomb_matrix_d = Coulomb_matrix_copy[slb_p, slb_c].toarray()
+            L_greater_c = L_greater[slb_c, slb_c].toarray()
+            L_greater_d = L_greater[slb_p, slb_c].toarray()
+            L_leser_c = L_lesser[slb_c, slb_c].toarray()
+            L_leser_d = L_lesser[slb_p, slb_c].toarray()
 
-        # # slice of current and previous block
-        # slb_c = slice(bmin_mm[0], bmax_mm[0] + 1)
-        # slb_p = slice(bmin_mm[1], bmax_mm[1] + 1)
 
-        # # WARNING the last read blocks from the above for loop are used
+            # MxR = M_E_kk+1 * xR_E_k+1k+1
+            M_retarded_xr = M_retarded_r @ xr_p
 
-        # # second step of iteration
-        # Coulomb_matrix_r = Coulomb_matrix_copy[slb_c, slb_p].toarray()
-        # L_greater_r = L_greater[slb_c, slb_p].toarray()
-        # L_leser_r = L_lesser[slb_c, slb_p].toarray()
+            # xR_E_kk = (M_E_kk - M_E_kk+1*xR_E_k+1k+1*M_E_k+1k)^{-1}
+            xr_c = np.linalg.inv(M_retarded_c - M_retarded_xr @ M_retarded_d)
+            xr_diag_rgf[idx_ib, :lb_i, :lb_i] = xr_c
 
-        # xr_mr = xr_p @ M_retarded_d
-        # xr_M_retarded_ct = xr_mr.conjugate().transpose()
+            # conjugate and transpose
+            M_retarded_r_ct = M_retarded_r.conjugate().transpose()
+            xr_c_ct = xr_c.conjugate().transpose()
 
-        # # WR_E_00 = wR_E_00
-        # wr_diag[0, :lb_f, :lb_f] = wr_diag_rgf[0, :lb_f, :lb_f]
+            # A^{\lessgtr} = M_E_kk+1 * xR_E_k+1k+1 * L^{\lessgtr}_E_k+1k
+            ag = M_retarded_xr @ L_greater_d
+            al = M_retarded_xr @ L_leser_d
+            ag_diff = ag - ag.conjugate().transpose()
+            al_diff = al - al.conjugate().transpose()
 
-        # # WR_E_01 = (V_01 - WR_E_00*M_E_10) * xR_E_11
-        # # todo if Coulomb_matrix_r can be used instead of Coulomb_matrix_copy[slb_c,slb_p]
-        # wr_upper[0, :lb_f, :lb_p] = (Coulomb_matrix_r - wr_diag[0, :lb_f, :lb_f] @ M_retarded_d.transpose()) @ xr_p.transpose()
+            # w^{\lessgtr}_E_kk = xR_E_kk * (L^{\lessgtr}_E_kk + M_E_kk+1*w^{\lessgtr}_E_k+1k+1*M_E_kk+1.H - (A^{\lessgtr} - A^{\lessgtr}.H)) * xR_E_kk.H
+            wg_c = xr_c @ (L_greater_c + M_retarded_r @ wg_p @ M_retarded_r_ct - ag_diff) @ xr_c_ct
+            wg_diag_rgf[idx_ib, :lb_i, :lb_i] = wg_c
 
-        # # XR_E_00 = xR_E_00
-        # xr_diag[0, :lb_f, :lb_f] = xr_diag_rgf[0, :lb_f, :lb_f]
+            wl_c = xr_c @ (L_leser_c + M_retarded_r @ wl_p @ M_retarded_r_ct - al_diff) @ xr_c_ct
+            wl_diag_rgf[idx_ib, :lb_i, :lb_i] = wl_c
 
-        # # W^{\lessgtr}_E_00 = w^{\lessgtr}_E_00
-        # wg_diag[0, :lb_f, :lb_f] = wg_diag_rgf[0, :lb_f, :lb_f]
-        # wl_diag[0, :lb_f, :lb_f] = wl_diag_rgf[0, :lb_f, :lb_f]
+            # wR_E_kk = xR_E_kk * (V_kk - M_E_kk+1 * xR_E_k+1k+1 * V_k+1k)
+            wr_c = xr_c @ (Coulomb_matrix_c - M_retarded_xr @ Coulomb_matrix_d)
+            wr_diag_rgf[idx_ib, :lb_i, :lb_i] = wr_c
 
-        # # W^{\lessgtr}_E_01 = xR_E_00*L^{\lessgtr}_01*_xR_E_11.H - xR_E_00*M_E_01*wL_E_11 - w^{\lessgtr}_E_00*M_E_10.H*xR_E_11.H
-        # xr_p_ct = xr_p.conjugate().transpose()
-        # wg_upper[0, :lb_f, :lb_p] = xr_c @ L_greater_r @ xr_p_ct - xr_c @ M_retarded_r @ wg_p - wg_c @ xr_M_retarded_ct
-        # wl_upper[0, :lb_f, :lb_p] = xr_c @ L_leser_r @ xr_p_ct - xr_c @ M_retarded_r @ wl_p - wl_c @ xr_M_retarded_ct
+        # block length 0
+        lb_f = lb_vec_mm[0]
+        lb_p = lb_vec_mm[1]
 
-        # # loop from left to right corner
-        # xr_diag_rgf_n = xr_diag_rgf[1, :lb_p, :lb_p]
-        # xr_diag_c = xr_diag_rgf[0, :lb_f, :lb_f]
+        # slice of current and previous block
+        slb_c = slice(bmin_mm[0], bmax_mm[0] + 1)
+        slb_p = slice(bmin_mm[1], bmax_mm[1] + 1)
 
-        # wg_diag_rgf_n = wg_diag_rgf[1, :lb_p, :lb_p]
-        # wg_diag_c = wg_diag_rgf[0, :lb_f, :lb_f]
+        # WARNING the last read blocks from the above for loop are used
 
-        # wl_diag_rgf_n = wl_diag_rgf[1, :lb_p, :lb_p]
-        # wl_diag_c = wl_diag_rgf[0, :lb_f, :lb_f]
+        # second step of iteration
+        Coulomb_matrix_r = Coulomb_matrix_copy[slb_c, slb_p].toarray()
+        L_greater_r = L_greater[slb_c, slb_p].toarray()
+        L_leser_r = L_lesser[slb_c, slb_p].toarray()
 
-        # wr_upper_c = wr_upper[0, :lb_f, :lb_p]
+        xr_mr = xr_p @ M_retarded_d
+        xr_M_retarded_ct = xr_mr.conjugate().transpose()
 
-        # desc = """
-        # Meaning of variables:
-        # _lb: last block
-        # _c:  current or center
-        # _p:  previous
-        # _n:  next
-        # _r:  right
-        # _l:  left
-        # _d:  down
-        # _u:  up
-        # """
+        # WR_E_00 = wR_E_00
+        wr_diag[0, :lb_f, :lb_f] = wr_diag_rgf[0, :lb_f, :lb_f]
 
-        # for idx_ib in range(1, number_of_blocks_after_mm):
-        #     # block length i
-        #     lb_i = lb_vec_mm[idx_ib]
-        #     # slice of current and previous block
-        #     slb_c = slice(bmin_mm[idx_ib], bmax_mm[idx_ib] + 1)
-        #     slb_p = slice(bmin_mm[idx_ib - 1], bmax_mm[idx_ib - 1] + 1)
+        # WR_E_01 = (V_01 - WR_E_00*M_E_10) * xR_E_11
+        # todo if Coulomb_matrix_r can be used instead of Coulomb_matrix_copy[slb_c,slb_p]
+        wr_upper[0, :lb_f, :lb_p] = (Coulomb_matrix_r - wr_diag[0, :lb_f, :lb_f] @ M_retarded_d.transpose()) @ xr_p.transpose()
 
-        #     # blocks from previous step
-        #     # avoids a read out operation
-        #     xr_diag_rgf_c = xr_diag_rgf_n
-        #     xr_diag_p = xr_diag_c
-        #     wg_diag_rgf_c = wg_diag_rgf_n
-        #     wg_diag_p = wg_diag_c
-        #     wl_diag_rgf_c = wl_diag_rgf_n
-        #     wl_diag_p = wl_diag_c
-        #     wr_upper_p = wr_upper_c
+        # XR_E_00 = xR_E_00
+        xr_diag[0, :lb_f, :lb_f] = xr_diag_rgf[0, :lb_f, :lb_f]
 
-        #     # read out blocks needed
-        #     M_retarded_l = M_retarded[slb_c, slb_p].toarray()
-        #     M_retarded_u = M_retarded[slb_p, slb_c].toarray()
-        #     L_greater_l = L_greater[slb_c, slb_p].toarray()
-        #     L_leser_l = L_lesser[slb_c, slb_p].toarray()
+        # W^{\lessgtr}_E_00 = w^{\lessgtr}_E_00
+        wg_diag[0, :lb_f, :lb_f] = wg_diag_rgf[0, :lb_f, :lb_f]
+        wl_diag[0, :lb_f, :lb_f] = wl_diag_rgf[0, :lb_f, :lb_f]
 
-        #     # xRM = xR_E_kk * M_E_kk-1
-        #     xr_M_retarded_xr = xr_mr @ xr_diag_p
-        #     xr_M_retarded_xr_ct = xr_M_retarded_xr.conjugate().transpose()
-        #     xr_M_retarded_xr_mr = xr_M_retarded_xr @ M_retarded_u
+        # W^{\lessgtr}_E_01 = xR_E_00*L^{\lessgtr}_01*_xR_E_11.H - xR_E_00*M_E_01*wL_E_11 - w^{\lessgtr}_E_00*M_E_10.H*xR_E_11.H
+        xr_p_ct = xr_p.conjugate().transpose()
+        wg_upper[0, :lb_f, :lb_p] = xr_c @ L_greater_r @ xr_p_ct - xr_c @ M_retarded_r @ wg_p - wg_c @ xr_M_retarded_ct
+        wl_upper[0, :lb_f, :lb_p] = xr_c @ L_leser_r @ xr_p_ct - xr_c @ M_retarded_r @ wl_p - wl_c @ xr_M_retarded_ct
 
-        #     # WR_E_kk = wR_E_kk - xR_E_kk*M_E_kk-1*WR_E_k-1k
-        #     wr_diag_rgf_c = wr_diag_rgf[idx_ib, :lb_i, :lb_i]
-        #     # todo if wr_upper_p can be used wr_upper[idx_ib-1,:lb_vec_mm[idx_ib-1],:lb_i]
-        #     wr_diag_c = wr_diag_rgf_c - xr_mr @ wr_upper[idx_ib - 1, :lb_vec_mm[idx_ib - 1], :lb_i]
-        #     wr_diag[idx_ib, :lb_i, :lb_i] = wr_diag_c
+        # loop from left to right corner
+        xr_diag_rgf_n = xr_diag_rgf[1, :lb_p, :lb_p]
+        xr_diag_c = xr_diag_rgf[0, :lb_f, :lb_f]
 
-        #     # XR_E_kk = xR_E_kk + (xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * xR_E_kk)
-        #     xr_diag_c = xr_diag_rgf_c + xr_M_retarded_xr_mr @ xr_diag_rgf_c
-        #     xr_diag[idx_ib, :lb_i, :lb_i] = xr_diag_c
+        wg_diag_rgf_n = wg_diag_rgf[1, :lb_p, :lb_p]
+        wg_diag_c = wg_diag_rgf[0, :lb_f, :lb_f]
 
-        #     # A^{\lessgtr} = xR_E_kk * L^{\lessgtr}_E_kk-1 * XR_E_k-1k-1.H * (xR_E_kk * M_E_kk-1).H
-        #     ag = xr_diag_rgf_c @ L_greater_l @ xr_M_retarded_xr_ct
-        #     al = xr_diag_rgf_c @ L_leser_l @ xr_M_retarded_xr_ct
-        #     ag_diff = ag - ag.conjugate().transpose()
-        #     al_diff = al - al.conjugate().transpose()
+        wl_diag_rgf_n = wl_diag_rgf[1, :lb_p, :lb_p]
+        wl_diag_c = wl_diag_rgf[0, :lb_f, :lb_f]
 
-        #     # B^{\lessgtr} = xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * w^{\lessgtr}_E_kk
-        #     bg = xr_M_retarded_xr_mr @ wg_diag_rgf_c
-        #     bl = xr_M_retarded_xr_mr @ wl_diag_rgf_c
-        #     bg_diff = bg - bg.conjugate().transpose()
-        #     bl_diff = bl - bl.conjugate().transpose()
+        wr_upper_c = wr_upper[0, :lb_f, :lb_p]
 
-        #     # W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
-        #     wg_diag_c = wg_diag_rgf_c + xr_mr @ wg_diag_p @ xr_M_retarded_ct - ag_diff + bg_diff
-        #     wl_diag_c = wl_diag_rgf_c + xr_mr @ wl_diag_p @ xr_M_retarded_ct - al_diff + bl_diff
-        #     wg_diag[idx_ib, :lb_i, :lb_i] = wg_diag_c
-        #     wl_diag[idx_ib, :lb_i, :lb_i] = wl_diag_c
+        desc = """
+        Meaning of variables:
+        _lb: last block
+        _c:  current or center
+        _p:  previous
+        _n:  next
+        _r:  right
+        _l:  left
+        _d:  down
+        _u:  up
+        """
 
-        #     # following code block has problems
-        #     if idx_ib < number_of_blocks_after_mm - 1:
-        #         # block length i
-        #         lb_n = lb_vec_mm[idx_ib + 1]
-        #         # slice of current and previous block
-        #         slb_n = slice(bmin_mm[idx_ib + 1], bmax_mm[idx_ib + 1] + 1)
+        for idx_ib in range(1, number_of_blocks_after_mm):
+            # block length i
+            lb_i = lb_vec_mm[idx_ib]
+            # slice of current and previous block
+            slb_c = slice(bmin_mm[idx_ib], bmax_mm[idx_ib] + 1)
+            slb_p = slice(bmin_mm[idx_ib - 1], bmax_mm[idx_ib - 1] + 1)
 
-        #         # read out blocks needed
-        #         Coulomb_matrix_d = Coulomb_matrix_copy[slb_n, slb_c].toarray()
-        #         M_retarded_d = M_retarded[slb_n, slb_c].toarray()
-        #         M_retarded_r = M_retarded[slb_c, slb_n].toarray()
-        #         L_greater_r = L_greater[slb_c, slb_n].toarray()
-        #         L_leser_r = L_lesser[slb_c, slb_n].toarray()
+            # blocks from previous step
+            # avoids a read out operation
+            xr_diag_rgf_c = xr_diag_rgf_n
+            xr_diag_p = xr_diag_c
+            wg_diag_rgf_c = wg_diag_rgf_n
+            wg_diag_p = wg_diag_c
+            wl_diag_rgf_c = wl_diag_rgf_n
+            wl_diag_p = wl_diag_c
+            wr_upper_p = wr_upper_c
 
-        #         xr_diag_rgf_n = xr_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
-        #         wg_diag_rgf_n = wg_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
-        #         wl_diag_rgf_n = wl_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
-        #         xr_diag_rgf_n_ct = xr_diag_rgf_n.conjugate().transpose()
+            # read out blocks needed
+            M_retarded_l = M_retarded[slb_c, slb_p].toarray()
+            M_retarded_u = M_retarded[slb_p, slb_c].toarray()
+            L_greater_l = L_greater[slb_c, slb_p].toarray()
+            L_leser_l = L_lesser[slb_c, slb_p].toarray()
 
-        #         # xRM_next = M_E_k+1k * xR_E_k+1k+1
-        #         xr_mr = xr_diag_rgf_n @ M_retarded_d
-        #         xr_M_retarded_ct = xr_mr.conjugate().transpose()
+            # xRM = xR_E_kk * M_E_kk-1
+            xr_M_retarded_xr = xr_mr @ xr_diag_p
+            xr_M_retarded_xr_ct = xr_M_retarded_xr.conjugate().transpose()
+            xr_M_retarded_xr_mr = xr_M_retarded_xr @ M_retarded_u
 
-        #         # WR_E_kk+1 = (V_k+1k.T - WR_E_kk*M_E_k+1k.T) * xR_E_k+1k+1.T
-        #         # difference between matlab and python silvio todo
-        #         # this line is wrong todo in the second part
-        #         wr_upper_c = Coulomb_matrix_d.transpose() @ xr_diag_rgf_n.transpose() - wr_diag_c @ xr_mr.transpose()
-        #         wr_upper[idx_ib, :lb_i, :lb_n] = wr_upper_c
+            # WR_E_kk = wR_E_kk - xR_E_kk*M_E_kk-1*WR_E_k-1k
+            wr_diag_rgf_c = wr_diag_rgf[idx_ib, :lb_i, :lb_i]
+            # todo if wr_upper_p can be used wr_upper[idx_ib-1,:lb_vec_mm[idx_ib-1],:lb_i]
+            wr_diag_c = wr_diag_rgf_c - xr_mr @ wr_upper[idx_ib - 1, :lb_vec_mm[idx_ib - 1], :lb_i]
+            wr_diag[idx_ib, :lb_i, :lb_i] = wr_diag_c
 
-        #         # W^{\lessgtr}_E_kk+1 = XR_E_kk*(L^{\lessgtr}_E_kk+1*xR_E_k+1k+1.H - M_E_kk+1*w^{\lessgtr}_E_k+1k+1) - W^{\lessgtr}_E_kk*M_E_k+1k.H*xxR_E_k+1k+1.H
-        #         wg_upper_c = xr_diag_c @ (L_greater_r @ xr_diag_rgf_n_ct - M_retarded_r @ wg_diag_rgf_n) - wg_diag_c @ xr_M_retarded_ct
-        #         wg_upper[idx_ib, :lb_i, :lb_n] = wg_upper_c
-        #         wl_upper_c = xr_diag_c @ (L_leser_r @ xr_diag_rgf_n_ct - M_retarded_r @ wl_diag_rgf_n) - wl_diag_c @ xr_M_retarded_ct
-        #         wl_upper[idx_ib, :lb_i, :lb_n] = wl_upper_c
+            # XR_E_kk = xR_E_kk + (xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * xR_E_kk)
+            xr_diag_c = xr_diag_rgf_c + xr_M_retarded_xr_mr @ xr_diag_rgf_c
+            xr_diag[idx_ib, :lb_i, :lb_i] = xr_diag_c
 
-        # for idx_ib in range(0, number_of_blocks_after_mm):
-        #     xr_diag[idx_ib, :, :] *= factor
-        #     wg_diag[idx_ib, :, :] *= factor
-        #     wl_diag[idx_ib, :, :] *= factor
-        #     wr_diag[idx_ib, :, :] *= factor
-        #     dosw[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
-        #     nEw[idx_ib] = -1j * np.trace(wl_diag[idx_ib, :, :])
-        #     nPw[idx_ib] = 1j * np.trace(wg_diag[idx_ib, :, :])
-        #     if idx_ib < number_of_blocks_after_mm - 1:
-        #         wr_upper[idx_ib, :, :] *= factor
-        #         wg_upper[idx_ib, :, :] *= factor
-        #         wl_upper[idx_ib, :, :] *= factor
+            # A^{\lessgtr} = xR_E_kk * L^{\lessgtr}_E_kk-1 * XR_E_k-1k-1.H * (xR_E_kk * M_E_kk-1).H
+            ag = xr_diag_rgf_c @ L_greater_l @ xr_M_retarded_xr_ct
+            al = xr_diag_rgf_c @ L_leser_l @ xr_M_retarded_xr_ct
+            ag_diff = ag - ag.conjugate().transpose()
+            al_diff = al - al.conjugate().transpose()
+
+            # B^{\lessgtr} = xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * w^{\lessgtr}_E_kk
+            bg = xr_M_retarded_xr_mr @ wg_diag_rgf_c
+            bl = xr_M_retarded_xr_mr @ wl_diag_rgf_c
+            bg_diff = bg - bg.conjugate().transpose()
+            bl_diff = bl - bl.conjugate().transpose()
+
+            # W^{\lessgtr}_E_kk = w^{\lessgtr}_E_kk + xR_E_kk*M_E_kk-1*W^{\lessgtr}_E_k-1k-1*(xR_E_kk*M_E_kk-1).H - (A^{\lessgtr}-A^{\lessgtr}.H) + (B^{\lessgtr}-B^{\lessgtr}.H)
+            wg_diag_c = wg_diag_rgf_c + xr_mr @ wg_diag_p @ xr_M_retarded_ct - ag_diff + bg_diff
+            wl_diag_c = wl_diag_rgf_c + xr_mr @ wl_diag_p @ xr_M_retarded_ct - al_diff + bl_diff
+            wg_diag[idx_ib, :lb_i, :lb_i] = wg_diag_c
+            wl_diag[idx_ib, :lb_i, :lb_i] = wl_diag_c
+
+            # following code block has problems
+            if idx_ib < number_of_blocks_after_mm - 1:
+                # block length i
+                lb_n = lb_vec_mm[idx_ib + 1]
+                # slice of current and previous block
+                slb_n = slice(bmin_mm[idx_ib + 1], bmax_mm[idx_ib + 1] + 1)
+
+                # read out blocks needed
+                Coulomb_matrix_d = Coulomb_matrix_copy[slb_n, slb_c].toarray()
+                M_retarded_d = M_retarded[slb_n, slb_c].toarray()
+                M_retarded_r = M_retarded[slb_c, slb_n].toarray()
+                L_greater_r = L_greater[slb_c, slb_n].toarray()
+                L_leser_r = L_lesser[slb_c, slb_n].toarray()
+
+                xr_diag_rgf_n = xr_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
+                wg_diag_rgf_n = wg_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
+                wl_diag_rgf_n = wl_diag_rgf[idx_ib + 1, :lb_n, :lb_n]
+                xr_diag_rgf_n_ct = xr_diag_rgf_n.conjugate().transpose()
+
+                # xRM_next = M_E_k+1k * xR_E_k+1k+1
+                xr_mr = xr_diag_rgf_n @ M_retarded_d
+                xr_M_retarded_ct = xr_mr.conjugate().transpose()
+
+                # WR_E_kk+1 = (V_k+1k.T - WR_E_kk*M_E_k+1k.T) * xR_E_k+1k+1.T
+                # difference between matlab and python silvio todo
+                # this line is wrong todo in the second part
+                wr_upper_c = Coulomb_matrix_d.transpose() @ xr_diag_rgf_n.transpose() - wr_diag_c @ xr_mr.transpose()
+                wr_upper[idx_ib, :lb_i, :lb_n] = wr_upper_c
+
+                # W^{\lessgtr}_E_kk+1 = XR_E_kk*(L^{\lessgtr}_E_kk+1*xR_E_k+1k+1.H - M_E_kk+1*w^{\lessgtr}_E_k+1k+1) - W^{\lessgtr}_E_kk*M_E_k+1k.H*xxR_E_k+1k+1.H
+                wg_upper_c = xr_diag_c @ (L_greater_r @ xr_diag_rgf_n_ct - M_retarded_r @ wg_diag_rgf_n) - wg_diag_c @ xr_M_retarded_ct
+                wg_upper[idx_ib, :lb_i, :lb_n] = wg_upper_c
+                wl_upper_c = xr_diag_c @ (L_leser_r @ xr_diag_rgf_n_ct - M_retarded_r @ wl_diag_rgf_n) - wl_diag_c @ xr_M_retarded_ct
+                wl_upper[idx_ib, :lb_i, :lb_n] = wl_upper_c
+
+        for idx_ib in range(0, number_of_blocks_after_mm):
+            xr_diag[idx_ib, :, :] *= factor
+            wg_diag[idx_ib, :, :] *= factor
+            wl_diag[idx_ib, :, :] *= factor
+            wr_diag[idx_ib, :, :] *= factor
+            dosw[idx_ib] = 1j * np.trace(wr_diag[idx_ib, :, :] - wr_diag[idx_ib, :, :].conjugate().transpose())
+            nEw[idx_ib] = -1j * np.trace(wl_diag[idx_ib, :, :])
+            nPw[idx_ib] = 1j * np.trace(wg_diag[idx_ib, :, :])
+            if idx_ib < number_of_blocks_after_mm - 1:
+                wr_upper[idx_ib, :, :] *= factor
+                wg_upper[idx_ib, :, :] *= factor
+                wl_upper[idx_ib, :, :] *= factor
 

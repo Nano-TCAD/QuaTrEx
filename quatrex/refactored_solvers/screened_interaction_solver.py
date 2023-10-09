@@ -15,47 +15,51 @@ def screened_interaction_solver(
     energy_array: np.ndarray,
     blocksize: int,
 ):
+    
+    Coulomb_matrix_localcopy = Coulomb_matrix.copy()
 
     for i, energy in enumerate(energy_array):
         
-        System_matrix = 1-Coulomb_matrix @ Polarization_retarded
+        System_matrix = 1-Coulomb_matrix_localcopy @ Polarization_retarded
 
-        # Get modified system ready for OBC
-        modify_system_for_obc(System_matrix, Coulomb_matrix, Polarization_retarded)
+        # L = V @ P<> @ V^dagger
+        L_lesser = np.zeros_like(System_matrix, dtype=System_matrix.dtype)
+        L_greater = np.zeros_like(System_matrix, dtype=System_matrix.dtype)
 
-        # Compute W OBC
+        # Compute OBC
         
-        # Applied W OBC
+        # Apply OBC to the system matrix
+        apply_boundary_conditions(System_matrix, 
+                                  System_matrix_left_obc, 
+                                  System_matrix_right_obc, 
+                                  blocksize)
         
-        Screened_interaction_retarded = np.linalg.inv(System_matrix) @ Coulomb_matrix
+        # Apply OBC to L (That is RHS)
+        apply_boundary_conditions(Coulomb_matrix_localcopy, 
+                                  Coulomb_matrix_localcopy_left_obc, 
+                                  Coulomb_matrix_localcopy_right_obc, 
+                                  blocksize)
         
-        compute_screened_interaction_lesser_and_greater(Screened_interaction_retarded, 
-                                                        Polarization_lesser, 
-                                                        Polarization_greater)
-    
-"""
-Notes about variable naming:
-
-- _ct is for the original matrix complex conjugated
-- _mm how certain sizes after matrix multiplication, because a block tri diagonal gets two new non zero off diagonals
-- _s stands for values related to the left/start/top contact block
-- _e stands for values related to the right/end/bottom contact block
-- _d stands for diagonal block (X00/NN in matlab)
-- _u stands for upper diagonal block (X01/NN1 in matlab)
-- _l stands for lower diagonal block (X10/N1N in matlab) 
-- exception _l/_r can stand for left/right in context of condition of OBC
-- _rgf are the not true inverse tensor (partial inverse) 
-more standard notation would be small characters for partial and large for true
-but this goes against python naming style guide
-"""
-    
-    
-def modify_system_for_obc(
-    System_matrix,
-    Coulomb_matrix,
-    Polarization_retarded
-):
-    
+        apply_boundary_conditions(L_lesser, 
+                                  L_lesser_left_obc, 
+                                  L_lesser_right_obc, 
+                                  blocksize)
+        
+        apply_boundary_conditions(L_greater, 
+                                  L_greater_left_obc, 
+                                  L_greater_right_obc, 
+                                  blocksize)
+        
+        System_matrix_inv = np.linalg.inv(System_matrix)
+        
+        Screened_interaction_retarded = System_matrix_inv @ Coulomb_matrix_localcopy
+        
+        Screened_interaction_lesser, Screened_interaction_greater\
+            = compute_screened_interaction_lesser_and_greater(System_matrix_inv, 
+                                                              L_lesser, 
+                                                              L_greater)
+            
+        return Screened_interaction_retarded, Screened_interaction_lesser, Screened_interaction_greater
     
     
     
@@ -70,23 +74,26 @@ def compute_open_boundary_conditions(
     
     
 def apply_boundary_conditions(
-    
+    A,
+    Left_obc,
+    Right_obc,
+    blocksize
 ):
-    pass
 
-    # Correct OBC
+    A[:blocksize, :blocksize] += Left_obc
+    A[-blocksize:, -blocksize:] += Right_obc
     
-    # Applied OBC
+    
     
     
 
 def compute_screened_interaction_lesser_and_greater(
-    Screened_interaction_retarded : np.ndarray, 
-    Polarization_lesser : np.ndarray, 
-    Polarization_greater : np.ndarray
+    System_matrix_inv : np.ndarray, 
+    L_lesser : np.ndarray, 
+    L_greater : np.ndarray
 ):
     
-    Screened_interaction_lesser = Screened_interaction_retarded @ Polarization_lesser @ Screened_interaction_retarded.conj().T
-    Screened_interaction_greater = Screened_interaction_retarded @ Polarization_greater @ Screened_interaction_retarded.conj().T
+    Screened_interaction_lesser = System_matrix_inv @ L_lesser @ System_matrix_inv.conj().T
+    Screened_interaction_greater = System_matrix_inv @ L_greater @ System_matrix_inv.conj().T
     
     return Screened_interaction_lesser, Screened_interaction_greater
