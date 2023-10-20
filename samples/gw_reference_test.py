@@ -53,7 +53,7 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
-    gw_num_iter = 2
+    gw_num_iter = 1
     is_padded = False
     comm_unblock = False
     save_result = False

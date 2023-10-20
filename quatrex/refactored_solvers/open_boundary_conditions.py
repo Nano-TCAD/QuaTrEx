@@ -4,6 +4,8 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from quatrex.OBC.beyn_cpu import beyn
+from quatrex.OBC import sancho
+
 
 
 
@@ -14,39 +16,47 @@ def compute_open_boundary_condition(
     blocksize : int,
 ):
     
-    imaginary_limit = 5e-4
-    contour_integration_radius = 1000
-    
-    left_boundary_size  = blocksize
-    
-    
-    _, success, left_gr_beyn, self_energy_left_boundary, _ = beyn(M[:left_boundary_size, :left_boundary_size].toarray(),
-                                                                  M[:left_boundary_size, left_boundary_size: 2*left_boundary_size].toarray(),
-                                                                  M[left_boundary_size:2*left_boundary_size, :left_boundary_size].toarray(),
+    _, success, left_gr_beyn, self_energy_left_boundary, _ = beyn(M[:blocksize, :blocksize].toarray(),
+                                                                  M[:blocksize, blocksize: 2*blocksize].toarray(),
+                                                                  M[blocksize:2*blocksize, :blocksize].toarray(),
                                                                   imaginary_limit,
                                                                   contour_integration_radius,
                                                                   'L',
                                                                   function='G')
 
+    # TODO: Modify the handling of Beyn errors
     if np.isnan(success):
-        print('Error: Beyn algorithm failed to compute the self-energy at the left boundary')
-        exit()
+        # TODO: modify the open_boundary_conditions function, identity parsing is not correct
+        # Coulomb matrix is used in Wr that we don't produce anyway
+        left_gr_beyn, self_energy_left_boundary, _, success = sancho.open_boundary_conditions(
+                                                            M[:blocksize, :blocksize].toarray(),
+                                                            M[blocksize:2*blocksize, :blocksize].toarray(),
+                                                            M[:blocksize, blocksize: 2*blocksize].toarray(),
+                                                            np.identity(blocksize))
+        if np.isnan(success):
+            print("Error: Sancho open boundary conditions failed [left side]")
+            exit()
 
-
-    right_boundary_size = blocksize
-
-    _, success, right_gr_beyn, self_energy_right_boundary, _ = beyn(M[-right_boundary_size:, -right_boundary_size:].toarray(),
-                                                                    M[-2*right_boundary_size:-right_boundary_size, -right_boundary_size:].toarray(),
-                                                                    M[-right_boundary_size:, -2*right_boundary_size: -right_boundary_size].toarray(),
+    _, success, right_gr_beyn, self_energy_right_boundary, _ = beyn(M[-blocksize:, -blocksize:].toarray(),
+                                                                    M[-2*blocksize:-blocksize, -blocksize:].toarray(),
+                                                                    M[-blocksize:, -2*blocksize: -blocksize].toarray(),
                                                                     imaginary_limit,
                                                                     contour_integration_radius,
                                                                     'R',
                                                                     function='G')
 
+    # TODO: Modify the handling of Beyn errors
     if np.isnan(success):
-        print('Error: Beyn algorithm failed to compute the self-energy at the right boundary')
-        exit()
-        
+        # TODO: modify the open_boundary_conditions function, identity parsing is not correct
+        # Coulomb matrix is used in Wr that we don't produce anyway
+        right_gr_beyn, self_energy_right_boundary, _, success = sancho.open_boundary_conditions(
+                                                            M[-blocksize:, -blocksize:].toarray(),
+                                                            M[-2*blocksize:-blocksize, -blocksize:].toarray(),
+                                                            M[-blocksize:, -2*blocksize: -blocksize].toarray(),
+                                                            np.identity(blocksize))
+        if np.isnan(success):
+            print("Error: Sancho open boundary conditions failed [right side]")
+            exit()
         
     return {"left": self_energy_left_boundary, "right": self_energy_right_boundary}, {"left": left_gr_beyn, "right": right_gr_beyn}
 

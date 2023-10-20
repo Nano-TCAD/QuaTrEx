@@ -11,10 +11,10 @@ from quatrex.refactored_solvers.screened_interaction_solver import screened_inte
 def p2w(
     hamiltionian_obj: object,
     energy: npt.NDArray[np.float64],
-    pg: npt.NDArray[np.complex128],
-    pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
+    Polarization_greater: npt.NDArray[np.complex128],
+    Polarization_lesser: npt.NDArray[np.complex128],
+    Polarization_retarded: npt.NDArray[np.complex128],
+    Coulomb_matrix: npt.NDArray[np.complex128],
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
@@ -29,10 +29,10 @@ def p2w(
     Args:
         hamiltionian_obj (object): Class containing the hamiltonian information
         energy (npt.NDArray[np.float64]): energy points
-        pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
-        pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
-        pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
-        vh (npt.NDArray[np.complex128]): Vh sparse matrix
+        Polarization_greater (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
+        Polarization_lesser (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
+        Polarization_retarded (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
+        Coulomb_matrix (npt.NDArray[np.complex128]): Vh sparse matrix
         dosw (npt.NDArray[np.complex128]): density of state
         new (npt.NDArray[np.complex128]): density of state
         npw (npt.NDArray[np.complex128]): density of state
@@ -54,7 +54,7 @@ def p2w(
     
     
     # number of energy points
-    ne = energy.shape[0]
+    number_of_energy_points = energy.shape[0]
 
     # number of blocks
     nb = hamiltionian_obj.Bmin.shape[0]
@@ -76,35 +76,55 @@ def p2w(
 
     # create empty buffer for screened interaction
     # in block format
-    Screened_interactions_retarded_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_retarded_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_lesser_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_lesser_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_greater_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_greater_upper = np.zeros((ne, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Susceptibility_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_retarded_diag = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_retarded_upper = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interaction_lesser_diag_blocks = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Susceptibility_diag = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
 
-    for ie in range(ne):
-        rgf_W.rgf_w(vh,
-                    pg[ie],
-                    pl[ie],
-                    pr[ie],
-                    bmax,
-                    bmin,
-                    Screened_interactions_greater_diag[ie],
-                    Screened_interactions_greater_upper[ie],
-                    Screened_interactions_lesser_diag[ie],
-                    Screened_interactions_lesser_upper[ie],
-                    Screened_interactions_retarded_diag[ie],
-                    Screened_interactions_retarded_upper[ie],
-                    Susceptibility_diag[ie],
-                    dosw[ie],
-                    new[ie],
-                    npw[ie],
-                    nbc,
-                    idx_e[ie],
-                    factor[ie])
-        
+    # for ie in range(number_of_energy_points):
+    #     rgf_W.rgf_w(Coulomb_matrix,
+    #                 Polarization_greater[ie],
+    #                 Polarization_lesser[ie],
+    #                 Polarization_retarded[ie],
+    #                 bmax,
+    #                 bmin,
+    #                 Screened_interaction_greater_diag_blocks[ie],
+    #                 Screened_interaction_greater_upper_blocks[ie],
+    #                 Screened_interaction_lesser_diag_blocks[ie],
+    #                 Screened_interaction_lesser_upper_blocks[ie],
+    #                 Screened_interactions_retarded_diag[ie],
+    #                 Screened_interactions_retarded_upper[ie],
+    #                 Susceptibility_diag[ie],
+    #                 dosw[ie],
+    #                 new[ie],
+    #                 npw[ie],
+    #                 nbc,
+    #                 idx_e[ie],
+    #                 factor[ie])
+    
+    blocksize = np.max(bmax - bmin + 1)
+    screened_interaction_solver(
+        Screened_interaction_lesser_diag_blocks,
+        Screened_interaction_lesser_upper_blocks,
+        Screened_interaction_greater_diag_blocks,
+        Screened_interaction_greater_upper_blocks,
+        Coulomb_matrix,
+        Polarization_greater,
+        Polarization_lesser,
+        Polarization_retarded,
+        number_of_energy_points,
+        blocksize,
+    )
         
 
-    return Screened_interactions_greater_diag, Screened_interactions_greater_upper, Screened_interactions_lesser_diag, Screened_interactions_lesser_upper, Screened_interactions_retarded_diag, Screened_interactions_retarded_upper, nb_mm, lb_max_mm
+    return (Screened_interaction_greater_diag_blocks,
+        Screened_interaction_greater_upper_blocks,
+        Screened_interaction_lesser_diag_blocks,
+        Screened_interaction_lesser_upper_blocks,
+        Screened_interactions_retarded_diag,
+        Screened_interactions_retarded_upper,
+        nb_mm,
+        lb_max_mm)

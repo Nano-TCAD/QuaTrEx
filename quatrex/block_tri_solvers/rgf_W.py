@@ -262,6 +262,15 @@ def rgf_w(
     # correct first and last block to account for the contacts in multiplication
     M_retarded_left_BC_block = -Coulomb_matrix_left_lower_block @ Polarization_retarded_left_upper_block
     M_retarded_right_BC_block = -Coulomb_matrix_right_upper_block @ Polarization_retarded_right_lower_block
+    
+    # if ie == 0:
+    #     import matplotlib.pyplot as plt
+    #     plt.matshow(abs(M_retarded.toarray()))
+    #     plt.matshow(abs(M_retarded_left_BC_block.toarray()))
+    #     plt.matshow(abs(M_retarded_right_BC_block.toarray()))
+    #     plt.show()
+
+    
 
     # L^{\lessgtr}_E_00 = V_10*P^{\lessgtr}_E_00*V_01 + V_10*P^{\lessgtr}_E_01*V_00 + V_00*P^{\lessgtr}_E_10*V_01
     L_greater_left_BC_block = (Coulomb_matrix_left_lower_block @ Polarization_greater_left_diag_block @ Coulomb_matrix_left_upper_block +
@@ -288,6 +297,7 @@ def rgf_w(
     # boundary correction calculations
     cond_l = 0.0
     cond_r = 0.0
+    
 
     # correction for first block
     _, cond_l, Chi_left_BC_block, M_retarded_BC_block, _ = beyn_cpu.beyn(
@@ -368,6 +378,7 @@ def rgf_w(
 
     # check if OBC did not fail
     if not np.isnan(cond_r) and not np.isnan(cond_l) and ie:
+
 
         # add OBC corrections to the start and end block
         M_retarded[-blocksize_after_mm:, -blocksize_after_mm:] += M_retarded_right_BC_block

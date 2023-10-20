@@ -2,6 +2,7 @@
 
 import numpy as np
 from scipy.sparse import csr_matrix
+from scipy.sparse import identity as sp_identity
 
 from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
@@ -12,8 +13,6 @@ from quatrex.OBC import dL_OBC_eigenmode_cpu
 
 
 def screened_interaction_solver(
-    Screened_interaction_retarded_diag_blocks : np.ndarray,
-    Screened_interaction_retarded_upper_blocks : np.ndarray,
     Screened_interaction_lesser_diag_blocks : np.ndarray,
     Screened_interaction_lesser_upper_blocks : np.ndarray,
     Screened_interaction_greater_diag_blocks : np.ndarray,
@@ -22,27 +21,36 @@ def screened_interaction_solver(
     Polarization_greater: csr_matrix,
     Polarization_lesser: csr_matrix,
     Polarization_retarded: csr_matrix,
-    energy_array: np.ndarray,
+    number_of_energy_points: int,
     blocksize: int,
 ):
     
-    for i, energy in enumerate(energy_array):
+    for i in range(number_of_energy_points):
+    # for i in range(1):
         
-        System_matrix = get_system_matrix(Coulomb_matrix, Polarization_retarded[i])
+        System_matrix = get_system_matrix(Coulomb_matrix, Polarization_retarded[i], blocksize)
         
+        # TODO: Modify how the overall workflow deal with the increased blocksize 
         blocksize_after_matmult = update_blocksize(blocksize, System_matrix)
         
-        L_greater = get_L(Coulomb_matrix, Polarization_greater[i])
-        L_lesser = get_L(Coulomb_matrix, Polarization_lesser[i])
+        L_greater = get_L(Coulomb_matrix, Polarization_greater[i], blocksize)
+        L_lesser = get_L(Coulomb_matrix, Polarization_lesser[i], blocksize)
         
         OBCs, beyn_gr = compute_open_boundary_condition(System_matrix,
-                                                        imaginary_limit=5e-4,
-                                                        contour_integration_radius=1000, 
+                                                        imaginary_limit=1e-4,
+                                                        contour_integration_radius=1e6, 
                                                         blocksize=blocksize_after_matmult)
         
         apply_obc_to_system_matrix(System_matrix, OBCs, blocksize_after_matmult)
         
-        System_matrix_inv = np.linalg.inv(System_matrix)
+        System_matrix_inv = np.linalg.inv(System_matrix.toarray())
+        
+        
+        import matplotlib.pyplot as plt
+        plt.matshow(abs(L_greater.toarray()))
+        plt.matshow(abs(L_lesser.toarray()))
+        plt.matshow(abs(System_matrix.toarray()))
+        plt.show()
         
         L_correction_of_obc(L_greater, L_lesser, System_matrix, beyn_gr, blocksize)
         
@@ -64,13 +72,13 @@ def get_system_matrix(
     blocksize : int
 ):
     
-    System_matrix = 1-Coulomb_matrix @ Polarization_retarded
+    System_matrix = sp_identity(Coulomb_matrix.shape[0]) - Coulomb_matrix @ Polarization_retarded
     
-    # correct system matrix for infitie contact
-    System_matrix[0:blocksize, 0:blocksize] = -Coulomb_matrix[blocksize:2*blocksize, 0:blocksize] @\
+    # Correct system matrix for infinite contact
+    System_matrix[0:blocksize, 0:blocksize] -= Coulomb_matrix[blocksize:2*blocksize, 0:blocksize] @\
                                                Polarization_retarded[0:blocksize, blocksize:2*blocksize]
                                                
-    System_matrix[-blocksize:, -blocksize:] = -Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:] @\
+    System_matrix[-blocksize:, -blocksize:] -= Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:] @\
                                                Polarization_retarded[-blocksize:, -2*blocksize:-blocksize]                                           
     
     return System_matrix
@@ -81,7 +89,7 @@ def update_blocksize(
     System_matrix : np.ndarray
 ):
     
-    return blocksize*2
+    return blocksize
     
     
 def get_L(
@@ -153,8 +161,6 @@ def get_L(
     
     return L
     
-      
-    
     
 def compute_screened_interaction(
     System_matrix_inv : np.ndarray, 
@@ -167,35 +173,43 @@ def compute_screened_interaction(
 
 
 def L_correction_of_obc(
-    
+    L_greater, 
+    L_lesser, 
+    System_matrix, 
+    beyn_gr : dict[np.ndarray], 
+    blocksize
 ):
     
     L_greater_left_OBC_block, L_lesser_left_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
-                                                            Chi_left_BC_block,
-                                                            L_greater_left_diag_block.toarray(),
-                                                            L_greater_left_upper_block.toarray(),
-                                                            L_leser_left_diag_block.toarray(),
-                                                            L_leser_left_upper_block.toarray(),
-                                                            M_retarded_left_lower_block.toarray(),
+                                                            beyn_gr["left"],
+                                                            L_greater[:blocksize, :blocksize].toarray(),
+                                                            L_greater[:blocksize, blocksize:2*blocksize].toarray(),
+                                                            L_lesser[:blocksize, :blocksize].toarray(),
+                                                            L_lesser[:blocksize, blocksize:2*blocksize].toarray(),
+                                                            System_matrix[blocksize:2*blocksize, :blocksize].toarray(),
                                                             blk="L")
 
+    # TODO: Modify the handling of error
     if np.isnan(L_lesser_left_OBC_block).any():
-        cond_l = np.nan
+        print('Error: Beyn algorithm failed to compute the self-energy at the left boundary')
+        exit()
     else:
-        L_greater_left_BC_block += L_greater_left_OBC_block
-        L_lesser_left_BC_block += L_lesser_left_OBC_block
+        L_greater[:blocksize, :blocksize] += L_greater_left_OBC_block
+        L_lesser[:blocksize, :blocksize] += L_lesser_left_OBC_block
 
     L_greater_right_OBC_block, L_lesser_right_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
-                                            Chi_right_BC_block,
-                                            L_greater_right_diag_block.toarray(),
-                                            L_greater_right_lower_block.toarray(),
-                                            L_leser_right_diag_block.toarray(),
-                                            L_leser_right_lower_block.toarray(),
-                                            M_retarded_right_upper_block.toarray(),
+                                            beyn_gr["right"],
+                                            L_greater[-blocksize:, -blocksize:].toarray(),
+                                            L_greater[-blocksize:, -2*blocksize:-blocksize].toarray(),
+                                            L_lesser[-blocksize:, -blocksize:].toarray(),
+                                            L_lesser[-blocksize:, -2*blocksize:-blocksize].toarray(),
+                                            System_matrix[-2*blocksize:blocksize, -blocksize:].toarray(),
                                             blk="R")
 
+    # TODO: Modify the handling of error
     if np.isnan(L_lesser_right_OBC_block).any():
-        cond_r = np.nan
+        print('Error: Beyn algorithm failed to compute the self-energy at the left boundary')
+        exit()
     else:
-        L_greater_right_BC_block += L_greater_right_OBC_block
-        L_lesser_right_BC_block += L_lesser_right_OBC_block
+        L_greater[-blocksize:, -blocksize:] += L_greater_right_OBC_block
+        L_lesser[-blocksize:, -blocksize:] += L_lesser_right_OBC_block
