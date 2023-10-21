@@ -63,16 +63,17 @@ def greens_function_solver(
     
         OBCs, _ = compute_open_boundary_condition(M,
                                                   imaginary_limit=5e-4,
-                                                  contour_integration_radius=1000, 
-                                                  blocksize=blocksize)
+                                                  contour_integration_radius=1000,
+                                                  blocksize=blocksize,
+                                                  caller_function_name="G")
         
         
         fermi_distribution = {"left": fermi_distribution_left[i], "right": fermi_distribution_right[i]}
         
         apply_obc_to_system_matrix(M, OBCs, blocksize)
         
-        apply_obc_to_self_energy(Self_energy_lesser[i], 
-                                 Self_energy_greater[i], 
+        apply_obc_to_self_energy(Self_energy_lesser[i],
+                                 Self_energy_greater[i],
                                  OBCs,
                                  fermi_distribution,
                                  blocksize)

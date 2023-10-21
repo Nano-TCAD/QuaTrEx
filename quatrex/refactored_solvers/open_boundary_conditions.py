@@ -14,6 +14,7 @@ def compute_open_boundary_condition(
     imaginary_limit : float,
     contour_integration_radius : float,
     blocksize : int,
+    caller_function_name : str
 ):
     
     _, success, left_gr_beyn, self_energy_left_boundary, _ = beyn(M[:blocksize, :blocksize].toarray(),
@@ -22,7 +23,7 @@ def compute_open_boundary_condition(
                                                                   imaginary_limit,
                                                                   contour_integration_radius,
                                                                   'L',
-                                                                  function='G')
+                                                                  function=caller_function_name)
 
     # TODO: Modify the handling of Beyn errors
     if np.isnan(success):
@@ -43,7 +44,7 @@ def compute_open_boundary_condition(
                                                                     imaginary_limit,
                                                                     contour_integration_radius,
                                                                     'R',
-                                                                    function='G')
+                                                                    function=caller_function_name)
 
     # TODO: Modify the handling of Beyn errors
     if np.isnan(success):

@@ -24,62 +24,63 @@ def screened_interaction_solver(
     number_of_energy_points: int,
     blocksize: int,
 ):
-    
+
     for i in range(number_of_energy_points):
     # for i in range(1):
-        
+
         System_matrix = get_system_matrix(Coulomb_matrix, Polarization_retarded[i], blocksize)
-        
-        # TODO: Modify how the overall workflow deal with the increased blocksize 
+
+        # TODO: Modify how the overall workflow deal with the increased blocksize
         blocksize_after_matmult = update_blocksize(blocksize, System_matrix)
-        
+
         L_greater = get_L(Coulomb_matrix, Polarization_greater[i], blocksize)
         L_lesser = get_L(Coulomb_matrix, Polarization_lesser[i], blocksize)
-        
+
         OBCs, beyn_gr = compute_open_boundary_condition(System_matrix,
                                                         imaginary_limit=1e-4,
-                                                        contour_integration_radius=1e6, 
-                                                        blocksize=blocksize_after_matmult)
-        
+                                                        contour_integration_radius=1e6,
+                                                        blocksize=blocksize_after_matmult,
+                                                        caller_function_name="W")
+
         apply_obc_to_system_matrix(System_matrix, OBCs, blocksize_after_matmult)
-        
+
         System_matrix_inv = np.linalg.inv(System_matrix.toarray())
-        
-        
+
+
         import matplotlib.pyplot as plt
         plt.matshow(abs(L_greater.toarray()))
         plt.matshow(abs(L_lesser.toarray()))
         plt.matshow(abs(System_matrix.toarray()))
         plt.show()
-        
+
         L_correction_of_obc(L_greater, L_lesser, System_matrix, beyn_gr, blocksize)
-        
+
         Screened_interaction_lesser = compute_screened_interaction(System_matrix_inv, L_lesser) 
         Screened_interaction_greater = compute_screened_interaction(System_matrix_inv, L_greater)  
 
         # TODO: modify the blocksize slicing 
-        Screened_interaction_lesser_diag_blocks[i],
-        Screened_interaction_lesser_upper_blocks[i] = csr_to_triple_array(Screened_interaction_lesser, blocksize_after_matmult)
-        Screened_interaction_greater_diag_blocks[i],
-        Screened_interaction_greater_upper_blocks[i] = csr_to_triple_array(Screened_interaction_greater, blocksize_after_matmult)
+        (Screened_interaction_lesser_diag_blocks[i],
+        Screened_interaction_lesser_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_lesser, blocksize_after_matmult)
+        (Screened_interaction_greater_diag_blocks[i],
+        Screened_interaction_greater_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_greater, blocksize_after_matmult)
 
-    
-    
-    
+
+
+
 def get_system_matrix(
     Coulomb_matrix : csr_matrix,
     Polarization_retarded : csr_matrix,
     blocksize : int
 ):
-    
+
     System_matrix = sp_identity(Coulomb_matrix.shape[0]) - Coulomb_matrix @ Polarization_retarded
-    
+
     # Correct system matrix for infinite contact
     System_matrix[0:blocksize, 0:blocksize] -= Coulomb_matrix[blocksize:2*blocksize, 0:blocksize] @\
                                                Polarization_retarded[0:blocksize, blocksize:2*blocksize]
                                                
     System_matrix[-blocksize:, -blocksize:] -= Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:] @\
-                                               Polarization_retarded[-blocksize:, -2*blocksize:-blocksize]                                           
+                                               Polarization_retarded[-blocksize:, -2*blocksize:-blocksize]                                     
     
     return System_matrix
     
@@ -117,7 +118,9 @@ def get_L(
          Coulomb_matrix[0:blocksize, 0:blocksize].conj().T
     
     L[0:blocksize, 0:blocksize] += C1+C2+C3
-    
+
+    # TODO: Test offdiagonal blocks because in reference example they are zero
+    # due to the coulomb matrix being rather sparse
     C1 = Coulomb_matrix[blocksize:2*blocksize, 0:blocksize] @\
          Polarization[blocksize:2*blocksize, 0:blocksize] @\
          Coulomb_matrix[blocksize:2*blocksize, 0:blocksize].conj().T
@@ -147,6 +150,8 @@ def get_L(
     
     L[-blocksize:, -blocksize:] += C1+C2+C3
     
+    # TODO: Test offdiagonal blocks because in reference example they are zero
+    # due to the coulomb matrix being rather sparse
     C1 = Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:] @\
          Polarization[-2*blocksize:-blocksize, -blocksize:] @\
          Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:].conj().T
