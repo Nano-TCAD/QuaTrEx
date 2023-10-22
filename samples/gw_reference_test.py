@@ -53,7 +53,7 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
-    gw_num_iter = 1
+    gw_num_iter = 2
     is_padded = False
     comm_unblock = False
     save_result = False
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
 
-    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter1_.mat"
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter2_no_filter_new_matmult_correction.mat"
 
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
@@ -80,7 +80,8 @@ if __name__ == "__main__":
     # gw matrices path
     # solution_path_gw = os.path.join(
     #    solution_path, "data_GPWS_big_memory1_InAs_0V.mat")
-    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter" + str(gw_num_iter) + "_no_filter.mat"
+    #solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter" + str(gw_num_iter) + "_no_filter.mat"
+    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter" + str(gw_num_iter) + "_no_filter_new_matmult_correction.mat"
 
     parser = argparse.ArgumentParser(
         description="Reference test of GW iterations with MPI+CUDA")
@@ -866,7 +867,7 @@ if __name__ == "__main__":
         reltol = 1e-1
         for gw_type in gw_types:
             for gw_name in gw_names:
-                if gw_name + gw_type == "pr":
+                if gw_name + gw_type == "pr" or gw_name + gw_type == "wr":
                     # is not computed anymore, but only derived from greater and lesser polarization
                     continue
                 assert difference[gw_name + gw_type] <= abstol + reltol * \

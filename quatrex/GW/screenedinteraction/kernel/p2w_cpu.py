@@ -71,18 +71,20 @@ def p2w(
     bmin_mm = bmin[0:nb:nbc]
     # number of blocks after matrix multiplication
     nb_mm = bmax_mm.size
+
+    blocksize = np.max(bmax - bmin + 1)
     # larges block length after matrix multiplication
-    lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
+    blocksize_after_matmul = np.max(bmax_mm - bmin_mm + 1)
 
     # create empty buffer for screened interaction
     # in block format
-    Screened_interactions_retarded_diag = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interactions_retarded_upper = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interaction_lesser_diag_blocks = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
-    Susceptibility_diag = np.zeros((number_of_energy_points, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    Screened_interactions_retarded_diag = np.zeros((number_of_energy_points, nb_mm, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Screened_interactions_retarded_upper = np.zeros((number_of_energy_points, nb_mm - 1, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Screened_interaction_lesser_diag_blocks = np.zeros((number_of_energy_points, nb_mm, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points, nb_mm, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points, nb_mm - 1, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
+    Susceptibility_diag = np.zeros((number_of_energy_points, nb_mm, blocksize_after_matmul, blocksize_after_matmul), dtype=np.complex128)
 
     # for ie in range(number_of_energy_points):
     #     rgf_W.rgf_w(Coulomb_matrix,
@@ -104,8 +106,27 @@ def p2w(
     #                 nbc,
     #                 idx_e[ie],
     #                 factor[ie])
-    
-    blocksize = np.max(bmax - bmin + 1)
+    # for ie in range(number_of_energy_points):
+    #     rgf_W.test_if_matmul_correction_is_correct(Coulomb_matrix,
+    #                 Polarization_greater[ie],
+    #                 Polarization_lesser[ie],
+    #                 Polarization_retarded[ie],
+    #                 bmax,
+    #                 bmin,
+    #                 Screened_interaction_greater_diag_blocks[ie],
+    #                 Screened_interaction_greater_upper_blocks[ie],
+    #                 Screened_interaction_lesser_diag_blocks[ie],
+    #                 Screened_interaction_lesser_upper_blocks[ie],
+    #                 Screened_interactions_retarded_diag[ie],
+    #                 Screened_interactions_retarded_upper[ie],
+    #                 Susceptibility_diag[ie],
+    #                 dosw[ie],
+    #                 new[ie],
+    #                 npw[ie],
+    #                 nbc,
+    #                 idx_e[ie],
+    #                 factor[ie])
+
     screened_interaction_solver(
         Screened_interaction_lesser_diag_blocks,
         Screened_interaction_lesser_upper_blocks,
@@ -127,4 +148,4 @@ def p2w(
         Screened_interactions_retarded_diag,
         Screened_interactions_retarded_upper,
         nb_mm,
-        lb_max_mm)
+        blocksize_after_matmul)

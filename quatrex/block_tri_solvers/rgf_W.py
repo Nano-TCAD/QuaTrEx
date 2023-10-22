@@ -680,3 +680,373 @@ def rgf_w(
                 wg_upper[idx_ib, :, :] *= factor
                 wl_upper[idx_ib, :, :] *= factor
 
+def test_if_matmul_correction_is_correct(
+    Coulomb_matrix: sparse.csr_matrix,
+    Polarization_greater: sparse.csr_matrix,
+    Polarization_lesser: sparse.csr_matrix,
+    Polarization_retarded: sparse.csr_matrix,
+    bmax: np.ndarray[np.int32],
+    bmin: np.ndarray[np.int32],
+    wg_diag: np.ndarray[np.complex128],
+    wg_upper: np.ndarray[np.complex128],
+    wl_diag: np.ndarray[np.complex128],
+    wl_upper: np.ndarray[np.complex128],
+    wr_diag: np.ndarray[np.complex128],
+    wr_upper: np.ndarray[np.complex128],
+    xr_diag: np.ndarray[np.complex128],
+    dosw: np.ndarray[np.complex128],
+    nEw: np.ndarray[np.complex128],
+    nPw: np.ndarray[np.complex128],
+    nbc: np.int64,
+    ie: np.int32,
+    factor: np.float64 = 1.0
+):
+    """Calculates the step from the polarization to the screened interaction.
+    Beyn open boundary conditions are used by default.
+    The outputs (w and x) are inputs which are changed inplace.
+    See the start of this file for more informations.
+
+    Args:
+        Coulomb_matrix (sparse.csr_matrix): sparse matrix of size (#orbitals,#orbitals)
+        Polarization_greater (sparse.csr_matrix): sparse matrix of size (#orbitals,#orbitals)
+        Polarization_lesser (sparse.csr_matrix): sparse matrix of size (#orbitals,#orbitals)
+        Polarization_retarded (sparse.csr_matrix): sparse matrix of size (#orbitals,#orbitals)
+        bmax (np.ndarray[np.int32]): end idx of the blocks, vector of size number of blocks
+        bmin (np.ndarray[np.int32]): start idx of the blocks, vector of size number of blocks
+        wg_diag (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        wg_upper (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm-1, maxblocklength_mm, maxblocklength_mm)
+        wl_diag (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        wl_upper (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm-1, maxblocklength_mm, maxblocklength_mm)
+        wr_diag (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        wr_upper (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm-1, maxblocklength_mm, maxblocklength_mm)
+        xr_diag (np.ndarray[np.complex128]): dense matrix of size (#blocks_mm, maxblocklength_mm, maxblocklength_mm)
+        dosw (np.ndarray[np.complex128]): density of states, vector of size number of blocks
+        nbc (np.int64): how block size changes after matrix multiplication
+        ie (np.int32): energy index (not used)
+        factor (np.float64, optional): factor to multiply the result with. Defaults to 1.0.
+        ref_flag (bool, optional): If reference solution to rgf made by np.linalg.inv should be returned
+        sancho_flag (bool, optional): If sancho or beyn should be used. Defaults to False.
+    """
+
+    # limit for beyn
+    imag_lim = 1e-4
+    # todo find out what rr/R is
+    # (R only is against the style guide)
+    # todo, compare with matlab
+    rr = 1e6
+
+
+    # number of blocks
+    nb = bmin.size
+    # number of total orbitals (number of atomic orbitals)
+    nao = Polarization_retarded.shape[0]
+
+    bmax_mm = bmax[nbc - 1:nb:nbc]
+    bmin_mm = bmin[0:nb:nbc]
+    blocksize = bmax[0] - bmin[0] + 1
+    blocksize_after_mm = bmax_mm[0] - bmin_mm[0] + 1
+    number_of_blocks_after_mm = bmax_mm.size
+    lb_vec_mm = bmax_mm - bmin_mm + 1
+
+
+    # calculate M^{r}\left(E\right)
+    M_retarded = sparse.identity(nao, format="csr") - Coulomb_matrix @ Polarization_retarded
+
+    # calculate L^{\lessgtr}\left(E\right)
+    L_greater = Coulomb_matrix @ Polarization_greater @ Coulomb_matrix.conjugate().transpose()
+    L_lesser = Coulomb_matrix @ Polarization_lesser @ Coulomb_matrix.conjugate().transpose()
+
+    # copy Coulomb_matrix to be able to change it inplace
+    Coulomb_matrix_copy = Coulomb_matrix.copy()
+
+
+
+    # from P^{\lessgtr}\left(E\right) / P^{r}\left(E\right)
+    # (diagonal, upper, lower block of the start block at the left)
+    (Polarization_greater_left_diag_block,
+     Polarization_greater_left_upper_block,
+     Polarization_greater_left_lower_block) = dL_OBC_eigenmode_cpu.stack_px(
+                                                            Polarization_greater[:blocksize, :blocksize],
+                                                            Polarization_greater[:blocksize, blocksize:2*blocksize],
+                                                            nbc)
+    (Polarization_lesser_left_diag_block,
+     Polarization_lesser_left_upper_block,
+     Polarization_lesser_left_lower_block) = dL_OBC_eigenmode_cpu.stack_px(
+                                                            Polarization_lesser[:blocksize, :blocksize],
+                                                            Polarization_lesser[:blocksize, blocksize:2*blocksize],
+                                                            nbc)
+    (Polarization_retarded_left_diag_block,
+     Polarization_retarded_left_upper_block,
+     Polarization_retarded_left_lower_block) = dL_OBC_eigenmode_cpu.stack_pr(
+                                                            Polarization_retarded[:blocksize, :blocksize],
+                                                            Polarization_retarded[:blocksize, blocksize:2*blocksize],
+                                                            nbc)
+
+    # (diagonal, upper, lower block of the end block at the right)
+    (Polarization_greater_right_diag_block,
+     Polarization_greater_right_upper_block,
+     Polarization_greater_right_lower_block) = dL_OBC_eigenmode_cpu.stack_px(
+                                                            Polarization_greater[-blocksize:, -blocksize:],
+                                                            -Polarization_greater[-blocksize:, -2*blocksize:-blocksize].conjugate().transpose(),
+                                                            nbc)
+    (Polarization_lesser_right_diag_block,
+     Polarization_lesser_right_upper_block,
+     Polarization_lesser_right_lower_block) = dL_OBC_eigenmode_cpu.stack_px(
+                                                            Polarization_lesser[-blocksize:, -blocksize:],
+                                                            -Polarization_lesser[-blocksize:, -2*blocksize:-blocksize].conjugate().transpose(),
+                                                            nbc)
+    (Polarization_retarded_right_diag_block,
+     Polarization_retarded_right_upper_block,
+     Polarization_retarded_right_lower_block) = dL_OBC_eigenmode_cpu.stack_pr(
+                                                            Polarization_retarded[-blocksize:, -blocksize:],
+                                                            Polarization_retarded[-blocksize:, -2*blocksize:-blocksize].transpose(),
+                                                            nbc)
+
+
+    # from \hat(V)\left(E\right)
+    # (diagonal, upper, lower block of the start block at the left)
+    (Coulomb_matrix_left_diag_block,
+     Coulomb_matrix_left_upper_block,
+     Coulomb_matrix_left_lower_block) = dL_OBC_eigenmode_cpu.stack_vh(
+                                                            Coulomb_matrix[:blocksize, :blocksize],
+                                                            Coulomb_matrix[:blocksize, blocksize:2*blocksize],
+                                                            nbc)
+
+    # (diagonal, upper, lower block of the end block at the right)
+    (Coulomb_matrix_right_diag_block,
+     Coulomb_matrix_right_upper_block,
+     Coulomb_matrix_right_lower_block) = dL_OBC_eigenmode_cpu.stack_vh(
+                                                            Coulomb_matrix[-blocksize:, -blocksize:],
+                                                            Coulomb_matrix[-blocksize:, -2*blocksize:-blocksize].conjugate().transpose(),
+                                                            nbc)
+
+    # from L^{\lessgtr}\left(E\right)
+    # (diagonal, upper, lower block of the start block at the left)
+    (L_greater_left_diag_block,
+     L_greater_left_upper_block, _) = dL_OBC_eigenmode_cpu.stack_lx(
+                                                            Coulomb_matrix_left_diag_block,
+                                                            Coulomb_matrix_left_upper_block,
+                                                            Coulomb_matrix_left_lower_block,
+                                                            Polarization_greater_left_diag_block,
+                                                            Polarization_greater_left_upper_block,
+                                                            Polarization_greater_left_lower_block)
+    (L_leser_left_diag_block,
+     L_leser_left_upper_block, _) = dL_OBC_eigenmode_cpu.stack_lx(
+                                                            Coulomb_matrix_left_diag_block,
+                                                            Coulomb_matrix_left_upper_block,
+                                                            Coulomb_matrix_left_lower_block,
+                                                            Polarization_lesser_left_diag_block,
+                                                            Polarization_lesser_left_upper_block,
+                                                            Polarization_lesser_left_lower_block)
+
+
+    # (diagonal, upper, lower block of the end block at the right)
+    (L_greater_right_diag_block,_,
+     L_greater_right_lower_block) = dL_OBC_eigenmode_cpu.stack_lx(
+                                                            Coulomb_matrix_right_diag_block,
+                                                            Coulomb_matrix_right_upper_block,
+                                                            Coulomb_matrix_right_lower_block,
+                                                            Polarization_greater_right_diag_block,
+                                                            Polarization_greater_right_upper_block,
+                                                            Polarization_greater_right_lower_block)
+    (L_leser_right_diag_block, _,
+     L_leser_right_lower_block) = dL_OBC_eigenmode_cpu.stack_lx(
+                                                            Coulomb_matrix_right_diag_block,
+                                                            Coulomb_matrix_right_upper_block,
+                                                            Coulomb_matrix_right_lower_block,
+                                                            Polarization_lesser_right_diag_block,
+                                                            Polarization_lesser_right_upper_block,
+                                                            Polarization_lesser_right_lower_block)
+
+    # from M^{r}\left(E\right)
+    # (diagonal, upper, lower block of the start block at the left)
+    (M_retarded_left_diag_block,
+     M_retarded_left_upper_block,
+     M_retarded_left_lower_block) = dL_OBC_eigenmode_cpu.stack_mr(
+                                                            Coulomb_matrix_left_diag_block,
+                                                            Coulomb_matrix_left_upper_block,
+                                                            Coulomb_matrix_left_lower_block,
+                                                            Polarization_retarded_left_diag_block,
+                                                            Polarization_retarded_left_upper_block,
+                                                            Polarization_retarded_left_lower_block)
+    # (diagonal, upper, lower block of the end block at the right)
+    (M_retarded_right_diag_block,
+     M_retarded_right_upper_block,
+     M_retarded_right_lower_block) = dL_OBC_eigenmode_cpu.stack_mr(
+                                                            Coulomb_matrix_right_diag_block,
+                                                            Coulomb_matrix_right_upper_block,
+                                                            Coulomb_matrix_right_lower_block,
+                                                            Polarization_retarded_right_diag_block,
+                                                            Polarization_retarded_right_upper_block,
+                                                            Polarization_retarded_right_lower_block)
+
+
+    # correct first and last block to account for the contacts in multiplication
+    M_retarded_left_matmul_correction = -Coulomb_matrix_left_lower_block @ Polarization_retarded_left_upper_block
+    M_retarded_right_matmul_correction = -Coulomb_matrix_right_upper_block @ Polarization_retarded_right_lower_block
+    
+    # if ie == 0:
+    #     import matplotlib.pyplot as plt
+    #     plt.matshow(abs(M_retarded.toarray()))
+    #     plt.matshow(abs(M_retarded_left_BC_block.toarray()))
+    #     plt.matshow(abs(M_retarded_right_BC_block.toarray()))
+    #     plt.show()
+
+    
+
+    # L^{\lessgtr}_E_00 = V_10*P^{\lessgtr}_E_00*V_01 + V_10*P^{\lessgtr}_E_01*V_00 + V_00*P^{\lessgtr}_E_10*V_01
+    L_greater_left_matmul_correction = (Coulomb_matrix_left_lower_block @ Polarization_greater_left_diag_block @ Coulomb_matrix_left_upper_block +
+                               Coulomb_matrix_left_lower_block @ Polarization_greater_left_upper_block @ Coulomb_matrix_left_diag_block +
+                               Coulomb_matrix_left_diag_block @ Polarization_greater_left_lower_block @ Coulomb_matrix_left_upper_block).toarray()
+
+    L_lesser_left_matmul_correction = (Coulomb_matrix_left_lower_block @ Polarization_lesser_left_diag_block @ Coulomb_matrix_left_upper_block +
+                              Coulomb_matrix_left_lower_block @ Polarization_lesser_left_upper_block @ Coulomb_matrix_left_diag_block +
+                              Coulomb_matrix_left_diag_block @ Polarization_lesser_left_lower_block @ Coulomb_matrix_left_upper_block).toarray()
+
+    # L^{\lessgtr}_E_nn = V_nn*Polarization_lesser_E_n-1n*V_nn-1 + V_n-1n*Polarization_lesser_E_nn-1*V_nn + V_n-1n*Polarization_lesser_E_nn*V_nn-1
+    L_greater_right_matmul_correction = (Coulomb_matrix_right_diag_block @ Polarization_greater_right_upper_block @ Coulomb_matrix_right_lower_block +
+                                Coulomb_matrix_right_upper_block @ Polarization_greater_right_lower_block @ Coulomb_matrix_right_diag_block +
+                                Coulomb_matrix_right_upper_block @ Polarization_greater_right_diag_block @ Coulomb_matrix_right_lower_block).toarray()
+
+    L_lesser_right_matmul_correction = (Coulomb_matrix_right_diag_block @ Polarization_lesser_right_upper_block @ Coulomb_matrix_right_lower_block +
+                               Coulomb_matrix_right_upper_block @ Polarization_lesser_right_lower_block @ Coulomb_matrix_right_diag_block +
+                               Coulomb_matrix_right_upper_block @ Polarization_lesser_right_diag_block @ Coulomb_matrix_right_lower_block).toarray()
+
+
+    # add OBC corrections to the start and end block
+    M_retarded[:blocksize_after_mm, :blocksize_after_mm] += M_retarded_left_matmul_correction
+    M_retarded[-blocksize_after_mm:, -blocksize_after_mm:] += M_retarded_right_matmul_correction
+    
+    L_greater[:blocksize_after_mm, :blocksize_after_mm] += L_greater_left_matmul_correction
+    L_greater[-blocksize_after_mm:, -blocksize_after_mm:] += L_greater_right_matmul_correction
+    
+    L_lesser[:blocksize_after_mm, :blocksize_after_mm] += L_lesser_left_matmul_correction
+    L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] += L_lesser_right_matmul_correction
+
+    
+    M_retarded_right_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+    M_retarded_left_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+    L_greater_right_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+    L_greater_left_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+    L_lesser_right_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+    L_lesser_left_BC_block = np.zeros((blocksize_after_mm, blocksize_after_mm), dtype=np.complex128)
+
+    # correction for the matrix inverse calculations----------------------------
+
+    # conditions about convergence or meaningful results from
+    # boundary correction calculations
+    cond_l = 0.0
+    cond_r = 0.0
+    
+
+    # correction for first block
+    _, cond_l, Chi_left_BC_block, M_retarded_BC_block, _ = beyn_cpu.beyn(
+                                                            M_retarded[:blocksize_after_mm,:blocksize_after_mm].toarray(),
+                                                            M_retarded[:blocksize_after_mm, blocksize_after_mm:2*blocksize_after_mm].toarray(),
+                                                            M_retarded[blocksize_after_mm:2*blocksize_after_mm, :blocksize_after_mm].toarray(),
+                                                            imag_lim, rr, "L", block=False)
+
+    if not np.isnan(cond_l):
+        M_retarded_left_BC_block -= M_retarded_BC_block
+        Coulomb_matrix_left_BC_block = M_retarded_left_lower_block @ Chi_left_BC_block @ Coulomb_matrix_left_upper_block
+
+    # beyn failed
+    if np.isnan(cond_l):
+        (Chi_left_BC_block, M_retarded_BC_block, Coulomb_matrix_left_BC_block, cond_l) = sancho.open_boundary_conditions(
+                                                            M_retarded[:blocksize_after_mm,:blocksize_after_mm].toarray(),
+                                                            M_retarded[blocksize_after_mm:2*blocksize_after_mm, :blocksize_after_mm].toarray(),
+                                                            M_retarded[:blocksize_after_mm, blocksize_after_mm:2*blocksize_after_mm].toarray(),
+                                                            Coulomb_matrix_left_upper_block.toarray()
+                                                            )
+        M_retarded_left_BC_block -= M_retarded_BC_block
+
+    # correction for last block
+    _, cond_r, Chi_right_BC_block, M_retarded_BC_block, _ = beyn_cpu.beyn(
+                                                            M_retarded[-blocksize_after_mm:,-blocksize_after_mm:].toarray(),
+                                                            M_retarded[-2*blocksize_after_mm:-blocksize_after_mm,-blocksize_after_mm:].toarray(),
+                                                            M_retarded[-blocksize_after_mm:,-2*blocksize_after_mm:-blocksize_after_mm].toarray(),
+                                                            imag_lim, rr, "R", block=False)
+    if not np.isnan(cond_r):
+        M_retarded_right_BC_block -= M_retarded_BC_block
+        Coulomb_matrix_right_BC_block = M_retarded_right_upper_block @ Chi_right_BC_block @ Coulomb_matrix_right_lower_block
+
+    # beyn failed
+    if np.isnan(cond_r):
+        Chi_right_BC_block, M_retarded_BC_block, Coulomb_matrix_right_BC_block, cond_r = sancho.open_boundary_conditions(
+                                                            M_retarded[-blocksize_after_mm:,-blocksize_after_mm:].toarray(),
+                                                            M_retarded[-2*blocksize_after_mm:-blocksize_after_mm,-blocksize_after_mm:].toarray(),
+                                                            M_retarded[-blocksize_after_mm:,-2*blocksize_after_mm:-blocksize_after_mm].toarray(),
+                                                            Coulomb_matrix_right_lower_block.toarray()
+                                                            )
+        M_retarded_right_BC_block -= M_retarded_BC_block
+
+
+    # boundary conditions could be calculated
+    if not np.isnan(cond_l) and not np.isnan(cond_l):
+        L_greater_left_OBC_block, L_lesser_left_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
+                                                            Chi_left_BC_block,
+                                                            L_greater[:blocksize_after_mm,:blocksize_after_mm].toarray(),
+                                                            L_greater[:blocksize_after_mm, blocksize_after_mm:2*blocksize_after_mm].toarray(),
+                                                            L_lesser[:blocksize_after_mm,:blocksize_after_mm].toarray(),
+                                                            L_lesser[:blocksize_after_mm, blocksize_after_mm:2*blocksize_after_mm].toarray(),
+                                                            M_retarded[blocksize_after_mm:2*blocksize_after_mm, :blocksize_after_mm].toarray(),
+                                                            blk="L")
+
+        if np.isnan(L_lesser_left_OBC_block).any():
+            cond_l = np.nan
+        else:
+            L_greater_left_BC_block += L_greater_left_OBC_block
+            L_lesser_left_BC_block += L_lesser_left_OBC_block
+
+        L_greater_right_OBC_block, L_lesser_right_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
+                                                            Chi_right_BC_block,
+                                                            L_greater[-blocksize_after_mm:,-blocksize_after_mm:].toarray(),
+                                                            L_greater[-blocksize_after_mm:,-2*blocksize_after_mm:-blocksize_after_mm].toarray(),
+                                                            L_lesser[-blocksize_after_mm:,-blocksize_after_mm:].toarray(),
+                                                            L_lesser[-blocksize_after_mm:,-2*blocksize_after_mm:-blocksize_after_mm].toarray(),
+                                                            M_retarded[-2*blocksize_after_mm:-blocksize_after_mm,-blocksize_after_mm:].toarray(),
+                                                            blk="R")
+
+        if np.isnan(L_lesser_right_OBC_block).any():
+            cond_r = np.nan
+        else:
+            L_greater_right_BC_block += L_greater_right_OBC_block
+            L_lesser_right_BC_block += L_lesser_right_OBC_block
+
+
+    # start of rgf_W------------------------------------------------------------
+
+    # check if OBC did not fail
+    if not np.isnan(cond_r) and not np.isnan(cond_l) and ie:
+
+        # add OBC corrections to the start and end block
+        M_retarded[:blocksize_after_mm, :blocksize_after_mm] += M_retarded_left_BC_block
+        M_retarded[-blocksize_after_mm:, -blocksize_after_mm:] += M_retarded_right_BC_block
+
+        L_greater[:blocksize_after_mm, :blocksize_after_mm] += L_greater_left_BC_block
+        L_greater[-blocksize_after_mm:, -blocksize_after_mm:] += L_greater_right_BC_block
+        
+        L_lesser[:blocksize_after_mm, :blocksize_after_mm] += L_lesser_left_BC_block
+        L_lesser[-blocksize_after_mm:, -blocksize_after_mm:] += L_lesser_right_BC_block
+        
+
+        Coulomb_matrix_copy[-blocksize_after_mm:, -blocksize_after_mm:] -= Coulomb_matrix_right_BC_block
+        Coulomb_matrix_copy[:blocksize_after_mm, :blocksize_after_mm] -= Coulomb_matrix_left_BC_block
+
+        System_matrix_invert = np.linalg.inv(M_retarded.toarray())
+        Screened_interaction_retarded = System_matrix_invert @ Coulomb_matrix_copy
+        Screened_interaction_lesser = System_matrix_invert @ L_lesser @ System_matrix_invert.conjugate().transpose()
+        Screened_interaction_greater = System_matrix_invert @ L_greater @ System_matrix_invert.conjugate().transpose()
+
+        # extract the diagonal and upper diagonal blocks from the screened interaction retarded, lesser and greater
+        # and store them in the corresponding arrays
+        for j in range(number_of_blocks_after_mm):
+            wr_diag[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+            wl_diag[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+            wg_diag[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, j * blocksize_after_mm : (j + 1) * blocksize_after_mm]
+
+        for j in range(number_of_blocks_after_mm-1):
+            wr_upper[j] = Screened_interaction_retarded[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
+            wl_upper[j] = Screened_interaction_lesser[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
+            wg_upper[j] = Screened_interaction_greater[j * blocksize_after_mm : (j + 1) * blocksize_after_mm, (j + 1) * blocksize_after_mm : (j + 2) * blocksize_after_mm]
+
