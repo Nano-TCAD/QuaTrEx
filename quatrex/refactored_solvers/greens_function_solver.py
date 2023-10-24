@@ -33,8 +33,6 @@ def compute_observables(
 
 
 def greens_function_solver(
-        G_retarded_diag_blocks : np.ndarray,
-        G_retarded_upper_blocks : np.ndarray,
         G_lesser_diag_blocks : np.ndarray,
         G_lesser_upper_blocks : np.ndarray,
         G_greater_diag_blocks : np.ndarray,
@@ -50,18 +48,14 @@ def greens_function_solver(
         blocksize : int
     ):
 
-    G_retarded : csr_matrix
-    G_lesser : csr_matrix
-    G_greater : csr_matrix
-
     for i, energy in enumerate(energy_array):
 
-        M = (energy + 1j * 1e-12)*Overlap_matrix - Hamiltonian - Self_energy_retarded[i]
+        System_matrix = (energy + 1j * 1e-12)*Overlap_matrix - Hamiltonian - Self_energy_retarded[i]
         
         # TODO --> Modification suggestion
         # System_matrix = make_system_matrix(energy, Overlap_matrix, Hamiltonian, Self_energy_retarded[i])
     
-        OBCs, _ = compute_open_boundary_condition(M,
+        OBCs, _ = compute_open_boundary_condition(System_matrix,
                                                   imaginary_limit=5e-4,
                                                   contour_integration_radius=1000,
                                                   blocksize=blocksize,
@@ -70,7 +64,7 @@ def greens_function_solver(
         
         fermi_distribution = {"left": fermi_distribution_left[i], "right": fermi_distribution_right[i]}
         
-        apply_obc_to_system_matrix(M, OBCs, blocksize)
+        apply_obc_to_system_matrix(System_matrix, OBCs, blocksize)
         
         apply_obc_to_self_energy(Self_energy_lesser[i],
                                  Self_energy_greater[i],
@@ -78,11 +72,10 @@ def greens_function_solver(
                                  fermi_distribution,
                                  blocksize)
         
-        G_retarded = np.linalg.inv(M.toarray())
+        G_retarded = np.linalg.inv(System_matrix.toarray())
         
         G_lesser, G_greater = compute_greens_function_lesser_and_greater(G_retarded, Self_energy_lesser[i], Self_energy_greater[i])
-        
-        G_retarded_diag_blocks[i], G_retarded_upper_blocks[i] = csr_to_triple_array(G_retarded, blocksize)
+
         G_lesser_diag_blocks[i], G_lesser_upper_blocks[i] = csr_to_triple_array(G_lesser, blocksize)
         G_greater_diag_blocks[i], G_greater_upper_blocks[i] = csr_to_triple_array(G_greater, blocksize)
         

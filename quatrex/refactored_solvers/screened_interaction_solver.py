@@ -53,9 +53,9 @@ def screened_interaction_solver(
 
         # TODO: modify the blocksize slicing
         (Screened_interaction_lesser_diag_blocks[i],
-        Screened_interaction_lesser_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_lesser, blocksize_after_matmult)
+        Screened_interaction_lesser_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_lesser, blocksize)
         (Screened_interaction_greater_diag_blocks[i],
-        Screened_interaction_greater_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_greater, blocksize_after_matmult)
+        Screened_interaction_greater_upper_blocks[i]) = csr_to_triple_array(Screened_interaction_greater, blocksize)
 
 
 

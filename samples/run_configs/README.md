@@ -1,1 +1,0 @@
-mpiexec -n 4 -f run_configs/mpd_multigpu.run python gw_chain_mpi.py --type=gpu
