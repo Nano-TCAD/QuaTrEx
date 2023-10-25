@@ -3,9 +3,7 @@
 import numpy as np
 import glob
 from scipy import sparse
-from scipy.sparse import identity
 import matplotlib.pylab as plt
-from scipy.interpolate import griddata
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
 from quatrex.utils.read_utils import *

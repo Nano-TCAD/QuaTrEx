@@ -6,7 +6,7 @@ from scipy.sparse import identity as sp_identity
 
 from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
-from quatrex.refactored_solvers.utils import csr_to_triple_array
+from quatrex.refactored_utils.utils import csr_to_triple_array
 
 from quatrex.OBC import dL_OBC_eigenmode_cpu
 

@@ -12,20 +12,17 @@ from scipy import sparse
 import time
 import pickle
 from quatrex.utils.communication import TransposeMatrix, CommunicateCompute
-from quatrex.utils.matrix_creation import get_number_connected_blocks
-from quatrex.utils import change_format
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.OMEN_structure_matrices import OMENHamClass
-from quatrex.GW.gold_solution import read_solution
+from quatrex.refactored_utils.read_solution import load_a_gw_matrix_flattened, load_coulomb_matrix_flattened, save_all
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
 
 
-# Import because of refactoring
-from quatrex.utils.matrix_creation import initialize_block_G
-
 
 # Refactored utils
-from quatrex.refactored_solvers.fermi_distribution import fermi_distribution
+from quatrex.refactored_utils.fermi_distribution import fermi_distribution
+from quatrex.refactored_utils.utils import flattened_to_list_of_csr, map_triple_array_to_flattened, triple_array_to_flattened
+
 
 # Refactored functions
 from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
@@ -54,19 +51,13 @@ if __name__ == "__main__":
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
 
-    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter"
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_iter.mat"
 
-    # path to solution
-    solution_path ="/usr/scratch/mont-fort17/dleonard/GW_paper/InAs"
-    hamiltonian_path = solution_path
-
-    # coulomb matrix path
-    solution_path_vh = os.path.join(
-        solution_path, "data_Vh_finalPI_InAs_0v.mat")
+    # path to hamiltonian
+    hamiltonian_path ="/usr/scratch/mont-fort17/dleonard/GW_paper/InAs"
 
     # gw matrices path
-    solution_path_gw = "/usr/scratch/mont-fort17/almaeder/test_gw/few_energy_iter" + str(gw_num_iter) + "_no_filter_new_matmult_correction.mat"
-
+    reference_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_iter" + str(gw_num_iter) + ".mat"
 
     # reading reference solution-------------------------------------------------
     gw_names = ["g", "p", "w", "s"]
@@ -75,11 +66,10 @@ if __name__ == "__main__":
                      "w": "Screened Interaction", "s": "Self-Energy"}
     matrices_gold = {}
     for gw_name in gw_names:
-        _, rows, columns, g_gold, l_gold, r_gold = read_solution.load_x(
-            solution_path_gw, gw_name)
+        _, rows, columns, g_gold, l_gold = load_a_gw_matrix_flattened(
+            reference_path, gw_name)
         matrices_gold[gw_name + "g"] = g_gold
         matrices_gold[gw_name + "l"] = l_gold
-        matrices_gold[gw_name + "r"] = r_gold
         matrices_gold[gw_name + "rows"] = rows
         matrices_gold[gw_name + "columns"] = columns
     for gw_name in gw_names:
@@ -89,49 +79,48 @@ if __name__ == "__main__":
 
     rows = matrices_gold["grows"]
     columns = matrices_gold["gcolumns"]
-    rowsRef, columnsRef, Coulomb_matrix_flattened_reference = read_solution.load_v(solution_path_vh)
+    rowsRef, columnsRef, Coulomb_matrix_flattened_reference = load_coulomb_matrix_flattened(reference_path)
 
     if rank == 0:
         time_read_gold += time.perf_counter()
         time_pre_compute = -time.perf_counter()
 
     # physics parameters---------------------------------------------------------
-    # create hamiltonian object
-    # one orbital on C atoms, two same types
-    no_orb = np.array([5, 5])
-    Vappl = 0.4
-    # Fermi Level of Left Contact
-    energy_fl = 1.9
-    # Fermi Level of Right Contact
-    energy_fr = energy_fl - Vappl
-    # Temperature in Kelvin
-    
-    # relative permittivity
-    epsR = 2.5
-    # DFT Conduction Band Minimum
-    ECmin = 1.9346
-
     # Phyiscal Constants -----------
     # TODO: Move out in config file
-    e = 1.6022e-19
-    eps0 = 8.854e-12
+    elementary_charge = 1.6022e-19
+    vacuum_permittivity = 8.854e-12
     hbar = 1.0546e-34
     temperature_in_kelvin = 300
     boltzmann_constant = 1.38e-23
-    elementary_charge = 1.6022e-19
 
+    
+    
+    # create hamiltonian object
+    # one orbital on C atoms, two same types
+    number_of_orbital_per_atom = np.array([5, 5])
+    voltage_applied = 0.4
+    # Fermi Level of Left Contact
+    energy_fermi_left = 1.9
+    # Fermi Level of Right Contact
+    energy_fermi_right = energy_fermi_left - voltage_applied
 
+    # relative permittivity
+    relative_permittivity = 2.5
+    # DFT Conduction Band Minimum
+    energy_conduction_band_minimum = 1.9346
 
     # Fermi Level to Band Edge Difference
-    dEfL_EC = energy_fl - ECmin
-    dEfR_EC = energy_fr - ECmin
+    energy_difference_fermi_minimum_left = energy_fermi_left - energy_conduction_band_minimum
+    energy_difference_fermi_minimum_right = energy_fermi_right - energy_conduction_band_minimum
 
-    energy = np.linspace(-10.0, 5.0, num_energy, endpoint=True,
-                         dtype=float)
-    delta_energy = energy[1] - energy[0]
-    pre_factor = -1.0j * delta_energy / (np.pi)
+    energy_points = np.linspace(-10.0, 5.0, num_energy, endpoint=True, dtype=float)
+    delta_energy = energy_points[1] - energy_points[0]
+
+    # TODO: refactor
     hamiltonian_obj = OMENHamClass.Hamiltonian(
-        solution_path, no_orb, Vappl=Vappl, rank=rank)
+        hamiltonian_path, number_of_orbital_per_atom, Vappl=voltage_applied, rank=rank)
+
     # broadcast hamiltonian object
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -147,7 +136,7 @@ if __name__ == "__main__":
     assert rows.shape[0] == columns.shape[0]
     assert number_of_orbitals % blocksize == 0
     number_of_blocks = int(number_of_orbitals / blocksize)
-    number_of_energy_points = energy.shape[0]
+    number_of_energy_points = energy_points.shape[0]
     number_of_nonzero_elements = rows.shape[0]
 
     
@@ -160,26 +149,23 @@ if __name__ == "__main__":
                                                         number_of_orbitals),
                                                 dtype=base_type).tocsr()
 
+    # TODO refactor
     Coulomb_matrix = construct_coulomb_matrix(
-        hamiltonian_obj, epsR, eps0, e, diag=False, orb_uniform=True)
+        hamiltonian_obj, relative_permittivity, vacuum_permittivity, elementary_charge, diag=False, orb_uniform=True)
     Coulomb_matrix_flattened = np.asarray(Coulomb_matrix[rows, columns].reshape(-1))
 
     assert np.allclose(Coulomb_matrix.toarray(), Coulomb_matrix_reference.toarray())
 
-    ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(gw_num_iter)))
-    EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(gw_num_iter)))
-    EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(gw_num_iter)))
+    energy_conduction_band_minimum_over_iterations = np.concatenate((np.array([energy_conduction_band_minimum]), np.zeros(gw_num_iter)))
+    energy_fermi_left_over_iterations = np.concatenate((np.array([energy_fermi_left]), np.zeros(gw_num_iter)))
+    energy_fermi_right_over_iterations = np.concatenate((np.array([energy_fermi_right]), np.zeros(gw_num_iter)))
 
 
-    # maps to transform after rgf for g and w
-    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(
-        rows, columns, bmax, bmin)
-    map_ = [map_diag, map_upper, map_lower]
-
-    # number of blocks
-    nb = hamiltonian_obj.Bmin.shape[0]
-    nbc = get_number_connected_blocks(
-        hamiltonian_obj.NH, bmin, bmax, rows, columns)
+    # maps to transform from _blocks to _flattened
+    map_blocks_to_flattened = map_triple_array_to_flattened(rows,
+                                                            columns,
+                                                            number_of_blocks,
+                                                            blocksize)
 
     if rank == 0:
         # print size of data
@@ -209,127 +195,107 @@ if __name__ == "__main__":
     distribution_no_padded = TransposeMatrix(
         comm, data_shape, base_type=base_type)
 
-    flag_zeros = np.zeros(distribution.count[1])
-    range_local_no_padding = [slice(distribution.displacement[0], min(distribution.displacement[0] + distribution.count[0], data_shape[0])),
-                              slice(distribution.displacement[1], min(distribution.displacement[1] + distribution.count[1], data_shape[1]))]
-    flag_end = min(distribution.count[1],
-                   data_shape[1] - distribution.displacement[1])
 
-    batchsize_row = distribution.count[0] // 2
-    batchsize_col = distribution.count[1] // 2
-    iteration_row = int(np.ceil(distribution.count[0] / batchsize_row))
-    iteration_col = int(np.ceil(distribution.count[1] / batchsize_col))
+    batchsize_nonzero_elements_per_rank = distribution.count[0] // 2
+    batchsize_energy_per_rank = distribution.count[1] // 2
+    iteration_nonzero_elements_per_rank = int(np.ceil(distribution.count[0] / batchsize_nonzero_elements_per_rank))
+    iteration_energy_per_rank = int(np.ceil(distribution.count[1] / batchsize_energy_per_rank))
+    iterations_unblock = [iteration_nonzero_elements_per_rank, iteration_energy_per_rank]
 
-    distribution_unblock_row = TransposeMatrix(comm, np.array(
-        [batchsize_row*size, data_shape_padded[1]]), base_type=base_type)
-    distribution_unblock_col = TransposeMatrix(comm, np.array(
-        [data_shape_padded[0], batchsize_col*size]), base_type=base_type)
+    distribution_unblock_nonzero_elements_per_rank = TransposeMatrix(comm, np.array(
+        [batchsize_nonzero_elements_per_rank*size, data_shape_padded[1]]), base_type=base_type)
+    distribution_unblock_energy_per_rank = TransposeMatrix(comm, np.array(
+        [data_shape_padded[0], batchsize_energy_per_rank*size]), base_type=base_type)
 
     distributions = [distribution for _ in range(num_buffer)]
-    distributions_unblock_row = [
-        distribution_unblock_row for _ in range(num_buffer)]
-    distributions_unblock_col = [
-        distribution_unblock_col for _ in range(num_buffer)]
-    iterations_unblock = [iteration_row, iteration_col]
 
-    bmax_mm = bmax[nbc - 1:nb:nbc]
-    bmin_mm = bmin[0:nb:nbc]
+    distributions_unblock_nonzero_elements_per_rank = [
+        distribution_unblock_nonzero_elements_per_rank for _ in range(num_buffer)]
 
-    map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(
-        rows, columns, bmax_mm, bmin_mm)
-    map_mm_ = [map_diag_mm, map_upper_mm, map_lower_mm]
+    distributions_unblock_energy_per_rank = [
+        distribution_unblock_energy_per_rank for _ in range(num_buffer)]
 
-    # observables and others----------------------------------------------------
-    # Energy Index Vector
-    Idx_e = np.arange(energy.shape[0])
-    # density of states
-    dos = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
-    dosw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
-    # occupied states/unoccupied states
-    nE = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
-    nP = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
-    # occupied screening/unoccupied screening
-    nEw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
-    nPw = np.zeros(shape=(distribution.shape[1], nb // nbc), dtype=base_type)
-    # current per energy
-    ide = np.zeros(shape=(distribution.shape[1], nb), dtype=base_type)
+    
+    number_of_energy_points_padded = distribution.shape[1]
+    number_of_nonzero_elements_padded = distribution.shape[0]
+    number_of_energy_points_per_rank = distribution.count[1]
+    number_of_nonzero_elements_per_rank = distribution.count[0]
 
-    # padding of 1D arrays
-    energy_padded = np.zeros((distribution.shape[1]), dtype=energy.dtype)
-    energy_padded[:data_shape[1]] = energy
-    Idx_e_padded = np.zeros((distribution.shape[1]), dtype=Idx_e.dtype)
-    Idx_e_padded[:data_shape[1]] = Idx_e
 
-    vh_padded = np.zeros((distribution.shape[0]), dtype=Coulomb_matrix_reference.dtype)
-    vh_padded[:data_shape[0]] = Coulomb_matrix_flattened
+
+    # padding of 1D arrays----------------------------------------------------
+
+    energy_points_padded = np.zeros((distribution.shape[1]), dtype=energy_points.dtype)
+    energy_points_padded[:data_shape[1]] = energy_points
+
+    Coulomb_matrix_padded = np.zeros((distribution.shape[0]), dtype=Coulomb_matrix_reference.dtype)
+    Coulomb_matrix_padded[:number_of_nonzero_elements] = Coulomb_matrix_flattened
 
     # split up the factor between the ranks
-    energy_loc = energy_padded[distribution.range_local[1]]
-    Idx_e_loc = Idx_e_padded[distribution.range_local[1]]
-    vh_loc = vh_padded[distribution.range_local[0]]
+    energy_points_per_rank = energy_points_padded[distribution.range_local[1]]
+    Coulomb_matrix_per_rank = Coulomb_matrix_padded[distribution.range_local[0]]
 
     # print rank distribution
     print(
-        f"Rank: {rank} #Energy/rank: {distribution.count[1]} #nnz/rank: {distribution.count[0]}", proc_name)
+        f"Rank: {rank} #Energy/rank: {number_of_energy_points_per_rank} #nnz/rank: {number_of_nonzero_elements_per_rank}", proc_name)
 
     if rank == 0:
         time_pre_compute += time.perf_counter()
         time_alloc_buf = -time.perf_counter()
 
     # create local buffers----------------------------------------------------------
-    # order g,l,r and the transposed needed
-    g_col = [np.zeros((distribution.count[1], distribution.shape[0]),
+    g_energy_per_rank = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                       dtype=base_type, order="C") for _ in range(g_num_buffer)]
-    p_col = [np.zeros((distribution.count[1], distribution.shape[0]),
+    p_energy_per_rank = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                       dtype=base_type, order="C") for _ in range(p_num_buffer)]
-    w_col = [np.zeros((distribution.count[1], distribution.shape[0]),
+    w_energy_per_rank = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                       dtype=base_type, order="C") for _ in range(w_num_buffer)]
-    w_col_tmp = [np.zeros((distribution.count[1], distribution.shape[0]),
+    w_energy_per_rank_tmp = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                           dtype=base_type, order="C") for _ in range(w_num_buffer)]
-    s_col = [np.zeros((distribution.count[1], distribution.shape[0]),
+    s_energy_per_rank = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                       dtype=base_type, order="C") for _ in range(s_num_buffer)]
-    s_col_tmp = [np.zeros((distribution.count[1], distribution.shape[0]),
+    s_energy_per_rank_tmp = [np.zeros((number_of_energy_points_per_rank, distribution.shape[0]),
                           dtype=base_type, order="C") for _ in range(s_num_buffer)]
 
-    g_row = [np.zeros((distribution.count[0], distribution.shape[1]),
+    g_nonzero_elements_per_rank = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                       dtype=base_type, order="C") for _ in range(g_num_buffer)]
-    p_row = [np.zeros((distribution.count[0], distribution.shape[1]),
+    p_nonzero_elements_per_rank = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                       dtype=base_type, order="C") for _ in range(p_num_buffer)]
-    w_row = [np.zeros((distribution.count[0], distribution.shape[1]),
+    w_nonzero_elements_per_rank = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                       dtype=base_type, order="C") for _ in range(w_num_buffer)]
-    w_row_tmp = [np.zeros((distribution.count[0], distribution.shape[1]),
+    w_nonzero_elements_per_rank_tmp = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                           dtype=base_type, order="C") for _ in range(w_num_buffer)]
-    s_row = [np.zeros((distribution.count[0], distribution.shape[1]),
+    s_nonzero_elements_per_rank = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                       dtype=base_type, order="C") for _ in range(s_num_buffer)]
-    s_row_tmp = [np.zeros((distribution.count[0], distribution.shape[1]),
+    s_nonzero_elements_per_rank_tmp = [np.zeros((number_of_nonzero_elements_per_rank, distribution.shape[1]),
                           dtype=base_type, order="C") for _ in range(s_num_buffer)]
 
-    buffer_row_compute = [np.empty((distribution_unblock_row.count[0],
-                                    distribution_unblock_row.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
-    buffer_row_send = [np.empty((distribution_unblock_row.count[0],
-                                 distribution_unblock_row.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
-    buffer_col_recv = [np.empty((distribution_unblock_row.count[1],
-                                 distribution_unblock_row.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_nonzero_elements_per_rank_compute = [np.empty((distribution_unblock_nonzero_elements_per_rank.count[0],
+                                    distribution_unblock_nonzero_elements_per_rank.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_nonzero_elements_per_rank_send = [np.empty((distribution_unblock_nonzero_elements_per_rank.count[0],
+                                 distribution_unblock_nonzero_elements_per_rank.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_energy_per_rank_recv = [np.empty((distribution_unblock_nonzero_elements_per_rank.count[1],
+                                 distribution_unblock_nonzero_elements_per_rank.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
 
-    buffer_col_compute = [np.empty((distribution_unblock_col.count[1],
-                                    distribution_unblock_col.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
-    buffer_col_send = [np.empty((distribution_unblock_col.count[1],
-                                 distribution_unblock_col.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
-    buffer_row_recv = [np.empty((distribution_unblock_col.count[0],
-                                 distribution_unblock_col.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_energy_per_rank_compute = [np.empty((distribution_unblock_energy_per_rank.count[1],
+                                    distribution_unblock_energy_per_rank.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_energy_per_rank_send = [np.empty((distribution_unblock_energy_per_rank.count[1],
+                                 distribution_unblock_energy_per_rank.shape[0]), dtype=base_type, order="C") for _ in range(num_buffer)]
+    buffer_nonzero_elements_per_rank_recv = [np.empty((distribution_unblock_energy_per_rank.count[0],
+                                 distribution_unblock_energy_per_rank.shape[1]), dtype=base_type, order="C") for _ in range(num_buffer)]
 
-    matrices_loc_row = {}
-    matrices_loc_col = {}
+    matrices_nonzero_elements_per_rank = {}
+    matrices_energy_per_rank = {}
     # transposed arrays are not compared in the end
     for i in range(gw_num_buffer):
-        matrices_loc_row[gw_names[0] + gw_types[i]] = g_row[i]
-        matrices_loc_row[gw_names[1] + gw_types[i]] = p_row[i]
-        matrices_loc_row[gw_names[2] + gw_types[i]] = w_row[i]
-        matrices_loc_row[gw_names[3] + gw_types[i]] = s_row[i]
-        matrices_loc_col[gw_names[0] + gw_types[i]] = g_col[i]
-        matrices_loc_col[gw_names[1] + gw_types[i]] = p_col[i]
-        matrices_loc_col[gw_names[2] + gw_types[i]] = w_col[i]
-        matrices_loc_col[gw_names[3] + gw_types[i]] = s_col[i]
+        matrices_nonzero_elements_per_rank[gw_names[0] + gw_types[i]] = g_nonzero_elements_per_rank[i]
+        matrices_nonzero_elements_per_rank[gw_names[1] + gw_types[i]] = p_nonzero_elements_per_rank[i]
+        matrices_nonzero_elements_per_rank[gw_names[2] + gw_types[i]] = w_nonzero_elements_per_rank[i]
+        matrices_nonzero_elements_per_rank[gw_names[3] + gw_types[i]] = s_nonzero_elements_per_rank[i]
+        matrices_energy_per_rank[gw_names[0] + gw_types[i]] = g_energy_per_rank[i]
+        matrices_energy_per_rank[gw_names[1] + gw_types[i]] = p_energy_per_rank[i]
+        matrices_energy_per_rank[gw_names[2] + gw_types[i]] = w_energy_per_rank[i]
+        matrices_energy_per_rank[gw_names[3] + gw_types[i]] = s_energy_per_rank[i]
 
     if rank == 0:
         time_alloc_buf += time.perf_counter()
@@ -347,28 +313,25 @@ if __name__ == "__main__":
         Sigma_greater,
         Sigma_lesser,
         Sigma_retarded,
-        energy_points_per_rank,
-        energy_fermi_left,
-        energy_fermi_right,
+        energy_fermi_left_per_iteration,
+        energy_fermi_right_per_iteration,
         G_greater,
         G_lesser
     ):
         # calculate the green's function at every rank------------------------------
-        number_of_energy_points_per_rank = energy_points_per_rank.shape[0]
-
         fermi_distribution_left = fermi_distribution(energy_points_per_rank,
-                                                    energy_fermi_left,
+                                                    energy_fermi_left_per_iteration,
                                                     elementary_charge,
                                                     boltzmann_constant,
                                                     temperature_in_kelvin)
         fermi_distribution_right = fermi_distribution(energy_points_per_rank,
-                                                    energy_fermi_right,
+                                                    energy_fermi_right_per_iteration,
                                                     elementary_charge,
                                                     boltzmann_constant,
                                                     temperature_in_kelvin)
 
 
-        # cannot be put into the self-energy kernel because transposed is needed
+        # cannot be put into the self-energy_points kernel because transposed is needed
         for ie in range(number_of_energy_points_per_rank):
             # symmetrize (lesser and greater have to be skewed symmetric)
             Sigma_lesser[ie] = (Sigma_lesser[ie] - Sigma_lesser[ie].T.conj()) / 2
@@ -376,22 +339,22 @@ if __name__ == "__main__":
             Sigma_retarded[ie] = np.real(Sigma_retarded[ie]) + (Sigma_greater[ie] - Sigma_lesser[ie]) / 2
 
 
-        G_lesser_diag_blocks = np.zeros((number_of_energy_points,
+        G_lesser_diag_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks,
                                         blocksize,
                                         blocksize),
                                         dtype=np.complex128)
-        G_lesser_upper_blocks = np.zeros((number_of_energy_points,
+        G_lesser_upper_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks - 1,
                                         blocksize,
                                         blocksize),
                                         dtype=np.complex128)
-        G_greater_diag_blocks = np.zeros((number_of_energy_points,
+        G_greater_diag_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks,
                                         blocksize,
                                         blocksize),
                                         dtype=np.complex128)
-        G_greater_upper_blocks = np.zeros((number_of_energy_points,
+        G_greater_upper_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks - 1,
                                         blocksize,
                                         blocksize),
@@ -400,7 +363,7 @@ if __name__ == "__main__":
 
         greens_function_solver(G_lesser_diag_blocks,
                                 G_lesser_upper_blocks,
-                                G_greater_diag_blocks, 
+                                G_greater_diag_blocks,
                                 G_greater_upper_blocks,
                                 hamiltonian_obj.Hamiltonian['H_4'],
                                 hamiltonian_obj.Overlap['H_4'],
@@ -418,105 +381,85 @@ if __name__ == "__main__":
         G_greater_lower_blocks = -G_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
         G_lesser_lower_blocks = -G_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
 
-        G_greater[:number_of_energy_points_per_rank,
-                  :number_of_nonzero_elements] = change_format.block2sparse_energy_alt(*map_,
-                                                                             G_greater_diag_blocks,
-                                                                             G_greater_upper_blocks,
-                                                                             G_greater_lower_blocks,
-                                                                             number_of_nonzero_elements,
-                                                                             number_of_energy_points_per_rank,
-                                                                             energy_contiguous=False)
-        G_lesser[:number_of_energy_points_per_rank,
-                 :number_of_nonzero_elements] = change_format.block2sparse_energy_alt(*map_,
-                                                                             G_lesser_diag_blocks,
-                                                                             G_lesser_upper_blocks,
-                                                                             G_lesser_lower_blocks,
-                                                                             number_of_nonzero_elements,
-                                                                             number_of_energy_points_per_rank,
-                                                                             energy_contiguous=False)
+        G_greater[:,:number_of_nonzero_elements] = triple_array_to_flattened(
+                                                        map_blocks_to_flattened,
+                                                        G_greater_diag_blocks,
+                                                        G_greater_upper_blocks,
+                                                        G_greater_lower_blocks,
+                                                        number_of_nonzero_elements,
+                                                        number_of_energy_points_per_rank)
 
+        G_lesser[:,:number_of_nonzero_elements] = triple_array_to_flattened(
+                                                        map_blocks_to_flattened,
+                                                        G_lesser_diag_blocks,
+                                                        G_lesser_upper_blocks,
+                                                        G_lesser_lower_blocks,
+                                                        number_of_nonzero_elements,
+                                                        number_of_energy_points_per_rank)
 
-
-    # TODO: Delete/remove/replace
-    def generator_rgf_Hamiltonian(E, DH, SigR):
-        for i in range(E.shape[0]):
-            yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
-
-    # TODO: Delete/remove/replace
-    def generator_rgf_currentdens_Hamiltonian(E, DH):
-        for i in range(E.shape[0]):
-            yield DH.Hamiltonian['H_4'] - (E[i]) * DH.Overlap['H_4']
 
 
     def polarization_compute(
         G_greater,
         G_lesser,
-        number_of_energy_points,
         Polarization_greater,
         Polarization_lesser
     ):
-        
-        number_of_orbitals = G_greater.shape[0]
-
-        # Input matrices can be padded, but the output matrices are not padded
-        # Output matrices could be bigger for nonblocking communication than input matrices
-        (Polarization_greater[:number_of_orbitals, :number_of_energy_points],
-        Polarization_lesser[:number_of_orbitals, :number_of_energy_points]) = compute_polarization(
+        (Polarization_greater[:, :number_of_energy_points],
+        Polarization_lesser[:, :number_of_energy_points]) = compute_polarization(
                                                             G_lesser[:, :number_of_energy_points],
                                                             G_greater[:, :number_of_energy_points],
                                                             delta_energy)
         
 
     def screened_interaction_compute(
-        Polarization_greater,
-        Polarization_lesser,
-        energy_points_per_rank,
+        Polarization_greater_flattened,
+        Polarization_lesser_flattened,
         Screened_interaction_greater_flattened,
         Screened_interaction_lesser_flattened
     ):
-
-        number_of_energy_points_per_rank = energy_points_per_rank.shape[0]
         # transform from 2D format to list/vector of sparse arrays format-----------
-        Polarization_greater_list = change_format.sparse2vecsparse_v2(
-            Polarization_greater[:, :data_shape[0]], rows, columns, number_of_orbitals)
-        Polarization_lesser_list = change_format.sparse2vecsparse_v2(
-            Polarization_lesser[:, :data_shape[0]], rows, columns, number_of_orbitals)
+        Polarization_greater_list = flattened_to_list_of_csr(
+                    Polarization_greater_flattened[:, :number_of_nonzero_elements],
+                    rows,
+                    columns,
+                    number_of_orbitals)
+        Polarization_lesser_list = flattened_to_list_of_csr(
+                Polarization_lesser_flattened[:, :number_of_nonzero_elements],
+                rows, columns,
+                number_of_orbitals)
 
         Polarization_retarded_list = []
         # Symmetrization of Polarization (TODO: check if this is needed)
         for ie in range(number_of_energy_points_per_rank):
             # Anti-Hermitian symmetrizing of PL and PG
-            # pl[ie] = 1j * np.imag(pl[ie])
             Polarization_lesser_list[ie] = (Polarization_lesser_list[ie] - Polarization_lesser_list[ie].conj().T) / 2
 
-            # pg[ie] = 1j * np.imag(pg[ie])
             Polarization_greater_list[ie] = (Polarization_greater_list[ie] - Polarization_greater_list[ie].conj().T) / 2
             
             # PR has to be derived from PL and PG and then has to be symmetrized
             Polarization_retarded_list.append((Polarization_greater_list[ie] - Polarization_lesser_list[ie]) / 2)
-        
-        number_of_blocks_after_matmul = int(number_of_blocks / nbc)
-        blocksize_after_matmul = int(blocksize * nbc)
+
         # calculate the screened interaction on every rank--------------------------
         Screened_interaction_lesser_diag_blocks = np.zeros((number_of_energy_points,
-                                                            number_of_blocks_after_matmul,
-                                                            blocksize_after_matmul,
-                                                            blocksize_after_matmul),
+                                                            number_of_blocks,
+                                                            blocksize,
+                                                            blocksize),
                                                             dtype=np.complex128)
         Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points,
-                                                             number_of_blocks_after_matmul - 1,
-                                                             blocksize_after_matmul,
-                                                             blocksize_after_matmul),
+                                                             number_of_blocks - 1,
+                                                             blocksize,
+                                                             blocksize),
                                                              dtype=np.complex128)
         Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points,
-                                                             number_of_blocks_after_matmul,
-                                                             blocksize_after_matmul,
-                                                             blocksize_after_matmul),
+                                                             number_of_blocks,
+                                                             blocksize,
+                                                             blocksize),
                                                              dtype=np.complex128)
         Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points,
-                                                              number_of_blocks_after_matmul - 1,
-                                                              blocksize_after_matmul,
-                                                              blocksize_after_matmul),
+                                                              number_of_blocks - 1,
+                                                              blocksize,
+                                                              blocksize),
                                                               dtype=np.complex128)
 
 
@@ -540,22 +483,20 @@ if __name__ == "__main__":
         Screened_interaction_greater_lower_blocks = -Screened_interaction_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
         Screened_interaction_lesser_lower_blocks = -Screened_interaction_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
 
-        Screened_interaction_greater_flattened[:number_of_energy_points_per_rank, :data_shape[0]] = change_format.block2sparse_energy_alt(
-            *map_mm_,
-            Screened_interaction_greater_diag_blocks,
-            Screened_interaction_greater_upper_blocks,
-            Screened_interaction_greater_lower_blocks,
-            number_of_nonzero_elements,
-            number_of_energy_points_per_rank,
-            energy_contiguous=False)
-        Screened_interaction_lesser_flattened[:number_of_energy_points_per_rank, :data_shape[0]] = change_format.block2sparse_energy_alt(
-            *map_mm_,
-            Screened_interaction_lesser_diag_blocks,
-            Screened_interaction_lesser_upper_blocks,
-            Screened_interaction_lesser_lower_blocks,
-            number_of_nonzero_elements,
-            number_of_energy_points_per_rank,
-            energy_contiguous=False)
+        Screened_interaction_greater_flattened[:, :number_of_nonzero_elements] = triple_array_to_flattened(
+                                            map_blocks_to_flattened,
+                                            Screened_interaction_greater_diag_blocks,
+                                            Screened_interaction_greater_upper_blocks,
+                                            Screened_interaction_greater_lower_blocks,
+                                            number_of_nonzero_elements,
+                                            number_of_energy_points_per_rank)
+        Screened_interaction_lesser_flattened[:, :number_of_nonzero_elements] = triple_array_to_flattened(
+                                            map_blocks_to_flattened,
+                                            Screened_interaction_lesser_diag_blocks,
+                                            Screened_interaction_lesser_upper_blocks,
+                                            Screened_interaction_lesser_lower_blocks,
+                                            number_of_nonzero_elements,
+                                            number_of_energy_points_per_rank)
 
 
     def selfenergy_compute(
@@ -563,23 +504,19 @@ if __name__ == "__main__":
             G_lesser,
             Screened_interaction_greater,
             Screened_interaction_lesser,
-            Coulomb_matrix,
-            number_of_energy_points,
             Sigma_greater,
             Sigma_lesser,
             Sigma_retarded
     ):
         # todo optimize and not load two time green's function to gpu and do twice the fft
-        number_of_orbitals = G_greater.shape[0]
-
-        (Sigma_greater[:number_of_orbitals, :number_of_energy_points],
-         Sigma_lesser[:number_of_orbitals, :number_of_energy_points],
-         Sigma_retarded[:number_of_orbitals, :number_of_energy_points]) = compute_gw_self_energy(
+        (Sigma_greater[:, :number_of_energy_points],
+         Sigma_lesser[:, :number_of_energy_points],
+         Sigma_retarded[:, :number_of_energy_points]) = compute_gw_self_energy(
             G_lesser[:, :number_of_energy_points],
             G_greater[:, :number_of_energy_points],
             Screened_interaction_lesser[:, :number_of_energy_points],
             Screened_interaction_greater[:, :number_of_energy_points],
-            Coulomb_matrix,
+            Coulomb_matrix_per_rank,
             delta_energy)
 
 
@@ -588,50 +525,50 @@ if __name__ == "__main__":
     # create communication wrapped functions
     greens_function = CommunicateCompute(distributions[:g_num_buffer],
                                          g_num_buffer, "c2r",
-                                         g_col,
-                                         g_row,
-                                         buffer_compute_unblock=buffer_col_compute[:g_num_buffer],
-                                         buffer_send_unblock=buffer_col_send[:g_num_buffer],
-                                         buffer_recv_unblock=buffer_row_recv[:g_num_buffer],
+                                         g_energy_per_rank,
+                                         g_nonzero_elements_per_rank,
+                                         buffer_compute_unblock=buffer_energy_per_rank_compute[:g_num_buffer],
+                                         buffer_send_unblock=buffer_energy_per_rank_send[:g_num_buffer],
+                                         buffer_recv_unblock=buffer_nonzero_elements_per_rank_recv[:g_num_buffer],
                                          comm_unblock=comm_unblock,
-                                         distributions_unblock=distributions_unblock_col[:g_num_buffer],
-                                         batchsize=batchsize_col,
+                                         distributions_unblock=distributions_unblock_energy_per_rank[:g_num_buffer],
+                                         batchsize=batchsize_energy_per_rank,
                                          iterations=iterations_unblock[1])(compute_greens_function)
 
     polarization = CommunicateCompute(distributions[:p_num_buffer],
                                       p_num_buffer, "r2c",
-                                      p_row,
-                                      p_col,
-                                      buffer_compute_unblock=buffer_row_compute[:p_num_buffer],
-                                      buffer_send_unblock=buffer_row_send[:p_num_buffer],
-                                      buffer_recv_unblock=buffer_col_recv[:p_num_buffer],
+                                      p_nonzero_elements_per_rank,
+                                      p_energy_per_rank,
+                                      buffer_compute_unblock=buffer_nonzero_elements_per_rank_compute[:p_num_buffer],
+                                      buffer_send_unblock=buffer_nonzero_elements_per_rank_send[:p_num_buffer],
+                                      buffer_recv_unblock=buffer_energy_per_rank_recv[:p_num_buffer],
                                       comm_unblock=comm_unblock,
-                                      distributions_unblock=distributions_unblock_row[:p_num_buffer],
-                                      batchsize=batchsize_row,
+                                      distributions_unblock=distributions_unblock_nonzero_elements_per_rank[:p_num_buffer],
+                                      batchsize=batchsize_nonzero_elements_per_rank,
                                       iterations=iterations_unblock[0])(polarization_compute)
 
     screened_interaction = CommunicateCompute(distributions[:w_num_buffer],
                                               w_num_buffer, "c2r",
-                                              w_col_tmp,
-                                              w_row_tmp,
-                                              buffer_compute_unblock=buffer_col_compute[:w_num_buffer],
-                                              buffer_send_unblock=buffer_col_send[:w_num_buffer],
-                                              buffer_recv_unblock=buffer_row_recv[:w_num_buffer],
+                                              w_energy_per_rank_tmp,
+                                              w_nonzero_elements_per_rank_tmp,
+                                              buffer_compute_unblock=buffer_energy_per_rank_compute[:w_num_buffer],
+                                              buffer_send_unblock=buffer_energy_per_rank_send[:w_num_buffer],
+                                              buffer_recv_unblock=buffer_nonzero_elements_per_rank_recv[:w_num_buffer],
                                               comm_unblock=comm_unblock,
-                                              distributions_unblock=distributions_unblock_col[:w_num_buffer],
-                                              batchsize=batchsize_col,
+                                              distributions_unblock=distributions_unblock_energy_per_rank[:w_num_buffer],
+                                              batchsize=batchsize_energy_per_rank,
                                               iterations=iterations_unblock[1])(screened_interaction_compute)
 
     selfenergy = CommunicateCompute(distributions[:s_num_buffer],
                                     s_num_buffer, "r2c",
-                                    s_row_tmp,
-                                    s_col_tmp,
-                                    buffer_compute_unblock=buffer_row_compute[:s_num_buffer],
-                                    buffer_send_unblock=buffer_row_send[:s_num_buffer],
-                                    buffer_recv_unblock=buffer_col_recv[:s_num_buffer],
+                                    s_nonzero_elements_per_rank_tmp,
+                                    s_energy_per_rank_tmp,
+                                    buffer_compute_unblock=buffer_nonzero_elements_per_rank_compute[:s_num_buffer],
+                                    buffer_send_unblock=buffer_nonzero_elements_per_rank_send[:s_num_buffer],
+                                    buffer_recv_unblock=buffer_energy_per_rank_recv[:s_num_buffer],
                                     comm_unblock=comm_unblock,
-                                    distributions_unblock=distributions_unblock_row[:s_num_buffer],
-                                    batchsize=batchsize_row,
+                                    distributions_unblock=distributions_unblock_nonzero_elements_per_rank[:s_num_buffer],
+                                    batchsize=batchsize_nonzero_elements_per_rank,
                                     iterations=iterations_unblock[0])(selfenergy_compute)
 
     if rank == 0:
@@ -641,51 +578,55 @@ if __name__ == "__main__":
 
     for iter_num in range(gw_num_iter):
 
-        # set observables to zero
-        dos.fill(0.0)
-        dosw.fill(0.0)
-        nE.fill(0.0)
-        nP.fill(0.0)
-        nEw.fill(0.0)
-        nPw.fill(0.0)
-        ide.fill(0.0)
 
         if rank == 0:
             time_g = -time.perf_counter()
 
         # transform from 2D format to list/vector of sparse arrays format-----------
-        s_col_vec = [change_format.sparse2vecsparse_v2(
-            s_col[i][:, :data_shape[0]], rows, columns, number_of_orbitals) for i in range(s_num_buffer)]
+        s_energy_per_rank_list = [flattened_to_list_of_csr(
+                    s_energy_per_rank[i][:, :data_shape[0]],
+                    rows,
+                    columns,
+                    number_of_orbitals)
+                    for i in range(s_num_buffer)]
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        sr_ephn_col_vec = change_format.sparse2vecsparse_v2(np.zeros((distribution.count[1], number_of_nonzero_elements), dtype=base_type), rows,
-                                                            columns, number_of_orbitals)
+        sr_ephn_energy_per_rank_list = flattened_to_list_of_csr(
+                        np.zeros((number_of_energy_points_per_rank,
+                        number_of_nonzero_elements),
+                        dtype=base_type),
+                        rows,
+                        columns,
+                        number_of_orbitals)
 
-        ECmin_vec[iter_num + 1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
-                                                             energy,
-                                                             hamiltonian_obj.Overlap["H_4"],
-                                                             hamiltonian_obj.Hamiltonian["H_4"],
-                                                             *(s_col_vec[::-1]),
-                                                             sr_ephn_col_vec,
-                                                             rows,
-                                                             columns,
-                                                             bmin,
-                                                             bmax,
-                                                             comm,
-                                                             rank,
-                                                             size,
-                                                             distribution.counts,
-                                                             distribution.displacements,
-                                                             side="left")
+        energy_conduction_band_minimum_over_iterations[iter_num + 1] = \
+            get_band_edge_mpi_interpol(
+                        energy_conduction_band_minimum_over_iterations[iter_num],
+                        energy_points,
+                        hamiltonian_obj.Overlap["H_4"],
+                        hamiltonian_obj.Hamiltonian["H_4"],
+                        *(s_energy_per_rank_list[::-1]),
+                        sr_ephn_energy_per_rank_list,
+                        rows,
+                        columns,
+                        bmin,
+                        bmax,
+                        comm,
+                        rank,
+                        size,
+                        distribution.counts,
+                        distribution.displacements,
+                        side="left")
 
-        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
-        EFL_vec[iter_num + 1] = energy_fl
-        EFR_vec[iter_num + 1] = energy_fr
+        energy_fermi_left = energy_conduction_band_minimum_over_iterations[iter_num + 1] + energy_difference_fermi_minimum_left
+        energy_fermi_right = energy_conduction_band_minimum_over_iterations[iter_num + 1] + energy_difference_fermi_minimum_right
+        energy_fermi_left_over_iterations[iter_num + 1] = (energy_conduction_band_minimum_over_iterations[iter_num + 1] 
+                                                           + energy_difference_fermi_minimum_left)
+        energy_fermi_right_over_iterations[iter_num + 1] = (energy_conduction_band_minimum_over_iterations[iter_num + 1] +
+                                                            energy_difference_fermi_minimum_right)
 
-        greens_function_inputs_to_slice = [*s_col_vec,
-                                     energy_loc]
-        greens_function_inputs = [energy_fl, energy_fr]
+        greens_function_inputs_to_slice = [*s_energy_per_rank_list]
+        greens_function_inputs = [energy_fermi_left, energy_fermi_right]
         greens_function(greens_function_inputs_to_slice, greens_function_inputs)
 
         # only take part of the greens function
@@ -696,8 +637,8 @@ if __name__ == "__main__":
             time_p = -time.perf_counter()
 
         # calculate and communicate the polarization----------------------------------
-        polarization_inputs_to_slice = [*g_row]
-        polarization_inputs = [data_shape[1]]
+        polarization_inputs_to_slice = [*g_nonzero_elements_per_rank]
+        polarization_inputs = []
         polarization(polarization_inputs_to_slice, polarization_inputs)
 
         if rank == 0:
@@ -705,51 +646,42 @@ if __name__ == "__main__":
             time_w = -time.perf_counter()
 
         # calculate and communicate the screened interaction----------------------------------
-        screened_interaction_inputs_to_slice = [*p_col,
-                                          energy_loc]
+        screened_interaction_inputs_to_slice = [*p_energy_per_rank]
         screened_interaction_inputs = []
         screened_interaction(screened_interaction_inputs_to_slice,
                              screened_interaction_inputs)
 
 
         for i in range(w_num_buffer):
-            w_row[i][:, :] = (
-                1.0 - mem_w) * w_row_tmp[i] + mem_w * w_row[i]
+            w_nonzero_elements_per_rank[i][:, :] = (
+                1.0 - mem_w) * w_nonzero_elements_per_rank_tmp[i] + mem_w * w_nonzero_elements_per_rank[i]
 
         if rank == 0:
             time_w += time.perf_counter()
             time_s = -time.perf_counter()
 
-        # compute and communicate the self-energy------------------------------------
-        selfenergy_inputs_to_slice = [*g_row[:g_num_buffer], *w_row, vh_loc]
-        selfenergy_inputs = [data_shape[1]]
+        # compute and communicate the self-energy_points------------------------------------
+        selfenergy_inputs_to_slice = [*g_nonzero_elements_per_rank[:g_num_buffer], *w_nonzero_elements_per_rank]
+        selfenergy_inputs = []
         selfenergy(selfenergy_inputs_to_slice, selfenergy_inputs)
 
-        # only take part of the self energy
+        # only take part of the self energy_points
         for i in range(s_num_buffer):
-            s_col[i][:] = (1.0 - mem_s) * s_col_tmp[i] + mem_s * s_col[i]
+            s_energy_per_rank[i][:] = (1.0 - mem_s) * s_energy_per_rank_tmp[i] + mem_s * s_energy_per_rank[i]
 
         if rank == 0:
             time_s += time.perf_counter()
 
-        # Wrapping up the iteration
-        if rank == 0:
-            comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
-
-        else:
-            comm.Reduce(dos, None, op=MPI.SUM, root=0)
-            comm.Reduce(ide, None, op=MPI.SUM, root=0)
 
     if rank == 0:
         time_loop += time.perf_counter()
         time_end = -time.perf_counter()
 
-    # communicate corrected g/w_col since data without filtering is communicated
+    # communicate corrected g/w since data without filtering is communicated
     for gw_type in gw_types:
         for gw_name in ["g", "w"]:
-            distribution.alltoall_r2c(matrices_loc_row[gw_name + gw_type],
-                                      matrices_loc_col[gw_name + gw_type], transpose_net=False)
+            distribution.alltoall_r2c(matrices_nonzero_elements_per_rank[gw_name + gw_type],
+                                      matrices_energy_per_rank[gw_name + gw_type], transpose_net=False)
 
     # gather at master to test against gold solution------------------------------
     if rank == 0:
@@ -758,14 +690,14 @@ if __name__ == "__main__":
                            for gw_type in gw_types for gw_name in gw_names}
         for gw_type in gw_types:
             for gw_name in gw_names:
-                distribution.gather_master(matrices_loc_col[gw_name + gw_type],
+                distribution.gather_master(matrices_energy_per_rank[gw_name + gw_type],
                                            matrices_global[gw_name + gw_type], transpose_net=False)
     else:
         # send time to master
         for gw_type in gw_types:
             for gw_name in gw_names:
                 distribution.gather_master(
-                    matrices_loc_col[gw_name + gw_type], None, transpose_net=False)
+                    matrices_energy_per_rank[gw_name + gw_type], None, transpose_net=False)
 
     # free datatypes------------------------------------------------------------
     distribution.free_datatypes()
@@ -790,9 +722,8 @@ if __name__ == "__main__":
         for item in matrices_global.items():
             matrices_global_save[item[0]
                                  ] = item[1][:data_shape[0], :data_shape[1]]
-        matrices_global_save["Coulomb_matrix_reference"] = Coulomb_matrix_flattened
-        read_solution.save_all(energy, rows, columns, bmax,
-                               bmin, save_path, **matrices_global_save)
+        matrices_global_save["coulomb_matrix"] = Coulomb_matrix_flattened
+        save_all(energy_points, rows, columns, blocksize, save_path, **matrices_global_save)
 
 
     # test against gold solution------------------------------------------------
