@@ -6,7 +6,7 @@ from scipy import sparse
 import matplotlib.pylab as plt
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
-from quatrex.utils.read_utils import *
+from quatrex.files_to_refactor.read_utils import *
 
 
 def matlab_fread(fid, nelements, dtype):

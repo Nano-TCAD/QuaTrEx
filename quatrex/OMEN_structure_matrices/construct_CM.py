@@ -2,7 +2,7 @@
 
 import numpy as np
 from scipy import sparse
-from quatrex.utils.read_utils import *
+from quatrex.files_to_refactor.read_utils import *
 
 
 def construct_coulomb_matrix(DH, eps_r, eps0, e, diag=False, orb_uniform=False):

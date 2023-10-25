@@ -7,22 +7,19 @@ See the different GW step folders for more explanations.
 """
 from mpi4py import MPI
 import numpy as np
-import os
 from scipy import sparse
 import time
 import pickle
-from quatrex.utils.communication import TransposeMatrix, CommunicateCompute
+from quatrex.files_to_refactor.communication import TransposeMatrix, CommunicateCompute
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.refactored_utils.read_solution import load_a_gw_matrix_flattened, load_coulomb_matrix_flattened, save_all
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
-
 
 
 # Refactored utils
 from quatrex.refactored_utils.fermi_distribution import fermi_distribution
 from quatrex.refactored_utils.utils import flattened_to_list_of_csr, map_triple_array_to_flattened, triple_array_to_flattened
-
+from quatrex.files_to_refactor.adjust_conduction_band_edge import adjust_conduction_band_edge
 
 # Refactored functions
 from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
@@ -79,7 +76,12 @@ if __name__ == "__main__":
 
     rows = matrices_gold["grows"]
     columns = matrices_gold["gcolumns"]
-    rowsRef, columnsRef, Coulomb_matrix_flattened_reference = load_coulomb_matrix_flattened(reference_path)
+    (rows_coulomb_matrix,
+     columns_coulomb_matrix,
+     Coulomb_matrix_flattened_reference) = load_coulomb_matrix_flattened(reference_path)
+
+    assert np.allclose(rows, rows_coulomb_matrix)
+    assert np.allclose(columns, columns_coulomb_matrix)
 
     if rank == 0:
         time_read_gold += time.perf_counter()
@@ -143,11 +145,12 @@ if __name__ == "__main__":
     data_shape = np.array([number_of_nonzero_elements,
                           number_of_energy_points], dtype=np.int32)
 
-    Coulomb_matrix_reference = sparse.coo_array((Coulomb_matrix_flattened_reference,
-                                                (np.squeeze(rowsRef), np.squeeze(columnsRef))),
+    Coulomb_matrix_reference = sparse.csr_matrix((Coulomb_matrix_flattened_reference,
+                                                (rows_coulomb_matrix,
+                                                 columns_coulomb_matrix)),
                                                 shape=(number_of_orbitals,
                                                         number_of_orbitals),
-                                                dtype=base_type).tocsr()
+                                                dtype=base_type)
 
     # TODO refactor
     Coulomb_matrix = construct_coulomb_matrix(
@@ -156,10 +159,13 @@ if __name__ == "__main__":
 
     assert np.allclose(Coulomb_matrix.toarray(), Coulomb_matrix_reference.toarray())
 
-    energy_conduction_band_minimum_over_iterations = np.concatenate((np.array([energy_conduction_band_minimum]), np.zeros(gw_num_iter)))
-    energy_fermi_left_over_iterations = np.concatenate((np.array([energy_fermi_left]), np.zeros(gw_num_iter)))
-    energy_fermi_right_over_iterations = np.concatenate((np.array([energy_fermi_right]), np.zeros(gw_num_iter)))
-
+    energy_conduction_band_minimum_over_iterations = np.zeros(gw_num_iter+1)
+    energy_fermi_left_over_iterations = np.zeros(gw_num_iter+1)
+    energy_fermi_right_over_iterations = np.zeros(gw_num_iter+1)
+    
+    energy_conduction_band_minimum_over_iterations[0] = energy_conduction_band_minimum
+    energy_fermi_left_over_iterations[0] = energy_fermi_left
+    energy_fermi_right_over_iterations[0] = energy_fermi_right
 
     # maps to transform from _blocks to _flattened
     map_blocks_to_flattened = map_triple_array_to_flattened(rows,
@@ -167,9 +173,6 @@ if __name__ == "__main__":
                                                             number_of_blocks,
                                                             blocksize)
 
-    if rank == 0:
-        # print size of data
-        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
 
     # computation parameters----------------------------------------------------
     # greater, lesser, retarded
@@ -195,9 +198,10 @@ if __name__ == "__main__":
     distribution_no_padded = TransposeMatrix(
         comm, data_shape, base_type=base_type)
 
-
+    # free parameter
     batchsize_nonzero_elements_per_rank = distribution.count[0] // 2
     batchsize_energy_per_rank = distribution.count[1] // 2
+
     iteration_nonzero_elements_per_rank = int(np.ceil(distribution.count[0] / batchsize_nonzero_elements_per_rank))
     iteration_energy_per_rank = int(np.ceil(distribution.count[1] / batchsize_energy_per_rank))
     iterations_unblock = [iteration_nonzero_elements_per_rank, iteration_energy_per_rank]
@@ -215,9 +219,7 @@ if __name__ == "__main__":
     distributions_unblock_energy_per_rank = [
         distribution_unblock_energy_per_rank for _ in range(num_buffer)]
 
-    
-    number_of_energy_points_padded = distribution.shape[1]
-    number_of_nonzero_elements_padded = distribution.shape[0]
+
     number_of_energy_points_per_rank = distribution.count[1]
     number_of_nonzero_elements_per_rank = distribution.count[0]
 
@@ -226,7 +228,7 @@ if __name__ == "__main__":
     # padding of 1D arrays----------------------------------------------------
 
     energy_points_padded = np.zeros((distribution.shape[1]), dtype=energy_points.dtype)
-    energy_points_padded[:data_shape[1]] = energy_points
+    energy_points_padded[:number_of_energy_points] = energy_points
 
     Coulomb_matrix_padded = np.zeros((distribution.shape[0]), dtype=Coulomb_matrix_reference.dtype)
     Coulomb_matrix_padded[:number_of_nonzero_elements] = Coulomb_matrix_flattened
@@ -236,8 +238,9 @@ if __name__ == "__main__":
     Coulomb_matrix_per_rank = Coulomb_matrix_padded[distribution.range_local[0]]
 
     # print rank distribution
-    print(
-        f"Rank: {rank} #Energy/rank: {number_of_energy_points_per_rank} #nnz/rank: {number_of_nonzero_elements_per_rank}", proc_name)
+    print(f"Rank: {rank} \
+          #Energy/rank: {number_of_energy_points_per_rank} \
+          #nnz/rank: {number_of_nonzero_elements_per_rank}", proc_name)
 
     if rank == 0:
         time_pre_compute += time.perf_counter()
@@ -310,13 +313,13 @@ if __name__ == "__main__":
     #  3. output matrices which are communicated
 
     def compute_greens_function(
-        Sigma_greater,
-        Sigma_lesser,
-        Sigma_retarded,
+        Sigma_greater_list,
+        Sigma_lesser_list,
+        Sigma_retarded_list,
         energy_fermi_left_per_iteration,
         energy_fermi_right_per_iteration,
-        G_greater,
-        G_lesser
+        G_greater_flattened,
+        G_lesser_flattened
     ):
         # calculate the green's function at every rank------------------------------
         fermi_distribution_left = fermi_distribution(energy_points_per_rank,
@@ -334,9 +337,10 @@ if __name__ == "__main__":
         # cannot be put into the self-energy_points kernel because transposed is needed
         for ie in range(number_of_energy_points_per_rank):
             # symmetrize (lesser and greater have to be skewed symmetric)
-            Sigma_lesser[ie] = (Sigma_lesser[ie] - Sigma_lesser[ie].T.conj()) / 2
-            Sigma_greater[ie] = (Sigma_greater[ie] - Sigma_greater[ie].T.conj()) / 2
-            Sigma_retarded[ie] = np.real(Sigma_retarded[ie]) + (Sigma_greater[ie] - Sigma_lesser[ie]) / 2
+            Sigma_lesser_list[ie] = (Sigma_lesser_list[ie] - Sigma_lesser_list[ie].T.conj()) / 2
+            Sigma_greater_list[ie] = (Sigma_greater_list[ie] - Sigma_greater_list[ie].T.conj()) / 2
+            Sigma_retarded_list[ie] = (np.real(Sigma_retarded_list[ie])
+                                       + (Sigma_greater_list[ie] - Sigma_lesser_list[ie]) / 2)
 
 
         G_lesser_diag_blocks = np.zeros((number_of_energy_points_per_rank,
@@ -367,9 +371,9 @@ if __name__ == "__main__":
                                 G_greater_upper_blocks,
                                 hamiltonian_obj.Hamiltonian['H_4'],
                                 hamiltonian_obj.Overlap['H_4'],
-                                Sigma_retarded,
-                                Sigma_lesser,
-                                Sigma_greater,
+                                Sigma_retarded_list,
+                                Sigma_lesser_list,
+                                Sigma_greater_list,
                                 energy_points_per_rank,
                                 fermi_distribution_left,
                                 fermi_distribution_right,
@@ -381,7 +385,7 @@ if __name__ == "__main__":
         G_greater_lower_blocks = -G_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
         G_lesser_lower_blocks = -G_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
 
-        G_greater[:,:number_of_nonzero_elements] = triple_array_to_flattened(
+        G_greater_flattened[:,:number_of_nonzero_elements] = triple_array_to_flattened(
                                                         map_blocks_to_flattened,
                                                         G_greater_diag_blocks,
                                                         G_greater_upper_blocks,
@@ -389,7 +393,7 @@ if __name__ == "__main__":
                                                         number_of_nonzero_elements,
                                                         number_of_energy_points_per_rank)
 
-        G_lesser[:,:number_of_nonzero_elements] = triple_array_to_flattened(
+        G_lesser_flattened[:,:number_of_nonzero_elements] = triple_array_to_flattened(
                                                         map_blocks_to_flattened,
                                                         G_lesser_diag_blocks,
                                                         G_lesser_upper_blocks,
@@ -400,15 +404,15 @@ if __name__ == "__main__":
 
 
     def polarization_compute(
-        G_greater,
-        G_lesser,
-        Polarization_greater,
-        Polarization_lesser
+        G_greater_flattened,
+        G_lesser_flattened,
+        Polarization_greater_flattened,
+        Polarization_lesser_flattened
     ):
-        (Polarization_greater[:, :number_of_energy_points],
-        Polarization_lesser[:, :number_of_energy_points]) = compute_polarization(
-                                                            G_lesser[:, :number_of_energy_points],
-                                                            G_greater[:, :number_of_energy_points],
+        (Polarization_greater_flattened[:, :number_of_energy_points],
+        Polarization_lesser_flattened[:, :number_of_energy_points]) = compute_polarization(
+                                                            G_lesser_flattened[:, :number_of_energy_points],
+                                                            G_greater_flattened[:, :number_of_energy_points],
                                                             delta_energy)
         
 
@@ -430,6 +434,7 @@ if __name__ == "__main__":
                 number_of_orbitals)
 
         Polarization_retarded_list = []
+
         # Symmetrization of Polarization (TODO: check if this is needed)
         for ie in range(number_of_energy_points_per_rank):
             # Anti-Hermitian symmetrizing of PL and PG
@@ -584,46 +589,26 @@ if __name__ == "__main__":
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         s_energy_per_rank_list = [flattened_to_list_of_csr(
-                    s_energy_per_rank[i][:, :data_shape[0]],
+                    s_energy_per_rank[i][:, :number_of_nonzero_elements],
                     rows,
                     columns,
                     number_of_orbitals)
                     for i in range(s_num_buffer)]
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        sr_ephn_energy_per_rank_list = flattened_to_list_of_csr(
-                        np.zeros((number_of_energy_points_per_rank,
-                        number_of_nonzero_elements),
-                        dtype=base_type),
-                        rows,
-                        columns,
-                        number_of_orbitals)
-
         energy_conduction_band_minimum_over_iterations[iter_num + 1] = \
-            get_band_edge_mpi_interpol(
-                        energy_conduction_band_minimum_over_iterations[iter_num],
-                        energy_points,
-                        hamiltonian_obj.Overlap["H_4"],
-                        hamiltonian_obj.Hamiltonian["H_4"],
-                        *(s_energy_per_rank_list[::-1]),
-                        sr_ephn_energy_per_rank_list,
-                        rows,
-                        columns,
-                        bmin,
-                        bmax,
-                        comm,
-                        rank,
-                        size,
-                        distribution.counts,
-                        distribution.displacements,
-                        side="left")
+                adjust_conduction_band_edge(
+                            energy_conduction_band_minimum_over_iterations[iter_num],
+                            energy_points,
+                            hamiltonian_obj.Overlap["H_4"],
+                            hamiltonian_obj.Hamiltonian["H_4"],
+                            *(s_energy_per_rank_list[::-1]),
+                            blocksize)
 
         energy_fermi_left = energy_conduction_band_minimum_over_iterations[iter_num + 1] + energy_difference_fermi_minimum_left
         energy_fermi_right = energy_conduction_band_minimum_over_iterations[iter_num + 1] + energy_difference_fermi_minimum_right
-        energy_fermi_left_over_iterations[iter_num + 1] = (energy_conduction_band_minimum_over_iterations[iter_num + 1] 
-                                                           + energy_difference_fermi_minimum_left)
-        energy_fermi_right_over_iterations[iter_num + 1] = (energy_conduction_band_minimum_over_iterations[iter_num + 1] +
-                                                            energy_difference_fermi_minimum_right)
+        energy_fermi_left_over_iterations[iter_num + 1] = energy_fermi_left
+        energy_fermi_right_over_iterations[iter_num + 1] = energy_fermi_right
 
         greens_function_inputs_to_slice = [*s_energy_per_rank_list]
         greens_function_inputs = [energy_fermi_left, energy_fermi_right]
@@ -720,8 +705,7 @@ if __name__ == "__main__":
         # todo remove padding from data to save
         matrices_global_save = {}
         for item in matrices_global.items():
-            matrices_global_save[item[0]
-                                 ] = item[1][:data_shape[0], :data_shape[1]]
+            matrices_global_save[item[0]] = item[1][:number_of_nonzero_elements, :number_of_energy_points]
         matrices_global_save["coulomb_matrix"] = Coulomb_matrix_flattened
         save_all(energy_points, rows, columns, blocksize, save_path, **matrices_global_save)
 
@@ -729,7 +713,7 @@ if __name__ == "__main__":
     # test against gold solution------------------------------------------------
     if rank == 0:
         # print difference to given solution
-        difference = {gw_name + gw_type: np.linalg.norm(matrices_global[gw_name + gw_type][:data_shape[0], :data_shape[1]] -
+        difference = {gw_name + gw_type: np.linalg.norm(matrices_global[gw_name + gw_type][:number_of_nonzero_elements, :number_of_energy_points] -
                                                         matrices_gold[gw_name + gw_type]) for gw_type in gw_types for gw_name in gw_names}
 
         for gw_name in gw_names:
@@ -743,6 +727,6 @@ if __name__ == "__main__":
             for gw_name in gw_names:
                 assert difference[gw_name + gw_type] <= abstol + reltol * \
                     np.linalg.norm(matrices_gold[gw_name + gw_type])
-                assert np.allclose(matrices_global[gw_name + gw_type][:data_shape[0], :data_shape[1]],
+                assert np.allclose(matrices_global[gw_name + gw_type][:number_of_nonzero_elements, :number_of_energy_points],
                                    matrices_gold[gw_name + gw_type], atol=1e-3, rtol=1e-3)
         print("The mpi implementation is correct")

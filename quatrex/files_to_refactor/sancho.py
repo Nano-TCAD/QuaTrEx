@@ -1,8 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
-from scipy import sparse
-import time
 
 
 def open_boundary_conditions(M00, M10, M01, V10):

@@ -8,7 +8,7 @@ from quatrex.refactored_solvers.open_boundary_conditions import compute_open_bou
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
 from quatrex.refactored_utils.utils import csr_to_triple_array
 
-from quatrex.OBC import dL_OBC_eigenmode_cpu
+from quatrex.files_to_refactor import dL_OBC_eigenmode_cpu
 
 
 

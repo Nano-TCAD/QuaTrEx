@@ -78,6 +78,8 @@ def load_coulomb_matrix_flattened(
     # read the entries
     rows = np.array(hdf5["rows"], dtype=int)
     columns = np.array(hdf5["columns"], dtype=int)
+    rows = np.squeeze(rows)
+    columns = np.squeeze(columns)
 
     Real_part_coulomb_matrix = np.array(hdf5["real_part_coulomb_matrix"], dtype=float)
     Imaginary_part_coulomb_matrix = np.array(hdf5["imaginary_part_coulomb_matrix"], dtype=float)

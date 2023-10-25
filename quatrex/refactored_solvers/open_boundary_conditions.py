@@ -3,8 +3,8 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from quatrex.OBC.beyn_cpu import beyn
-from quatrex.OBC import sancho
+from quatrex.files_to_refactor.beyn_cpu import beyn
+from quatrex.files_to_refactor import sancho
 
 
 
