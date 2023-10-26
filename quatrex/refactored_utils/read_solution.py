@@ -28,7 +28,6 @@ def load_a_gw_matrix_flattened(
         np.ndarray: Columns 
         np.ndarray: Greater Function
         np.ndarray: Lesser Function
-        np.ndarray: Retarded Function 
     """
 
     # open the file

@@ -3,9 +3,9 @@
 import numpy as np
 from scipy import sparse
 from quatrex.files_to_refactor.read_utils import *
+from quatrex.refactored_utils.constants import e, epsilon_0
 
-
-def construct_coulomb_matrix(DH, eps_r, eps0, e, diag=False, orb_uniform=False):
+def construct_coulomb_matrix(DH, eps_r, diag=False, orb_uniform=False):
     """
     This function computes a placeholder for the 2-index Coulomb matrix. It
     assumes that the atomic orbitals are point charges and computes their 
@@ -18,11 +18,9 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag=False, orb_uniform=False):
         OMEN Hamiltonian Class with Block Properties
     epsR : float
         Relative Dielectric permittivity
-    eps0 : float
+    epsilon_0 : float
         Dielectric permittivity of vacuum
-    e   : float
-        Elementary charge
-
+    
     Returns
     -------
     V_Col : scipy.sparse.csc matix of type cfloat, same dimension as
@@ -30,7 +28,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag=False, orb_uniform=False):
         The coulomb Matrix
 
     """
-    factor = e / (4 * np.pi * eps0 * eps_r) * 1e9
+    factor = e / (4 * np.pi * epsilon_0 * eps_r) * 1e9
     V_atomic = np.zeros((DH.NA, DH.NB + 1, DH.TB, DH.TB), dtype=np.cfloat)
     SF = np.outer(np.arange(1, -0.1, -0.1), np.arange(1, -0.1, -0.1))
     Vmax = float(0.0)

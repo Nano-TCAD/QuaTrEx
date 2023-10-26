@@ -1,9 +1,5 @@
-"""
-@author: Alexander Maeder (almaeder@ethz.ch)
-@date: 2023-09
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
-"""
 import numpy as np
 from mpi4py import MPI
 from mpi4py.util import dtlib

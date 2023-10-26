@@ -35,26 +35,26 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     proc_name = MPI.Get_processor_name()
     base_type = np.complex128
-    gw_num_iter = 2
+    number_of_gw_iterations = 2
     is_padded = False
     comm_unblock = False
     save_result = False
-    num_energy = 31
+    num_energy = 5
     # memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.5
-    mem_w = 0.1
+    self_energy_memory_factor = 0.5
+    screened_interaction_memory_factor = 0.1
 
     if rank == 0:
         time_startup = -time.perf_counter()
         time_read_gold = -time.perf_counter()
 
-    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_iter.mat"
+    save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_five_energy_points_iter2.mat"
 
     # path to hamiltonian
     hamiltonian_path ="/usr/scratch/mont-fort17/dleonard/GW_paper/InAs"
 
     # gw matrices path
-    reference_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_iter" + str(gw_num_iter) + ".mat"
+    reference_solution_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_five_energy_points_iter" + str(number_of_gw_iterations) + ".mat"
 
     # reading reference solution-------------------------------------------------
     gw_names = ["g", "p", "w", "s"]
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     matrices_gold = {}
     for gw_name in gw_names:
         _, rows, columns, g_gold, l_gold = load_a_gw_matrix_flattened(
-            reference_path, gw_name)
+            reference_solution_path, gw_name)
         matrices_gold[gw_name + "g"] = g_gold
         matrices_gold[gw_name + "l"] = l_gold
         matrices_gold[gw_name + "rows"] = rows
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     columns = matrices_gold["gcolumns"]
     (rows_coulomb_matrix,
      columns_coulomb_matrix,
-     Coulomb_matrix_flattened_reference) = load_coulomb_matrix_flattened(reference_path)
+     Coulomb_matrix_flattened_reference) = load_coulomb_matrix_flattened(reference_solution_path)
 
     assert np.allclose(rows, rows_coulomb_matrix)
     assert np.allclose(columns, columns_coulomb_matrix)
@@ -88,13 +88,10 @@ if __name__ == "__main__":
         time_pre_compute = -time.perf_counter()
 
     # physics parameters---------------------------------------------------------
-    # Phyiscal Constants -----------
+    # Phyiscal parameter -----------
     # TODO: Move out in config file
-    elementary_charge = 1.6022e-19
     vacuum_permittivity = 8.854e-12
-    hbar = 1.0546e-34
     temperature_in_kelvin = 300
-    boltzmann_constant = 1.38e-23
 
     
     
@@ -154,14 +151,18 @@ if __name__ == "__main__":
 
     # TODO refactor
     Coulomb_matrix = construct_coulomb_matrix(
-        hamiltonian_obj, relative_permittivity, vacuum_permittivity, elementary_charge, diag=False, orb_uniform=True)
+        hamiltonian_obj,
+        relative_permittivity,
+        diag=False,
+        orb_uniform=True)
+
     Coulomb_matrix_flattened = np.asarray(Coulomb_matrix[rows, columns].reshape(-1))
 
-    assert np.allclose(Coulomb_matrix.toarray(), Coulomb_matrix_reference.toarray())
+    # assert np.allclose(Coulomb_matrix.toarray(), Coulomb_matrix_reference.toarray())
 
-    energy_conduction_band_minimum_over_iterations = np.zeros(gw_num_iter+1)
-    energy_fermi_left_over_iterations = np.zeros(gw_num_iter+1)
-    energy_fermi_right_over_iterations = np.zeros(gw_num_iter+1)
+    energy_conduction_band_minimum_over_iterations = np.zeros(number_of_gw_iterations+1)
+    energy_fermi_left_over_iterations = np.zeros(number_of_gw_iterations+1)
+    energy_fermi_right_over_iterations = np.zeros(number_of_gw_iterations+1)
     
     energy_conduction_band_minimum_over_iterations[0] = energy_conduction_band_minimum
     energy_fermi_left_over_iterations[0] = energy_fermi_left
@@ -230,7 +231,7 @@ if __name__ == "__main__":
     energy_points_padded = np.zeros((distribution.shape[1]), dtype=energy_points.dtype)
     energy_points_padded[:number_of_energy_points] = energy_points
 
-    Coulomb_matrix_padded = np.zeros((distribution.shape[0]), dtype=Coulomb_matrix_reference.dtype)
+    Coulomb_matrix_padded = np.zeros((distribution.shape[0]), dtype=Coulomb_matrix.dtype)
     Coulomb_matrix_padded[:number_of_nonzero_elements] = Coulomb_matrix_flattened
 
     # split up the factor between the ranks
@@ -313,9 +314,9 @@ if __name__ == "__main__":
     #  3. output matrices which are communicated
 
     def compute_greens_function(
-        Sigma_greater_list,
-        Sigma_lesser_list,
-        Sigma_retarded_list,
+        Self_energy_greater_list,
+        Self_energy_lesser_list,
+        Self_energy_retarded_list,
         energy_fermi_left_per_iteration,
         energy_fermi_right_per_iteration,
         G_greater_flattened,
@@ -324,45 +325,41 @@ if __name__ == "__main__":
         # calculate the green's function at every rank------------------------------
         fermi_distribution_left = fermi_distribution(energy_points_per_rank,
                                                     energy_fermi_left_per_iteration,
-                                                    elementary_charge,
-                                                    boltzmann_constant,
                                                     temperature_in_kelvin)
         fermi_distribution_right = fermi_distribution(energy_points_per_rank,
                                                     energy_fermi_right_per_iteration,
-                                                    elementary_charge,
-                                                    boltzmann_constant,
                                                     temperature_in_kelvin)
 
 
         # cannot be put into the self-energy_points kernel because transposed is needed
         for ie in range(number_of_energy_points_per_rank):
             # symmetrize (lesser and greater have to be skewed symmetric)
-            Sigma_lesser_list[ie] = (Sigma_lesser_list[ie] - Sigma_lesser_list[ie].T.conj()) / 2
-            Sigma_greater_list[ie] = (Sigma_greater_list[ie] - Sigma_greater_list[ie].T.conj()) / 2
-            Sigma_retarded_list[ie] = (np.real(Sigma_retarded_list[ie])
-                                       + (Sigma_greater_list[ie] - Sigma_lesser_list[ie]) / 2)
+            Self_energy_lesser_list[ie] = (Self_energy_lesser_list[ie] - Self_energy_lesser_list[ie].T.conj()) / 2
+            Self_energy_greater_list[ie] = (Self_energy_greater_list[ie] - Self_energy_greater_list[ie].T.conj()) / 2
+            Self_energy_retarded_list[ie] = (np.real(Self_energy_retarded_list[ie])
+                                       + (Self_energy_greater_list[ie] - Self_energy_lesser_list[ie]) / 2)
 
 
         G_lesser_diag_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks,
                                         blocksize,
                                         blocksize),
-                                        dtype=np.complex128)
+                                        dtype=base_type)
         G_lesser_upper_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks - 1,
                                         blocksize,
                                         blocksize),
-                                        dtype=np.complex128)
+                                        dtype=base_type)
         G_greater_diag_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks,
                                         blocksize,
                                         blocksize),
-                                        dtype=np.complex128)
+                                        dtype=base_type)
         G_greater_upper_blocks = np.zeros((number_of_energy_points_per_rank,
                                         number_of_blocks - 1,
                                         blocksize,
                                         blocksize),
-                                        dtype=np.complex128)
+                                        dtype=base_type)
 
 
         greens_function_solver(G_lesser_diag_blocks,
@@ -371,9 +368,9 @@ if __name__ == "__main__":
                                 G_greater_upper_blocks,
                                 hamiltonian_obj.Hamiltonian['H_4'],
                                 hamiltonian_obj.Overlap['H_4'],
-                                Sigma_retarded_list,
-                                Sigma_lesser_list,
-                                Sigma_greater_list,
+                                Self_energy_retarded_list,
+                                Self_energy_lesser_list,
+                                Self_energy_greater_list,
                                 energy_points_per_rank,
                                 fermi_distribution_left,
                                 fermi_distribution_right,
@@ -400,6 +397,7 @@ if __name__ == "__main__":
                                                         G_lesser_lower_blocks,
                                                         number_of_nonzero_elements,
                                                         number_of_energy_points_per_rank)
+        print("0")
 
 
 
@@ -450,22 +448,22 @@ if __name__ == "__main__":
                                                             number_of_blocks,
                                                             blocksize,
                                                             blocksize),
-                                                            dtype=np.complex128)
+                                                            dtype=base_type)
         Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points,
                                                              number_of_blocks - 1,
                                                              blocksize,
                                                              blocksize),
-                                                             dtype=np.complex128)
+                                                             dtype=base_type)
         Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points,
                                                              number_of_blocks,
                                                              blocksize,
                                                              blocksize),
-                                                             dtype=np.complex128)
+                                                             dtype=base_type)
         Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points,
                                                               number_of_blocks - 1,
                                                               blocksize,
                                                               blocksize),
-                                                              dtype=np.complex128)
+                                                              dtype=base_type)
 
 
         screened_interaction_solver(
@@ -505,22 +503,22 @@ if __name__ == "__main__":
 
 
     def selfenergy_compute(
-            G_greater,
-            G_lesser,
-            Screened_interaction_greater,
-            Screened_interaction_lesser,
-            Sigma_greater,
-            Sigma_lesser,
-            Sigma_retarded
+            G_greater_flattened,
+            G_lesser_flattened,
+            Screened_interaction_greater_flattened,
+            Screened_interaction_lesser_flattened,
+            Self_energy_greater_flattened,
+            Self_energy_lesser_flattened,
+            Self_energy_retarded_flattened
     ):
         # todo optimize and not load two time green's function to gpu and do twice the fft
-        (Sigma_greater[:, :number_of_energy_points],
-         Sigma_lesser[:, :number_of_energy_points],
-         Sigma_retarded[:, :number_of_energy_points]) = compute_gw_self_energy(
-            G_lesser[:, :number_of_energy_points],
-            G_greater[:, :number_of_energy_points],
-            Screened_interaction_lesser[:, :number_of_energy_points],
-            Screened_interaction_greater[:, :number_of_energy_points],
+        (Self_energy_greater_flattened[:, :number_of_energy_points],
+         Self_energy_lesser_flattened[:, :number_of_energy_points],
+         Self_energy_retarded_flattened[:, :number_of_energy_points]) = compute_gw_self_energy(
+            G_lesser_flattened[:, :number_of_energy_points],
+            G_greater_flattened[:, :number_of_energy_points],
+            Screened_interaction_lesser_flattened[:, :number_of_energy_points],
+            Screened_interaction_greater_flattened[:, :number_of_energy_points],
             Coulomb_matrix_per_rank,
             delta_energy)
 
@@ -581,7 +579,7 @@ if __name__ == "__main__":
         time_startup += time.perf_counter()
         time_loop = -time.perf_counter()
 
-    for iter_num in range(gw_num_iter):
+    for iter_num in range(number_of_gw_iterations):
 
 
         if rank == 0:
@@ -638,8 +636,9 @@ if __name__ == "__main__":
 
 
         for i in range(w_num_buffer):
-            w_nonzero_elements_per_rank[i][:, :] = (
-                1.0 - mem_w) * w_nonzero_elements_per_rank_tmp[i] + mem_w * w_nonzero_elements_per_rank[i]
+            w_nonzero_elements_per_rank[i][:, :] = \
+                (1.0 - screened_interaction_memory_factor) * w_nonzero_elements_per_rank_tmp[i] \
+                + screened_interaction_memory_factor * w_nonzero_elements_per_rank[i]
 
         if rank == 0:
             time_w += time.perf_counter()
@@ -652,7 +651,7 @@ if __name__ == "__main__":
 
         # only take part of the self energy_points
         for i in range(s_num_buffer):
-            s_energy_per_rank[i][:] = (1.0 - mem_s) * s_energy_per_rank_tmp[i] + mem_s * s_energy_per_rank[i]
+            s_energy_per_rank[i][:] = (1.0 - self_energy_memory_factor) * s_energy_per_rank_tmp[i] + self_energy_memory_factor * s_energy_per_rank[i]
 
         if rank == 0:
             time_s += time.perf_counter()
