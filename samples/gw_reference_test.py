@@ -375,36 +375,13 @@ if __name__ == "__main__":
         Screened_interaction_greater_flattened,
         Screened_interaction_lesser_flattened
     ):
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        Polarization_greater_list = flattened_to_list_of_csr(
-                    Polarization_greater_flattened[:, :number_of_nonzero_elements],
-                    rows,
-                    columns,
-                    number_of_orbitals)
-        Polarization_lesser_list = flattened_to_list_of_csr(
-                Polarization_lesser_flattened[:, :number_of_nonzero_elements],
-                rows, columns,
-                number_of_orbitals)
-
-        Polarization_retarded_list = []
-
-        # Symmetrization of Polarization (TODO: check if this is needed)
-        for ie in range(number_of_energy_points_per_rank):
-            # Anti-Hermitian symmetrizing of PL and PG
-            Polarization_lesser_list[ie] = (Polarization_lesser_list[ie] - Polarization_lesser_list[ie].conj().T) / 2
-
-            Polarization_greater_list[ie] = (Polarization_greater_list[ie] - Polarization_greater_list[ie].conj().T) / 2
-            
-            # PR has to be derived from PL and PG and then has to be symmetrized
-            Polarization_retarded_list.append((Polarization_greater_list[ie] - Polarization_lesser_list[ie]) / 2)
 
         # calculate the screened interaction on every rank--------------------------
         (Screened_interaction_greater_flattened[:, :number_of_nonzero_elements],
         Screened_interaction_lesser_flattened[:, :number_of_nonzero_elements]) = screened_interaction_solver(
             Coulomb_matrix,
-            Polarization_greater_list,
-            Polarization_lesser_list,
-            Polarization_retarded_list,
+            Polarization_greater_flattened[:, :number_of_nonzero_elements],
+            Polarization_lesser_flattened[:, :number_of_nonzero_elements],
             number_of_energy_points,
             rows,
             columns,

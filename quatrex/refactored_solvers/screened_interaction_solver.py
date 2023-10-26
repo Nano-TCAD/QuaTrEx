@@ -7,20 +7,37 @@ from scipy.sparse import identity as sp_identity
 from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
 from quatrex.refactored_utils.utils import csr_to_flattened
+from quatrex.refactored_utils.utils import flattened_to_list_of_csr
 
 from quatrex.files_to_refactor import dL_OBC_eigenmode_cpu
 
 
 def screened_interaction_solver(
     Coulomb_matrix: csr_matrix,
-    Polarization_greater_list: csr_matrix,
-    Polarization_lesser_list: csr_matrix,
-    Polarization_retarded_list: csr_matrix,
+    Polarization_greater_flattened: np.ndarray,
+    Polarization_lesser_flattened: np.ndarray,
     number_of_energy_points: int,
     rows: np.ndarray,
     columns: np.ndarray,
     blocksize: int
 ):
+
+    Polarization_greater_list = flattened_to_list_of_csr(
+        Polarization_greater_flattened,
+        rows,
+        columns,
+        Coulomb_matrix.shape[0])
+    Polarization_lesser_list = flattened_to_list_of_csr(
+        Polarization_lesser_flattened,
+        rows,
+        columns,
+        Coulomb_matrix.shape[0])
+
+    (Polarization_retarded_list,
+     Polarization_lesser_list,
+     Polarization_greater_list) = symmetrize_polarization(
+        Polarization_greater_list,
+        Polarization_lesser_list)
 
     Screened_interaction_greater_flattened = np.zeros((number_of_energy_points,
                                                        rows.size),
@@ -220,3 +237,25 @@ def L_correction_of_obc(
 
     L_greater[-blocksize:, -blocksize:] += L_greater_right_OBC_block
     L_lesser[-blocksize:, -blocksize:] += L_lesser_right_OBC_block
+
+
+def symmetrize_polarization(
+    Polarization_greater_list,
+    Polarization_lesser_list
+):
+
+    # Symmetrization of Polarization (TODO: check if this is needed)
+    Polarization_retarded_list = []
+    for ie in range(len(Polarization_greater_list)):
+        # Anti-Hermitian symmetrizing of PL and PG
+        Polarization_lesser_list[ie] = (Polarization_lesser_list[ie] -
+                                        Polarization_lesser_list[ie].conj().T) / 2
+
+        Polarization_greater_list[ie] = (Polarization_greater_list[ie] -
+                                         Polarization_greater_list[ie].conj().T) / 2
+
+        # PR has to be derived from PL and PG and then has to be symmetrized
+        Polarization_retarded_list.append((Polarization_greater_list[ie] -
+                                           Polarization_lesser_list[ie]) / 2)
+
+    return Polarization_retarded_list, Polarization_lesser_list, Polarization_greater_list
