@@ -17,20 +17,20 @@ def screened_interaction_solver(
     Polarization_greater_flattened: np.ndarray,
     Polarization_lesser_flattened: np.ndarray,
     number_of_energy_points: int,
-    rows: np.ndarray,
-    columns: np.ndarray,
+    row_indices_kept: np.ndarray,
+    column_indices_kept: np.ndarray,
     blocksize: int
 ):
 
     Polarization_greater_list = flattened_to_list_of_csr(
         Polarization_greater_flattened,
-        rows,
-        columns,
+        row_indices_kept,
+        column_indices_kept,
         Coulomb_matrix.shape[0])
     Polarization_lesser_list = flattened_to_list_of_csr(
         Polarization_lesser_flattened,
-        rows,
-        columns,
+        row_indices_kept,
+        column_indices_kept,
         Coulomb_matrix.shape[0])
 
     (Polarization_retarded_list,
@@ -40,10 +40,10 @@ def screened_interaction_solver(
         Polarization_lesser_list)
 
     Screened_interaction_greater_flattened = np.zeros((number_of_energy_points,
-                                                       rows.size),
+                                                       row_indices_kept.size),
                                                       dtype=Polarization_greater_list[0].dtype)
     Screened_interaction_lesser_flattened = np.zeros((number_of_energy_points,
-                                                      rows.size),
+                                                      row_indices_kept.size),
                                                      dtype=Polarization_greater_list[0].dtype)
 
     # TODO: explanation why the first point is skipped
@@ -78,28 +78,28 @@ def screened_interaction_solver(
             System_matrix_inv, L_greater)
 
         Screened_interaction_lesser_flattened[i] = csr_to_flattened(
-            Screened_interaction_lesser, rows, columns)
+            Screened_interaction_lesser, row_indices_kept, column_indices_kept)
         Screened_interaction_greater_flattened[i] = csr_to_flattened(
-            Screened_interaction_greater, rows, columns)
+            Screened_interaction_greater, row_indices_kept, column_indices_kept)
 
     return Screened_interaction_greater_flattened, Screened_interaction_lesser_flattened
 
 
 def get_system_matrix(
     Coulomb_matrix: csr_matrix,
-    Polarization_retarded_list: csr_matrix,
+    Polarization_retarded: csr_matrix,
     blocksize: int
 ):
 
     System_matrix = sp_identity(
-        Coulomb_matrix.shape[0]) - Coulomb_matrix @ Polarization_retarded_list
+        Coulomb_matrix.shape[0]) - Coulomb_matrix @ Polarization_retarded
 
     # Correct system matrix for infinite contact
     System_matrix[0:blocksize, 0:blocksize] -= Coulomb_matrix[blocksize:2*blocksize, 0:blocksize] @\
-        Polarization_retarded_list[0:blocksize, blocksize:2*blocksize]
+        Polarization_retarded[0:blocksize, blocksize:2*blocksize]
 
     System_matrix[-blocksize:, -blocksize:] -= Coulomb_matrix[-2*blocksize:-blocksize, -blocksize:] @\
-        Polarization_retarded_list[-blocksize:, -2*blocksize:-blocksize]
+        Polarization_retarded[-blocksize:, -2*blocksize:-blocksize]
 
     return System_matrix
 

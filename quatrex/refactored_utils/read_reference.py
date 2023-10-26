@@ -87,34 +87,67 @@ def load_coulomb_matrix_flattened(
 
     return (rows, columns, Coulomb_matrix)
 
-def save_all(
-    energy_points:np.ndarray,
-    rows: np.ndarray,
-    columns: np.ndarray,
-    blocksize: int,
-    path: str,
-    **kwargs
+def save_parameters(
+    path,
+    parameters_reference
 ):
-    """
-    Saves all the data to a file
+    np.savez(
+        path + "parameters.npz",
+        energy_points = parameters_reference["energy_points"],
+        voltage_applied = parameters_reference["voltage_applied"],
+        energy_fermi_left = parameters_reference["energy_fermi_left"],
+        energy_conduction_band_minimum = parameters_reference["energy_conduction_band_minimum"],
+        number_of_orbital_per_atom = parameters_reference["number_of_orbital_per_atom"],
+        temperature_in_kelvin = parameters_reference["temperature_in_kelvin"],
+        relative_permittivity = parameters_reference["relative_permittivity"],
+        screened_interaction_memory_factor = parameters_reference["screened_interaction_memory_factor"],
+        self_energy_memory_factor = parameters_reference["self_energy_memory_factor"],
+        blocksize = parameters_reference["blocksize"]
+    )
 
-    Args:
-        energy_points (npt.NDArray[np.float64]): Energy
-        rows (np.ndarray): Non-zero row elements
-        columns (np.ndarray): Non-zero column elements
-        blocksize (int): blocksizes
-        path (str): Path+filename where to save
-        **kwargs: Dictionary of all the data to save
-    """
-    # create the file
-    hdf5 = h5py.File(path, "w")
-    group = hdf5.create_group("formatted")
 
-    # write the entries
-    group.create_dataset("rows", data=rows)
-    group.create_dataset("columns", data=columns)
-    group.create_dataset("energy_points", data=energy_points)
-    group.create_dataset("blocksize", data=blocksize)
-    for key, value in kwargs.items():
-        group.create_dataset("real_part_" + key, data=np.real(value))
-        group.create_dataset("imaginary_part_" + key, data=np.imag(value))
+def save_inputs(
+    path,
+    inputs_reference
+):
+    np.savez(
+        path + "hamiltonian.npz",
+        indices = inputs_reference["hamiltonian"].indices,
+        indptr = inputs_reference["hamiltonian"].indptr,
+        data = inputs_reference["hamiltonian"].data
+    )
+    np.savez(
+        path + "overlap_matrix.npz",
+        indices = inputs_reference["overlap_matrix"].indices,
+        indptr = inputs_reference["overlap_matrix"].indptr,
+        data = inputs_reference["overlap_matrix"].data
+    )
+    np.savez(
+        path + "coulomb_matrix.npz",
+        indices = inputs_reference["overlap_matrix"].indices,
+        indptr = inputs_reference["overlap_matrix"].indptr,
+        data = inputs_reference["overlap_matrix"].data
+    )
+    np.savez(
+        path + "row_indices_kept.npz",
+        row_indices_kept = inputs_reference["row_indices_kept"]
+    )
+    np.savez(
+        path + "column_indices_kept.npz",
+        column_indices_kept = inputs_reference["column_indices_kept"]
+    )
+
+def save_outputs(
+    path,
+    outputs_reference
+):
+    gw_names = ["G", "Screened_interaction", "Polarization", "Self_energy"]
+    gw_types = ["greater", "lesser"]
+    for gw_name in gw_names:
+        for gw_type in gw_types:
+            np.savez(
+                path + gw_name + "_" + gw_type + ".npz",
+                dats = outputs_reference[gw_name + "_" + gw_type]
+            )
+
+

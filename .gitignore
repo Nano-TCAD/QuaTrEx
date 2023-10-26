@@ -145,3 +145,6 @@ gmon.out
 
 # DaCe
 .dacecache/
+
+# TODO: reference test files
+*.npz
