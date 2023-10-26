@@ -54,7 +54,8 @@ if __name__ == "__main__":
     hamiltonian_path ="/usr/scratch/mont-fort17/dleonard/GW_paper/InAs"
 
     # gw matrices path
-    reference_solution_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_five_energy_points_iter" + str(number_of_gw_iterations) + ".mat"
+    reference_solution_path = "/usr/scratch/mont-fort17/almaeder/test_gw/reference_five_energy_points_iter"\
+                                + str(number_of_gw_iterations) + ".mat"
 
     # reading reference solution-------------------------------------------------
     gw_names = ["g", "p", "w", "s"]
@@ -340,32 +341,9 @@ if __name__ == "__main__":
                                        + (Self_energy_greater_list[ie] - Self_energy_lesser_list[ie]) / 2)
 
 
-        G_lesser_diag_blocks = np.zeros((number_of_energy_points_per_rank,
-                                        number_of_blocks,
-                                        blocksize,
-                                        blocksize),
-                                        dtype=base_type)
-        G_lesser_upper_blocks = np.zeros((number_of_energy_points_per_rank,
-                                        number_of_blocks - 1,
-                                        blocksize,
-                                        blocksize),
-                                        dtype=base_type)
-        G_greater_diag_blocks = np.zeros((number_of_energy_points_per_rank,
-                                        number_of_blocks,
-                                        blocksize,
-                                        blocksize),
-                                        dtype=base_type)
-        G_greater_upper_blocks = np.zeros((number_of_energy_points_per_rank,
-                                        number_of_blocks - 1,
-                                        blocksize,
-                                        blocksize),
-                                        dtype=base_type)
 
-
-        greens_function_solver(G_lesser_diag_blocks,
-                                G_lesser_upper_blocks,
-                                G_greater_diag_blocks,
-                                G_greater_upper_blocks,
+        (G_greater_flattened[:,:number_of_nonzero_elements],
+         G_lesser_flattened[:,:number_of_nonzero_elements]) = greens_function_solver(
                                 hamiltonian_obj.Hamiltonian['H_4'],
                                 hamiltonian_obj.Overlap['H_4'],
                                 Self_energy_retarded_list,
@@ -374,32 +352,9 @@ if __name__ == "__main__":
                                 energy_points_per_rank,
                                 fermi_distribution_left,
                                 fermi_distribution_right,
+                                rows,
+                                columns,
                                 blocksize)
-
-        
-        
-        # lower diagonal blocks from physics identity
-        G_greater_lower_blocks = -G_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-        G_lesser_lower_blocks = -G_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-
-        G_greater_flattened[:,:number_of_nonzero_elements] = triple_array_to_flattened(
-                                                        map_blocks_to_flattened,
-                                                        G_greater_diag_blocks,
-                                                        G_greater_upper_blocks,
-                                                        G_greater_lower_blocks,
-                                                        number_of_nonzero_elements,
-                                                        number_of_energy_points_per_rank)
-
-        G_lesser_flattened[:,:number_of_nonzero_elements] = triple_array_to_flattened(
-                                                        map_blocks_to_flattened,
-                                                        G_lesser_diag_blocks,
-                                                        G_lesser_upper_blocks,
-                                                        G_lesser_lower_blocks,
-                                                        number_of_nonzero_elements,
-                                                        number_of_energy_points_per_rank)
-        print("0")
-
-
 
     def polarization_compute(
         G_greater_flattened,
@@ -444,62 +399,17 @@ if __name__ == "__main__":
             Polarization_retarded_list.append((Polarization_greater_list[ie] - Polarization_lesser_list[ie]) / 2)
 
         # calculate the screened interaction on every rank--------------------------
-        Screened_interaction_lesser_diag_blocks = np.zeros((number_of_energy_points,
-                                                            number_of_blocks,
-                                                            blocksize,
-                                                            blocksize),
-                                                            dtype=base_type)
-        Screened_interaction_lesser_upper_blocks = np.zeros((number_of_energy_points,
-                                                             number_of_blocks - 1,
-                                                             blocksize,
-                                                             blocksize),
-                                                             dtype=base_type)
-        Screened_interaction_greater_diag_blocks = np.zeros((number_of_energy_points,
-                                                             number_of_blocks,
-                                                             blocksize,
-                                                             blocksize),
-                                                             dtype=base_type)
-        Screened_interaction_greater_upper_blocks = np.zeros((number_of_energy_points,
-                                                              number_of_blocks - 1,
-                                                              blocksize,
-                                                              blocksize),
-                                                              dtype=base_type)
-
-
-        screened_interaction_solver(
-            Screened_interaction_lesser_diag_blocks,
-            Screened_interaction_lesser_upper_blocks,
-            Screened_interaction_greater_diag_blocks,
-            Screened_interaction_greater_upper_blocks,
+        (Screened_interaction_greater_flattened[:, :number_of_nonzero_elements],
+        Screened_interaction_lesser_flattened[:, :number_of_nonzero_elements]) = screened_interaction_solver(
             Coulomb_matrix,
             Polarization_greater_list,
             Polarization_lesser_list,
             Polarization_retarded_list,
             number_of_energy_points,
+            rows,
+            columns,
             blocksize,
         )
-
-        # Flattening from [E, bblocks, blocksize, blocksize] -> [ij, E]
-        
-        # Production of lower blocks through symmetry from upper blocks computed
-        # in RGF
-        Screened_interaction_greater_lower_blocks = -Screened_interaction_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-        Screened_interaction_lesser_lower_blocks = -Screened_interaction_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-
-        Screened_interaction_greater_flattened[:, :number_of_nonzero_elements] = triple_array_to_flattened(
-                                            map_blocks_to_flattened,
-                                            Screened_interaction_greater_diag_blocks,
-                                            Screened_interaction_greater_upper_blocks,
-                                            Screened_interaction_greater_lower_blocks,
-                                            number_of_nonzero_elements,
-                                            number_of_energy_points_per_rank)
-        Screened_interaction_lesser_flattened[:, :number_of_nonzero_elements] = triple_array_to_flattened(
-                                            map_blocks_to_flattened,
-                                            Screened_interaction_lesser_diag_blocks,
-                                            Screened_interaction_lesser_upper_blocks,
-                                            Screened_interaction_lesser_lower_blocks,
-                                            number_of_nonzero_elements,
-                                            number_of_energy_points_per_rank)
 
 
     def selfenergy_compute(

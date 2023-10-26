@@ -193,11 +193,8 @@ if __name__ == "__main__":
                                        + (Self_energy_greater_list[ie] - Self_energy_lesser_list[ie]) / 2)
 
 
-        greens_function_solver(
-                            G_lesser_diag_blocks,
-                            G_lesser_upper_blocks,
-                            G_greater_diag_blocks,
-                            G_greater_upper_blocks,
+        (G_greater_flattened,
+         G_lesser_flattened) = greens_function_solver(
                             Hamiltonian,
                             Overlap_matrix,
                             Self_energy_retarded_list,
@@ -206,27 +203,10 @@ if __name__ == "__main__":
                             energy_points,
                             fermi_distribution_left,
                             fermi_distribution_right,
+                            rows,
+                            columns,
                             blocksize)
 
-        # lower diagonal blocks from physics identity
-        G_greater_lower_blocks = -G_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-        G_lesser_lower_blocks = -G_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-
-        G_greater_flattened = triple_array_to_flattened(
-                                    map_blocks_to_flattened,
-                                    G_greater_diag_blocks,
-                                    G_greater_upper_blocks,
-                                    G_greater_lower_blocks,
-                                    number_of_nonzero_elements,
-                                    number_of_energy_points)
-
-        G_lesser_flattened = triple_array_to_flattened(
-                                    map_blocks_to_flattened,
-                                    G_lesser_diag_blocks,
-                                    G_lesser_upper_blocks,
-                                    G_lesser_lower_blocks,
-                                    number_of_nonzero_elements,
-                                    number_of_energy_points)
 
         (Polarization_greater_flattened,
         Polarization_lesser_flattened) = compute_polarization(
@@ -264,36 +244,15 @@ if __name__ == "__main__":
 
 
 
-        screened_interaction_solver(
-            Screened_interaction_lesser_diag_blocks,
-            Screened_interaction_lesser_upper_blocks,
-            Screened_interaction_greater_diag_blocks,
-            Screened_interaction_greater_upper_blocks,
+        (Screened_interaction_greater_flattened, Screened_interaction_lesser_flattened) = screened_interaction_solver(
             Coulomb_matrix,
             Polarization_greater_list,
             Polarization_lesser_list,
             Polarization_retarded_list,
             number_of_energy_points,
+            rows,
+            columns,
             blocksize)
-
-        # lower diagonal blocks from physics identity
-        Screened_interaction_greater_lower_blocks = -Screened_interaction_greater_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-        Screened_interaction_lesser_lower_blocks = -Screened_interaction_lesser_upper_blocks.conjugate().transpose((0, 1, 3, 2))
-
-        Screened_interaction_greater_flattened = triple_array_to_flattened(
-                                            map_blocks_to_flattened,
-                                            Screened_interaction_greater_diag_blocks,
-                                            Screened_interaction_greater_upper_blocks,
-                                            Screened_interaction_greater_lower_blocks,
-                                            number_of_nonzero_elements,
-                                            number_of_energy_points)
-        Screened_interaction_lesser_flattened = triple_array_to_flattened(
-                                            map_blocks_to_flattened,
-                                            Screened_interaction_lesser_diag_blocks,
-                                            Screened_interaction_lesser_upper_blocks,
-                                            Screened_interaction_lesser_lower_blocks,
-                                            number_of_nonzero_elements,
-                                            number_of_energy_points)
 
         # mix with old screened interaction
         Screened_interaction_greater_previous_iteration_flattened = \

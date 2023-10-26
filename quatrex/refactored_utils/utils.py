@@ -3,6 +3,13 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
+def csr_to_flattened(
+    A : csr_matrix,
+    rows : np.ndarray,
+    columns : np.ndarray    
+):
+    return A[rows, columns]
+
 
 def csr_to_triple_array(
     A : csr_matrix,
