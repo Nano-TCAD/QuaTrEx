@@ -94,14 +94,17 @@ def test_symmetrize_polarization(
     number_of_blocks: int,
     blocksize: int
 ):
-    C_list = [create_matrices.create_tridiagonal_matrix(number_of_blocks, blocksize)]
-    B_list = [create_matrices.create_tridiagonal_matrix(number_of_blocks, blocksize)]
-    A_list , B_skewed_list , C_skewed_list = \
+    C_list = [create_matrices.create_tridiagonal_matrix(
+        number_of_blocks, blocksize)]
+    B_list = [create_matrices.create_tridiagonal_matrix(
+        number_of_blocks, blocksize)]
+    A_sym_list, B_sym_list, C_sym_list = \
         screened_interaction_solver.symmetrize_polarization(C_list, B_list)
-    assert np.allclose(C_skewed_list[0], -C_skewed_list[0].conj().T)
-    assert np.allclose(B_skewed_list[0], -B_skewed_list[0].conj().T)
-    assert np.allclose(A_list[0], (C_skewed_list[0] - B_skewed_list[0])/2 )
-    assert np.allclose(A_list[0], -A_list[0].conj().T)
+    assert np.allclose(C_sym_list[0], -C_sym_list[0].conj().T)
+    assert np.allclose(B_sym_list[0], -B_sym_list[0].conj().T)
+    assert np.allclose(A_sym_list[0], (C_sym_list[0] - B_sym_list[0])/2)
+    assert np.allclose(A_sym_list[0], -A_sym_list[0].conj().T)
+
 
 @pytest.mark.parametrize(
     "number_of_blocks",
@@ -120,12 +123,14 @@ def test_compute_screened_interaction(
     number_of_blocks: int,
     blocksize: int
 ):
-    A = create_matrices.create_tridiagonal_matrix(number_of_blocks, blocksize)
+    rng = np.random.default_rng()
+    matrix_size = number_of_blocks * blocksize
+    A = rng.random((matrix_size, matrix_size)) + 1j * \
+        rng.random((matrix_size, matrix_size))
     B = create_matrices.create_tridiagonal_matrix(number_of_blocks, blocksize)
     C_reference = A @ B @ A.conj().T
     C_test = screened_interaction_solver.compute_screened_interaction(A, B)
     assert np.allclose(C_test, C_reference)
-
 
 
 @pytest.mark.parametrize(
@@ -159,4 +164,3 @@ def test_update_blocksize(
             if abs(i-j) > 1:
                 assert np.allclose(A[i*blocksize_test:(i+1)*blocksize_test,
                                      j*blocksize_test:(j+1)*blocksize_test], 0)
-

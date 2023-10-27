@@ -82,11 +82,10 @@ def greens_function_solver(
 
     for i, energy in enumerate(energy_array):
 
-        System_matrix = (energy + 1j * 1e-12)*Overlap_matrix - \
-            Hamiltonian - Self_energy_retarded_list[i]
-
-        # TODO --> Modification suggestion
-        # System_matrix = make_system_matrix(energy, Overlap_matrix, Hamiltonian, Self_energy_retarded_list[i])
+        System_matrix = get_system_matrix(Hamiltonian,
+                                          Overlap_matrix,
+                                          Self_energy_retarded_list[i],
+                                          energy)
 
         OBCs, _ = compute_open_boundary_condition(System_matrix,
                                                   imaginary_limit=5e-4,
@@ -107,13 +106,31 @@ def greens_function_solver(
 
         G_retarded = np.linalg.inv(System_matrix.toarray())
 
-        G_lesser, G_greater = compute_greens_function_lesser_and_greater(
-            G_retarded, Self_energy_lesser_list[i], Self_energy_greater_list[i])
+        G_lesser = compute_greens_function(
+            G_retarded, Self_energy_lesser_list[i])
 
-        G_lesser_flattened[i] = csr_to_flattened(G_lesser, row_indices_kept, col_indices_kept)
-        G_greater_flattened[i] = csr_to_flattened(G_greater, row_indices_kept, col_indices_kept)
+        G_greater = compute_greens_function(
+            G_retarded, Self_energy_greater_list[i])
+
+        G_lesser_flattened[i] = csr_to_flattened(
+            G_lesser, row_indices_kept, col_indices_kept)
+        G_greater_flattened[i] = csr_to_flattened(
+            G_greater, row_indices_kept, col_indices_kept)
 
     return G_greater_flattened, G_lesser_flattened
+
+
+def get_system_matrix(
+    Hamiltonian: csr_matrix,
+    Overlap_matrix: csr_matrix,
+    Self_energy_retarded: csr_matrix,
+    energy: float,
+):
+
+    System_matrix = (energy + 1j * 1e-12)*Overlap_matrix - \
+        Hamiltonian - Self_energy_retarded
+
+    return System_matrix
 
 
 def apply_obc_to_self_energy(
@@ -130,9 +147,9 @@ def apply_obc_to_self_energy(
     Self_energy_greater_left_boundary = 1j * \
         (fermi_distribution["left"] - 1) * Gamma_left
     Self_energy_lesser[:blocksize,
-                            :blocksize] += Self_energy_lesser_left_boundary
+                       :blocksize] += Self_energy_lesser_left_boundary
     Self_energy_greater[:blocksize,
-                             :blocksize] += Self_energy_greater_left_boundary
+                        :blocksize] += Self_energy_greater_left_boundary
 
     Gamma_right = 1j * (OBCs["right"] - OBCs["right"].conj().T)
     Self_energy_lesser_right_boundary = 1j * \
@@ -140,35 +157,20 @@ def apply_obc_to_self_energy(
     Self_energy_greater_right_boundary = 1j * \
         (fermi_distribution["right"] - 1) * Gamma_right
     Self_energy_lesser[-blocksize:, -
-                            blocksize:] += Self_energy_lesser_right_boundary
+                       blocksize:] += Self_energy_lesser_right_boundary
     Self_energy_greater[-blocksize:, -
-                             blocksize:] += Self_energy_greater_right_boundary
+                        blocksize:] += Self_energy_greater_right_boundary
 
 
-def cut_to_tridiag(
-    A: np.ndarray,
-    blocksize: int
-):
-    # Delete elements of G_retarded that are outside of the tridiagonal block structure
-    number_of_blocks = int(A.shape[0] / blocksize)
-    zero_block = np.zeros((blocksize, blocksize))
-    for row in range(number_of_blocks):
-        for col in range(number_of_blocks):
-            if col < row - 1 or col > row + 1:
-                A[row*blocksize:(row+1)*blocksize, col *
-                  blocksize:(col+1)*blocksize] = zero_block
 
-
-def compute_greens_function_lesser_and_greater(
-    G_retarded: np.ndarray,
-    Self_energy_lesser: np.ndarray,
-    Self_energy_greater: np.ndarray
+def compute_greens_function(
+    System_matrix_inv: np.ndarray,
+    Self_energy: np.ndarray
 ):
 
-    G_lesser = G_retarded @ Self_energy_lesser @ G_retarded.conj().T
-    G_greater = G_retarded @ Self_energy_greater @ G_retarded.conj().T
+    G = System_matrix_inv @ Self_energy @ System_matrix_inv.conj().T
 
-    return G_lesser, G_greater
+    return G
 
 
 def symmetrize_self_energy(
@@ -176,14 +178,16 @@ def symmetrize_self_energy(
     Self_energy_lesser_list,
     Self_energy_greater_list
 ):
-
+    Self_energy_retarded_sym = []
+    Self_energy_lesser_sym = []
+    Self_energy_greater_sym = []
     for ie in range(len(Self_energy_lesser_list)):
         # symmetrize (lesser and greater have to be skewed symmetric)
-        Self_energy_lesser_list[ie] = (Self_energy_lesser_list[ie] -
-                                       Self_energy_lesser_list[ie].T.conj()) / 2
-        Self_energy_greater_list[ie] = (Self_energy_greater_list[ie] -
-                                        Self_energy_greater_list[ie].T.conj()) / 2
-        Self_energy_retarded_list[ie] = (np.real(Self_energy_retarded_list[ie])
-                                         + (Self_energy_greater_list[ie] - Self_energy_lesser_list[ie]) / 2)
+        Self_energy_lesser_sym.append((Self_energy_lesser_list[ie] -
+                                       Self_energy_lesser_list[ie].T.conj()) / 2)
+        Self_energy_greater_sym.append((Self_energy_greater_list[ie] -
+                                        Self_energy_greater_list[ie].T.conj()) / 2)
+        Self_energy_retarded_sym.append(np.real(Self_energy_retarded_list[ie])
+                                        + (Self_energy_greater_sym[ie] - Self_energy_lesser_sym[ie]) / 2)
 
-    return Self_energy_retarded_list, Self_energy_lesser_list, Self_energy_greater_list
+    return Self_energy_retarded_sym, Self_energy_lesser_sym, Self_energy_greater_sym
