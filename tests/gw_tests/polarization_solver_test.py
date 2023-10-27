@@ -57,10 +57,13 @@ def test_compute_polarization(
 ):
     rng = np.random.default_rng()
 
+    # not symmetrized, but both should be
+    # if a function is used which does not assume the symmetry
     G_lesser = rng.random((number_of_elements_kept, number_of_energy_points)) +\
         1j * rng.random((number_of_elements_kept, number_of_energy_points))
     G_greater = rng.random((number_of_elements_kept, number_of_energy_points)) +\
         1j * rng.random((number_of_elements_kept, number_of_energy_points))
+
     delta_energy = rng.random()
     Polarization_lesser, Polarization_greater = compute_polarization(
         G_lesser, G_greater, delta_energy)
