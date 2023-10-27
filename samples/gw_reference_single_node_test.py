@@ -68,26 +68,26 @@ if __name__ == "__main__":
     assert number_of_orbitals % blocksize == 0
     number_of_blocks = int(number_of_orbitals / blocksize)
     number_of_energy_points = energy_points.shape[0]
-    number_of_nonzero_elements = row_indices_kept.shape[0]
+    number_of_elements_kept = row_indices_kept.shape[0]
 
     # initial self energies
     Self_energy_retarded_previous_iteration_flattened = np.zeros(
-        (number_of_energy_points, number_of_nonzero_elements),
+        (number_of_energy_points, number_of_elements_kept),
         dtype=base_type)
 
     Self_energy_lesser_previous_iteration_flattened = np.zeros(
-        (number_of_energy_points, number_of_nonzero_elements),
+        (number_of_energy_points, number_of_elements_kept),
         dtype=base_type)
 
     Self_energy_greater_previous_iteration_flattened = np.zeros(
-        (number_of_energy_points, number_of_nonzero_elements),
+        (number_of_energy_points, number_of_elements_kept),
         dtype=base_type)
 
     Screened_interaction_greater_previous_iteration_flattened = np.zeros(
-        (number_of_nonzero_elements, number_of_energy_points),
+        (number_of_elements_kept, number_of_energy_points),
         dtype=base_type)
     Screened_interaction_lesser_previous_iteration_flattened = np.zeros(
-        (number_of_nonzero_elements, number_of_energy_points),
+        (number_of_elements_kept, number_of_energy_points),
         dtype=base_type)
 
     for gw_iteration in range(number_of_gw_iterations):
