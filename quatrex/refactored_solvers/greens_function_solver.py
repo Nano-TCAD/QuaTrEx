@@ -45,7 +45,7 @@ def greens_function_solver(
     fermi_distribution_left: np.ndarray,
     fermi_distribution_right: np.ndarray,
     row_indices_kept: np.ndarray,
-    column_indices_kept: np.ndarray,
+    col_indices_kept: np.ndarray,
     blocksize: int
 ) -> tuple[np.ndarray, np.ndarray]:
 
@@ -53,17 +53,17 @@ def greens_function_solver(
     Self_energy_retarded_list = flattened_to_list_of_csr(
         Self_energy_retarded_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
     Self_energy_lesser_list = flattened_to_list_of_csr(
         Self_energy_lesser_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
     Self_energy_greater_list = flattened_to_list_of_csr(
         Self_energy_greater_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
 
     (Self_energy_retarded_list,
@@ -110,8 +110,8 @@ def greens_function_solver(
         G_lesser, G_greater = compute_greens_function_lesser_and_greater(
             G_retarded, Self_energy_lesser_list[i], Self_energy_greater_list[i])
 
-        G_lesser_flattened[i] = csr_to_flattened(G_lesser, row_indices_kept, column_indices_kept)
-        G_greater_flattened[i] = csr_to_flattened(G_greater, row_indices_kept, column_indices_kept)
+        G_lesser_flattened[i] = csr_to_flattened(G_lesser, row_indices_kept, col_indices_kept)
+        G_greater_flattened[i] = csr_to_flattened(G_greater, row_indices_kept, col_indices_kept)
 
     return G_greater_flattened, G_lesser_flattened
 

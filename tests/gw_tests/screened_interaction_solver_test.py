@@ -101,6 +101,7 @@ def test_symmetrize_polarization(
     assert np.allclose(C_skewed_list[0], -C_skewed_list[0].conj().T)
     assert np.allclose(B_skewed_list[0], -B_skewed_list[0].conj().T)
     assert np.allclose(A_list[0], (C_skewed_list[0] - B_skewed_list[0])/2 )
+    assert np.allclose(A_list[0], -A_list[0].conj().T)
 
 @pytest.mark.parametrize(
     "number_of_blocks",

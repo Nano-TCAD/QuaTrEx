@@ -1,6 +1,22 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
+from scipy import sparse
+
+
+def create_indices_to_keep(
+    matrix_size: int,
+    density: float
+):
+    A = sparse.random(matrix_size, matrix_size, density=density, format="csr")
+    A = A + A.T
+    A[0,0] = 1.0
+    A = A.tocoo()
+    row_indices_to_keep = A.row
+    col_indices_to_keep = A.col
+
+    return row_indices_to_keep, col_indices_to_keep
+
 
 def create_invertible_block(
     blocksize: int

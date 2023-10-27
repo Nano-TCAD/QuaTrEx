@@ -38,4 +38,4 @@ def compute_polarization(
         Polarization_lesser[:, j] = -np.conjugate(Polarization_greater[:, -j])
 
     # cutoff to original size
-    return (Polarization_greater[:, :number_of_energy_points], Polarization_lesser[:, :number_of_energy_points])
+    return (Polarization_lesser[:, :number_of_energy_points], Polarization_greater[:, :number_of_energy_points])

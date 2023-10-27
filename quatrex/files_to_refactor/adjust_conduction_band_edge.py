@@ -68,24 +68,24 @@ def adjust_conduction_band_edge(
         Self_energy_lesser_flattened,
         Self_energy_greater_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         blocksize
 ):
 
     Self_energy_retarded_list = flattened_to_list_of_csr(
         Self_energy_retarded_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
     Self_energy_lesser_list = flattened_to_list_of_csr(
         Self_energy_lesser_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
     Self_energy_greater_list = flattened_to_list_of_csr(
         Self_energy_greater_flattened,
         row_indices_kept,
-        column_indices_kept,
+        col_indices_kept,
         Hamiltonian.shape[0])
 
     # First step: get a first estimate of the CB edge

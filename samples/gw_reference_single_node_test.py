@@ -51,11 +51,11 @@ if __name__ == "__main__":
     Coulomb_matrix = construct_coulomb_matrix(
         hamiltonian_obj, relative_permittivity, diag=False, orb_uniform=True)
 
-    # TODO get row_indices_kept / column_indices_kept from neighbour matrix
-    _, row_indices_kept, column_indices_kept, _, _ = load_a_gw_matrix_flattened(
+    # TODO get row_indices_kept / col_indices_kept from neighbour matrix
+    _, row_indices_kept, col_indices_kept, _, _ = load_a_gw_matrix_flattened(
         reference_solution_path, "g")
     Coulomb_matrix_flattened = np.asarray(
-        Coulomb_matrix[row_indices_kept, column_indices_kept].reshape(-1))
+        Coulomb_matrix[row_indices_kept, col_indices_kept].reshape(-1))
 
     Hamiltonian = hamiltonian_obj.Hamiltonian["H_4"]
     Overlap_matrix = hamiltonian_obj.Overlap["H_4"]
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     blocksize = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
     number_of_orbitals = Hamiltonian.shape[0]
     assert number_of_orbitals == Hamiltonian.shape[1]
-    assert row_indices_kept.shape[0] == column_indices_kept.shape[0]
+    assert row_indices_kept.shape[0] == col_indices_kept.shape[0]
     assert number_of_orbitals % blocksize == 0
     number_of_blocks = int(number_of_orbitals / blocksize)
     number_of_energy_points = energy_points.shape[0]
@@ -102,7 +102,7 @@ if __name__ == "__main__":
             Self_energy_lesser_previous_iteration_flattened,
             Self_energy_greater_previous_iteration_flattened,
             row_indices_kept,
-            column_indices_kept,
+            col_indices_kept,
             blocksize)
 
 
@@ -126,11 +126,11 @@ if __name__ == "__main__":
             fermi_distribution_left,
             fermi_distribution_right,
             row_indices_kept,
-            column_indices_kept,
+            col_indices_kept,
             blocksize)
 
-        (Polarization_greater_flattened,
-         Polarization_lesser_flattened) = compute_polarization(
+        (Polarization_lesser_flattened,
+         Polarization_greater_flattened) = compute_polarization(
             G_lesser_flattened.T,
             G_greater_flattened.T,
             delta_energy)
@@ -142,7 +142,7 @@ if __name__ == "__main__":
             Polarization_lesser_flattened.T,
             number_of_energy_points,
             row_indices_kept,
-            column_indices_kept,
+            col_indices_kept,
             blocksize)
 
         # mix with old screened interaction
@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     assert np.allclose(energy_points, energy_reference)
     assert np.allclose(row_indices_kept, row_indices_kept_reference)
-    assert np.allclose(column_indices_kept, column_indices_kept_reference)
+    assert np.allclose(col_indices_kept, column_indices_kept_reference)
 
     # print norm difference
     print("differences to reference Green's Function: ",
@@ -231,7 +231,7 @@ if __name__ == "__main__":
         inputs_reference["overlap_matrix"] = Overlap_matrix
         inputs_reference["coulomb_matrix"] = Coulomb_matrix
         inputs_reference["row_indices_kept"] = row_indices_kept
-        inputs_reference["column_indices_kept"] = column_indices_kept
+        inputs_reference["col_indices_kept"] = col_indices_kept
         parameters_reference = {}
         parameters_reference["energy_points"] = energy_points
         parameters_reference["voltage_applied"] = voltage_applied

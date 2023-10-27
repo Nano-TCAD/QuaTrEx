@@ -133,8 +133,8 @@ def save_inputs(
         row_indices_kept = inputs_reference["row_indices_kept"]
     )
     np.savez(
-        path + "column_indices_kept.npz",
-        column_indices_kept = inputs_reference["column_indices_kept"]
+        path + "col_indices_kept.npz",
+        col_indices_kept = inputs_reference["col_indices_kept"]
     )
 
 def save_outputs(
