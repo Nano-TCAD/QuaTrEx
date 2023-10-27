@@ -727,7 +727,7 @@ def rgf_w_opt(
 
     # TODO: Fix module to import BSR matrix
     bsr = False
-    if not isinstance(vh, sparse.csr_matrix):
+    if not (isinstance(vh, sparse.csr_matrix) or isinstance(vh, sparse.csc_matrix)):
         bsr = True
 
     # is now done outside of function.
@@ -823,6 +823,7 @@ def rgf_w_opt(
         pl_s2 = pl[slb_sd, slb_so]
         pr_s1 = pr[slb_sd, slb_sd]
         pr_s2 = pr[slb_sd, slb_so]
+        pr_s3 = pr[slb_so, slb_sd]
     else:
         vh_s1 = np.ascontiguousarray(vh[slb_sd, slb_sd].toarray(order="C"))
         vh_s2 = np.ascontiguousarray(vh[slb_sd, slb_so].toarray(order="C"))
@@ -832,8 +833,9 @@ def rgf_w_opt(
         pl_s2 = np.ascontiguousarray(pl[slb_sd, slb_so].toarray(order="C"))
         pr_s1 = np.ascontiguousarray(pr[slb_sd, slb_sd].toarray(order="C"))
         pr_s2 = np.ascontiguousarray(pr[slb_sd, slb_so].toarray(order="C"))
+        pr_s3 = np.ascontiguousarray(pr[slb_so, slb_sd].toarray(order="C"))
     mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
-        vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, nbc)
+        vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3, nbc)
     # (diagonal, upper, lower block of the end block at the right)
     if bsr:
         vh_e1 = vh[slb_ed, slb_ed]
@@ -852,9 +854,10 @@ def rgf_w_opt(
         pl_e1 = np.ascontiguousarray(pl[slb_ed, slb_ed].toarray(order="C"))
         pl_e2 = np.ascontiguousarray(-pl[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
         pr_e1 = np.ascontiguousarray(pr[slb_ed, slb_ed].toarray(order="C"))
-        pr_e2 = np.ascontiguousarray(pr[slb_ed, slb_eo].transpose().toarray(order="C"))
+        pr_e2 = np.ascontiguousarray(pr[slb_eo, slb_ed].toarray(order="C"))
+        pr_e3 = np.ascontiguousarray(pr[slb_ed, slb_eo].toarray(order="C"))
     mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
-        vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, nbc)
+        vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3, nbc)
     # dmr_s[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # dmr_e[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # correction for matrix multiplication--------------------------------------

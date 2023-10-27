@@ -47,7 +47,7 @@ class Hamiltonian:
     TB = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', rank = 0):
+    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', rank = 0):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -90,7 +90,7 @@ class Hamiltonian:
             #self.hermitean = True
 
             #Read Block Properties
-            self.LM = read_file_to_float_ndarray(sim_folder + '/Layer_Matrix.dat')
+            self.LM = read_file_to_float_ndarray(sim_folder + layer_matrix)
             self.NA = self.LM.shape[0]
             self.NB = self.LM.shape[1] - 4
             self.TB = np.max(self.no_orb)

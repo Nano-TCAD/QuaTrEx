@@ -57,7 +57,7 @@ def load_V_mpi(path: str,
     """Expects a .dat with 4 columns: rows, cols, real, imag """
     if (rank == 0):
         # Loading the coulomb matrix and extracting rows, columns, real, imag
-        V_sparse = np.loadtxt(path + "/V.dat",
+        V_sparse = np.loadtxt(path,
                               dtype={
                                   'names': ('col1', 'col2', 'col3', 'col4'),
                                   'formats': ('i4', 'i4', 'f8', 'f8')
@@ -69,6 +69,8 @@ def load_V_mpi(path: str,
 
         # Creating a coo_matrix from the data above
         V_sparse = csc_array((real_parts + 1j * imag_parts, (rows, cols)))
+        # Making the coulomb matrix hermitian
+        V_sparse = (V_sparse + V_sparse.conj().T) / 2
         nao = V_sparse.shape[0]
 
         # Reducing the coulomb matrix to the neighbor indices
@@ -77,11 +79,8 @@ def load_V_mpi(path: str,
             V_sparse = V_sparse.toarray()[rows_ni, columns_ni]
             V_sparse = csc_array((V_sparse, (rows_ni, columns_ni)), shape=(nao, nao))
 
-        # Making the coulomb matrix hermitian
-        V_sparse = (V_sparse + V_sparse.conj().T) / 2
-
         # Adding a small real part to the diagonal to make the matrix positive definite
-        V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
+        #V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
         comm.Bcast([np.array(nao), MPI.INT], root=0)
         comm.Bcast([V_sparse.data, MPI.DOUBLE_COMPLEX], root=0)
         return V_sparse
@@ -102,6 +101,7 @@ if __name__ == "__main__":
     rank = comm.Get_rank()
     name = MPI.Get_processor_name()
 
-    rows_ni = np.arange(768)
+    rows_ni = np.concatenate((1 + np.arange(767), [0]))
     columns_ni = np.arange(768)
-    V_sparse = load_V_mpi("/usr/scratch/mont-fort17/dleonard/CNT/CNT_newwannier", rows_ni, columns_ni, comm, rank)
+    V_sparse = load_V_mpi("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32/V.dat", rows_ni, columns_ni, comm, rank)
+    print(np.sum(V_sparse.data))

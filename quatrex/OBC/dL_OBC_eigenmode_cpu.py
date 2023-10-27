@@ -723,7 +723,7 @@ def get_mm_obc(
 def get_mm_obc_dense(
     vh_1: npt.NDArray[np.complex128], vh_2: npt.NDArray[np.complex128], pg_1: npt.NDArray[np.complex128],
     pg_2: npt.NDArray[np.complex128], pl_1: npt.NDArray[np.complex128], pl_2: npt.NDArray[np.complex128],
-    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], nbc: int
+    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], pr_3: npt.NDArray[np.complex128], nbc: int
 ) -> typing.Tuple[typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
@@ -743,7 +743,8 @@ def get_mm_obc_dense(
         pl_1 (npt.NDArray[np.complex128]): Diagonal block of lesser polarization
         pl_2 (npt.NDArray[np.complex128]): Off diagonal block of lesser polarization
         pr_1 (npt.NDArray[np.complex128]): Diagonal block of retarded polarization
-        pr_2 (npt.NDArray[np.complex128]): Off diagonal block of retarded polarization
+        pr_2 (npt.NDArray[np.complex128]): Off-diagonal block of retarded polarization (upper off-diagonal)
+        pr_3 (npt.NDArray[np.complex128]): Off-diagonal block of retarded polarization (lower off-diagonal)
         nbc (int): How block size changes after matrix multiplication
 
     Returns:
@@ -773,7 +774,8 @@ def get_mm_obc_dense(
     pl_l1 = -pl_u1.conjugate().transpose()
     pr_d1 = pr_1
     pr_u1 = pr_2
-    pr_l1 = pr_u1.transpose()
+    #pr_l1 = pr_u1.transpose()
+    pr_l1 = pr_3
 
     # output matrices
     mr_d2 = np.empty((lb_mm, lb_mm), dtype=np.complex128)
