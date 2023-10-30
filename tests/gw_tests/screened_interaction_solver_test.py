@@ -23,6 +23,13 @@ def test_get_system_matrix(
     number_of_blocks: int,
     blocksize: int
 ):
+    """
+    Test that the correction of the system matrix is correct.
+    This correction is due to the assumption that the real system is infinite
+    with periodic contacts.
+    In the test, two periodic matrices are multiplied and 
+    the device part of the resulting matrix is compared to our implementation.
+    """
     number_of_blocks += 2
     matrix_size = number_of_blocks * blocksize
     A_reference = create_matrices.create_periodic_matrix(
@@ -60,6 +67,13 @@ def test_get_L(
     number_of_blocks: int,
     blocksize: int
 ):
+    """
+    Test that the correction of the L=V@P@V^H is correct.
+    This correction is due to the assumption that the real system is infinite
+    with periodic contacts.
+    In the test, three periodic matrices are multiplied and 
+    the device part of the resulting matrix is compared to our implementation.
+    """
     number_of_blocks += 4
     A_reference = create_matrices.create_periodic_matrix(
         number_of_blocks, blocksize)
@@ -94,6 +108,9 @@ def test_symmetrize_polarization(
     number_of_blocks: int,
     blocksize: int
 ):
+    """
+    Test the correct skewed hermitian symmetrization of the polarization
+    """
     C_list = [create_matrices.create_tridiagonal_matrix(
         number_of_blocks, blocksize)]
     B_list = [create_matrices.create_tridiagonal_matrix(
@@ -123,6 +140,9 @@ def test_compute_screened_interaction(
     number_of_blocks: int,
     blocksize: int
 ):
+    """
+    Test the fundamental formula for the screened interaction
+    """
     rng = np.random.default_rng()
     matrix_size = number_of_blocks * blocksize
     A = rng.random((matrix_size, matrix_size)) + 1j * \

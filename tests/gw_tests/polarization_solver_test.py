@@ -38,6 +38,7 @@ def compute_polarization_reference(
 
     return (Polarization_lesser, Polarization_greater)
 
+
 @pytest.mark.parametrize(
     "number_of_energy_points",
     [(1),
@@ -55,6 +56,10 @@ def test_compute_polarization(
     number_of_energy_points: int,
     number_of_elements_kept: int
 ):
+    """
+    Test the optimized calculation of the lesser and greater polarization
+    against the reference convolution implementation
+    """
     rng = np.random.default_rng()
 
     # not symmetrized, but both should be

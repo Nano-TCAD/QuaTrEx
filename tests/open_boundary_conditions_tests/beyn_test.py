@@ -28,7 +28,7 @@ def test_beyn(
     M_lower = np.zeros((blocksize, blocksize), dtype=np.complex128)
     while np.isnan(success):
         M_diag[:] = rng.uniform(size=(blocksize, blocksize)) +\
-            1j * rng.uniform(size=(blocksize, blocksize))
+            1j * rng.uniform(size=(blocksize, blocksize)) + 10*np.eye(blocksize)
         M_upper[:] = rng.uniform(size=(blocksize, blocksize)) +\
             1j * rng.uniform(size=(blocksize, blocksize))
         M_lower[:] = rng.uniform(size=(blocksize, blocksize)) +\

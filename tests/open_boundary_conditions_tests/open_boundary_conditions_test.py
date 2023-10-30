@@ -23,6 +23,10 @@ def test_apply_obc_to_system_matrix(
     number_of_blocks: int,
     blocksize: int
 ):
+    """
+    Test the application of open boundary conditions to the system matrix.
+    It is tested that only the boundary blocks are modified.
+    """
     rng = np.random.default_rng()
     matrix_size = number_of_blocks * blocksize
     A = rng.random((matrix_size, matrix_size)) + 1j * \
@@ -37,7 +41,7 @@ def test_apply_obc_to_system_matrix(
     A_copy = A.copy()
 
     apply_obc_to_system_matrix(A, OBCs, blocksize)
-    # assert that only the boundary blocks have changed
+
     assert np.allclose(A[:blocksize, :blocksize],
                        A_copy[:blocksize, :blocksize] - OBC_left)
     assert np.allclose(A[-blocksize:, -blocksize:],

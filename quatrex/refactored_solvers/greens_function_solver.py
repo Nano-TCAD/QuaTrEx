@@ -126,7 +126,7 @@ def get_system_matrix(
     Self_energy_retarded: csr_matrix,
     energy: float,
 ):
-
+    # possible to optimize TODO
     System_matrix = (energy + 1j * 1e-12)*Overlap_matrix - \
         Hamiltonian - Self_energy_retarded
 
