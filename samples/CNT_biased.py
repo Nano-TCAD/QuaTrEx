@@ -125,10 +125,10 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-    Vappl = 0.0
+    Vappl = 0.2
     energy = np.linspace(-40, 30, 15000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix100.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -182,13 +182,13 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.85
+    energy_fl = -3.5
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 1.2
     # DFT Conduction Band Minimum
     ECmin = -3.524
 
@@ -377,12 +377,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.9
+    mem_s = 0.8
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 250
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -435,7 +435,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/quatrex/results/CNT_flatband_sc_selfv_offdiag_epsR1_n64/'
+    folder = '/quatrex/results/CNT_biased_selfv_offdiag/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -469,7 +469,7 @@ if __name__ == "__main__":
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
+        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.02,
                                                             energy,
                                                             hamiltonian_obj.Overlap['H_4'], 
                                                             hamiltonian_obj.Hamiltonian['H_4'], 
@@ -515,13 +515,14 @@ if __name__ == "__main__":
 
         comm.Barrier()
 
+        if iter_num == 62:
+            mem_s = 0.4
+
         if rank == 0:
             pre_gf_time += time.perf_counter()
             print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
             gf_time = -time.perf_counter()
 
-        if iter_num == 50:
-            mem_s = 0.3
         # calculate the green's function at every rank------------------------------
         if args.pool:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
@@ -541,7 +542,7 @@ if __name__ == "__main__":
                                                                 comm,
                                                                 rank,
                                                                 size,
-                                                                homogenize = True,
+                                                                homogenize = False,
                                                                 mkl_threads = gf_mkl_threads,
                                                                 worker_num = gf_worker_threads,
                                                                 block_inv = args.block_inv,
@@ -764,7 +765,7 @@ if __name__ == "__main__":
                                                                                                     rank,
                                                                                                     size,
                                                                                                     nbc,
-                                                                                                    homogenize = True,
+                                                                                                    homogenize = False,
                                                                                                     mkl_threads = w_mkl_threads,
                                                                                                     worker_num = w_worker_threads,
                                                                                                     block_inv=args.block_inv,
@@ -898,7 +899,7 @@ if __name__ == "__main__":
         elif args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,
