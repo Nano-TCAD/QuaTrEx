@@ -45,7 +45,7 @@ def compute_gw_self_energy(
         Sigma_lesser,
         Sigma_greater)
 
-    return (Sigma_greater, Sigma_lesser, Sigma_retarded)
+    return (Sigma_retarded, Sigma_lesser, Sigma_greater)
 
 
 def compute_gw_self_energy_lesser_greater(

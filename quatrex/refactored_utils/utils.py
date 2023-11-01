@@ -3,38 +3,41 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
+
 def csr_to_flattened(
-    A : csr_matrix,
-    rows : np.ndarray,
-    columns : np.ndarray    
+    A: csr_matrix,
+    indices: dict[np.ndarray]
 ):
-    return A[rows, columns]
+    return A[indices["row"], indices["col"]]
 
 
 def csr_to_triple_array(
-    A : csr_matrix,
-    blocksize : int,
+    A: csr_matrix,
+    blocksize: int,
 ) -> [np.ndarray, np.ndarray, np.ndarray]:
 
     number_of_blocks = int(A.shape[0] / blocksize)
 
-    A_diag_blocks = np.zeros((number_of_blocks, blocksize, blocksize), dtype=A.dtype)
-    A_upper_blocks = np.zeros((number_of_blocks-1, blocksize, blocksize), dtype=A.dtype)
+    A_diag_blocks = np.zeros(
+        (number_of_blocks, blocksize, blocksize), dtype=A.dtype)
+    A_upper_blocks = np.zeros(
+        (number_of_blocks-1, blocksize, blocksize), dtype=A.dtype)
 
     for j in range(number_of_blocks):
-        A_diag_blocks[j] = A[j * blocksize : (j + 1) * blocksize, j * blocksize : (j + 1) * blocksize]
+        A_diag_blocks[j] = A[j *
+                             blocksize: (j + 1) * blocksize, j * blocksize: (j + 1) * blocksize]
     for j in range(number_of_blocks-1):
-        A_upper_blocks[j] = A[j * blocksize : (j + 1) * blocksize, (j + 1) * blocksize : (j + 2) * blocksize]
- 
+        A_upper_blocks[j] = A[j * blocksize: (j + 1) * blocksize,
+                              (j + 1) * blocksize: (j + 2) * blocksize]
+
     return A_diag_blocks, A_upper_blocks
 
 
 def flattened_to_list_of_csr(
-                        A_flattened: np.ndarray,
-                        rows: np.ndarray,
-                        columns: np.ndarray,
-                        number_of_orbitals: int
-    ) -> list[csr_matrix]:
+    A_flattened: np.ndarray,
+    indices: dict[np.ndarray],
+    number_of_orbitals: int
+) -> list[csr_matrix]:
     """
         Converts from flattened array of size
         (number_of_energy_points, number_of_nonzero_elements)
@@ -47,12 +50,13 @@ def flattened_to_list_of_csr(
     for i in range(number_of_energy_points):
         A_list.append(
             csr_matrix((A_flattened[i, :],
-            (rows, columns)),
-            shape=(number_of_orbitals, number_of_orbitals),
-            dtype=A_flattened.dtype)
-            )
+                        (indices["row"], indices["col"])),
+                       shape=(number_of_orbitals, number_of_orbitals),
+                       dtype=A_flattened.dtype)
+        )
 
     return A_list
+
 
 def triple_array_to_flattened(
         map_tripple_array_to_flattened: dict,
@@ -73,23 +77,27 @@ def triple_array_to_flattened(
     """
     A_flattened = np.empty((number_of_energy_points,
                             number_of_nonzero_elements),
-                            dtype=A_diag_blocks.dtype)
+                           dtype=A_diag_blocks.dtype)
 
     # diagonal elements
     A_flattened[:, map_tripple_array_to_flattened["diag"][3, :]] = A_diag_blocks[:,
-                                                   map_tripple_array_to_flattened["diag"][0, :],
-                                                   map_tripple_array_to_flattened["diag"][1, :],
-                                                   map_tripple_array_to_flattened["diag"][2, :]]
+                                                                                 map_tripple_array_to_flattened["diag"][0, :],
+                                                                                 map_tripple_array_to_flattened["diag"][1, :],
+                                                                                 map_tripple_array_to_flattened["diag"][2, :]]
     # off diagonal elements
     A_flattened[:, map_tripple_array_to_flattened["upper"][3, :]] = A_upper_blocks[:,
-                                                     map_tripple_array_to_flattened["upper"][0, :],
-                                                     map_tripple_array_to_flattened["upper"][1, :],
-                                                     map_tripple_array_to_flattened["upper"][2, :]]
+                                                                                   map_tripple_array_to_flattened[
+                                                                                       "upper"][0, :],
+                                                                                   map_tripple_array_to_flattened[
+                                                                                       "upper"][1, :],
+                                                                                   map_tripple_array_to_flattened["upper"][2, :]]
 
     A_flattened[:, map_tripple_array_to_flattened["lower"][3, :]] = A_lower_blocks[:,
-                                                     map_tripple_array_to_flattened["lower"][0, :],
-                                                     map_tripple_array_to_flattened["lower"][1, :],
-                                                     map_tripple_array_to_flattened["lower"][2, :]]
+                                                                                   map_tripple_array_to_flattened[
+                                                                                       "lower"][0, :],
+                                                                                   map_tripple_array_to_flattened[
+                                                                                       "lower"][1, :],
+                                                                                   map_tripple_array_to_flattened["lower"][2, :]]
     return A_flattened
 
 
@@ -110,7 +118,7 @@ def map_triple_array_to_flattened(
     """
     assert columns.size == rows.size
 
-    #a priori the length is unknown
+    # a priori the length is unknown
     map_diag = np.empty((4, 0), dtype=int)
     map_upper = np.empty((4, 0), dtype=int)
     map_lower = np.empty((4, 0), dtype=int)
@@ -127,16 +135,17 @@ def map_triple_array_to_flattened(
 
         # mask_diag if the elements are in the block
         mask_diag = ((rows >= start_index_block) &
-                (rows <= end_index_block) &
-                (columns >= start_index_block) &
-                (columns <= end_index_block))
+                     (rows <= end_index_block) &
+                     (columns >= start_index_block) &
+                     (columns <= end_index_block))
 
         # number of to read out elements in the block
         number_of_elements_diag_block = mask_diag.sum()
         number_of_nonzero_elements += number_of_elements_diag_block
 
         # per block mapping to one vector data
-        map_per_diag_block = np.empty((4, number_of_elements_diag_block), dtype=int)
+        map_per_diag_block = np.empty(
+            (4, number_of_elements_diag_block), dtype=int)
 
         # sparse elements in the block
         map_per_diag_block[0, :] = i
@@ -153,7 +162,7 @@ def map_triple_array_to_flattened(
         start_index_block = i*blocksize
         end_index_block = (i+1)*blocksize - 1
         start_index_next_block = (i+1)*blocksize
-        end_index_next_block = (i+2)*blocksize -1
+        end_index_next_block = (i+2)*blocksize - 1
 
         # mask_diag if the elements are in the upper/lower block
         mask_upper = ((rows >= start_index_block) &
@@ -175,8 +184,10 @@ def map_triple_array_to_flattened(
         number_of_nonzero_elements += number_of_elements_lower_block
 
         # per block mapping to one vector data
-        map_per_upper_block = np.empty((4, number_of_elements_upper_block), dtype=int)
-        map_per_lower_block = np.empty((4, number_of_elements_lower_block), dtype=int)
+        map_per_upper_block = np.empty(
+            (4, number_of_elements_upper_block), dtype=int)
+        map_per_lower_block = np.empty(
+            (4, number_of_elements_lower_block), dtype=int)
 
         # sparse elements in the upper/lower block
         map_per_upper_block[0, :] = i
@@ -196,5 +207,4 @@ def map_triple_array_to_flattened(
 
     assert number_of_nonzero_elements == rows.size
 
-    return {"diag": map_diag,"upper": map_upper, "lower": map_lower}
-
+    return {"diag": map_diag, "upper": map_upper, "lower": map_lower}

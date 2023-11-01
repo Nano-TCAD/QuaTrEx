@@ -14,23 +14,20 @@ from quatrex.files_to_refactor import dL_OBC_eigenmode_cpu
 
 def screened_interaction_solver(
     Coulomb_matrix: csr_matrix,
-    Polarization_greater_flattened: np.ndarray,
     Polarization_lesser_flattened: np.ndarray,
+    Polarization_greater_flattened: np.ndarray,
     number_of_energy_points: int,
-    row_indices_kept: np.ndarray,
-    col_indices_kept: np.ndarray,
+    indices_of_neighboring_matrix: dict[np.ndarray],
     blocksize: int
 ):
 
     Polarization_greater_list = flattened_to_list_of_csr(
         Polarization_greater_flattened,
-        row_indices_kept,
-        col_indices_kept,
+        indices_of_neighboring_matrix,
         Coulomb_matrix.shape[0])
     Polarization_lesser_list = flattened_to_list_of_csr(
         Polarization_lesser_flattened,
-        row_indices_kept,
-        col_indices_kept,
+        indices_of_neighboring_matrix,
         Coulomb_matrix.shape[0])
 
     (Polarization_retarded_list,
@@ -40,10 +37,10 @@ def screened_interaction_solver(
         Polarization_lesser_list)
 
     Screened_interaction_greater_flattened = np.zeros((number_of_energy_points,
-                                                       row_indices_kept.size),
+                                                       indices_of_neighboring_matrix["row"].size),
                                                       dtype=Polarization_greater_list[0].dtype)
     Screened_interaction_lesser_flattened = np.zeros((number_of_energy_points,
-                                                      row_indices_kept.size),
+                                                      indices_of_neighboring_matrix["row"].size),
                                                      dtype=Polarization_greater_list[0].dtype)
 
     # TODO: explanation why the first point is skipped
@@ -78,11 +75,11 @@ def screened_interaction_solver(
             System_matrix_inv, L_greater)
 
         Screened_interaction_lesser_flattened[i] = csr_to_flattened(
-            Screened_interaction_lesser, row_indices_kept, col_indices_kept)
+            Screened_interaction_lesser, indices_of_neighboring_matrix)
         Screened_interaction_greater_flattened[i] = csr_to_flattened(
-            Screened_interaction_greater, row_indices_kept, col_indices_kept)
+            Screened_interaction_greater, indices_of_neighboring_matrix)
 
-    return Screened_interaction_greater_flattened, Screened_interaction_lesser_flattened
+    return  Screened_interaction_lesser_flattened, Screened_interaction_greater_flattened
 
 
 def get_system_matrix(

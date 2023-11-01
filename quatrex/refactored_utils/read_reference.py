@@ -100,8 +100,8 @@ def save_parameters(
         number_of_orbital_per_atom = parameters_reference["number_of_orbital_per_atom"],
         temperature_in_kelvin = parameters_reference["temperature_in_kelvin"],
         relative_permittivity = parameters_reference["relative_permittivity"],
-        screened_interaction_memory_factor = parameters_reference["screened_interaction_memory_factor"],
-        self_energy_memory_factor = parameters_reference["self_energy_memory_factor"],
+        screened_interaction_stepping_factor = parameters_reference["screened_interaction_stepping_factor"],
+        self_energy_stepping_factor = parameters_reference["self_energy_stepping_factor"],
         blocksize = parameters_reference["blocksize"]
     )
 
@@ -129,12 +129,12 @@ def save_inputs(
         data = inputs_reference["overlap_matrix"].data
     )
     np.savez(
-        path + "row_indices_kept.npz",
-        row_indices_kept = inputs_reference["row_indices_kept"]
+        path + "row_indices_of_neighboring_matrix.npz",
+        row_indices_of_neighboring_matrix = inputs_reference["row_indices_of_neighboring_matrix"]
     )
     np.savez(
-        path + "col_indices_kept.npz",
-        col_indices_kept = inputs_reference["col_indices_kept"]
+        path + "col_indices_of_neighboring_matrix.npz",
+        col_indices_of_neighboring_matrix = inputs_reference["col_indices_of_neighboring_matrix"]
     )
 
 def save_outputs(
