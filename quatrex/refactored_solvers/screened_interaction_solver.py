@@ -17,17 +17,17 @@ def screened_interaction_solver(
     Polarization_lesser_flattened: np.ndarray,
     Polarization_greater_flattened: np.ndarray,
     number_of_energy_points: int,
-    indices_of_neighboring_matrix: dict[np.ndarray],
+    Neighboring_matrix_indices: dict[np.ndarray],
     blocksize: int
 ):
 
     Polarization_greater_list = flattened_to_list_of_csr(
         Polarization_greater_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Coulomb_matrix.shape[0])
     Polarization_lesser_list = flattened_to_list_of_csr(
         Polarization_lesser_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Coulomb_matrix.shape[0])
 
     (Polarization_retarded_list,
@@ -37,10 +37,10 @@ def screened_interaction_solver(
         Polarization_lesser_list)
 
     Screened_interaction_greater_flattened = np.zeros((number_of_energy_points,
-                                                       indices_of_neighboring_matrix["row"].size),
+                                                       Neighboring_matrix_indices["row"].size),
                                                       dtype=Polarization_greater_list[0].dtype)
     Screened_interaction_lesser_flattened = np.zeros((number_of_energy_points,
-                                                      indices_of_neighboring_matrix["row"].size),
+                                                      Neighboring_matrix_indices["row"].size),
                                                      dtype=Polarization_greater_list[0].dtype)
 
     # TODO: explanation why the first point is skipped
@@ -75,9 +75,9 @@ def screened_interaction_solver(
             System_matrix_inv, L_greater)
 
         Screened_interaction_lesser_flattened[i] = csr_to_flattened(
-            Screened_interaction_lesser, indices_of_neighboring_matrix)
+            Screened_interaction_lesser, Neighboring_matrix_indices)
         Screened_interaction_greater_flattened[i] = csr_to_flattened(
-            Screened_interaction_greater, indices_of_neighboring_matrix)
+            Screened_interaction_greater, Neighboring_matrix_indices)
 
     return Screened_interaction_lesser_flattened, Screened_interaction_greater_flattened
 

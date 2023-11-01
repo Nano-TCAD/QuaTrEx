@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 import toml
 
+
 class SimulationParameters(BaseModel):
     blocksize: int
     conduction_band_energy: float
@@ -10,6 +11,3 @@ class SimulationParameters(BaseModel):
     solver_mode: str
     energy_grid: dict
     fermi_levels: dict
-    
-    
-    

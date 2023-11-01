@@ -18,22 +18,22 @@ def greens_function_solver(
     energy_array: np.ndarray,
     energy_fermi: dict[float],
     temperature: float,
-    indices_of_neighboring_matrix: dict[np.ndarray],
+    Neighboring_matrix_indices: dict[np.ndarray],
     blocksize: int
 ) -> tuple[np.ndarray, np.ndarray]:
 
     # transform the self energy from flattened to list
     Self_energy_retarded_list = flattened_to_list_of_csr(
         Self_energy_retarded_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Hamiltonian.shape[0])
     Self_energy_lesser_list = flattened_to_list_of_csr(
         Self_energy_lesser_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Hamiltonian.shape[0])
     Self_energy_greater_list = flattened_to_list_of_csr(
         Self_energy_greater_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Hamiltonian.shape[0])
 
     (Self_energy_retarded_list,
@@ -44,10 +44,10 @@ def greens_function_solver(
         Self_energy_greater_list)
 
     G_greater_flattened = np.zeros((energy_array.size,
-                                    indices_of_neighboring_matrix["row"].size),
+                                    Neighboring_matrix_indices["row"].size),
                                    dtype=Self_energy_retarded_list[0].dtype)
     G_lesser_flattened = np.zeros((energy_array.size,
-                                   indices_of_neighboring_matrix["row"].size),
+                                   Neighboring_matrix_indices["row"].size),
                                   dtype=Self_energy_retarded_list[0].dtype)
 
     fermi_distribution = compute_fermi_distribution(
@@ -80,9 +80,9 @@ def greens_function_solver(
                                                                      Self_energy_greater_list[i])
 
         G_lesser_flattened[i] = csr_to_flattened(
-            G_lesser, indices_of_neighboring_matrix)
+            G_lesser, Neighboring_matrix_indices)
         G_greater_flattened[i] = csr_to_flattened(
-            G_greater, indices_of_neighboring_matrix)
+            G_greater, Neighboring_matrix_indices)
 
     return G_greater_flattened, G_lesser_flattened
 
@@ -128,16 +128,6 @@ def apply_obc_to_self_energy(
                        blocksize:] += Self_energy_lesser_right_boundary
     Self_energy_greater[-blocksize:, -
                         blocksize:] += Self_energy_greater_right_boundary
-
-
-def compute_greens_function(
-    System_matrix_inv: np.ndarray,
-    Self_energy: np.ndarray
-):
-
-    G = System_matrix_inv @ Self_energy @ System_matrix_inv.conj().T
-
-    return G
 
 
 def compute_greens_function_lesser_greater(
