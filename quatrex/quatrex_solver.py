@@ -10,7 +10,7 @@ import bsparse
 import numpy as np
 
     
-class Quatrex_solver:
+class QuatrexSolver:
     
     def __init__(
 		self,
@@ -38,7 +38,7 @@ class Quatrex_solver:
         while(not self._self_current_converged() or current_iteration >= self._max_iterations):
             G_retarded, G_lesser, G_greater = compute_greens_functions()
             if self._solver_mode == "gw":
-                Self_energy += compute_gw_self_energy(Gr, G<, G>, Screened_interactions, GW_self_energy, coulomb_potential,)
+                Self_energy += compute_gw_self_energy(G_retarded, G_lesser, G_greater, Screened_interactions, GW_self_energy, coulomb_potential,)
         
         self._compute_current()
         self._compute_electron_density()

@@ -1,0 +1,44 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+
+# Blocksize of the system-matrices
+#   blocksize: int 
+blocksize = 1
+
+# Conduction band energy [eV]
+#   conduction_band_energy: float
+conduction_band_energy = 1
+
+# Temperature in Kelvin [K]
+#   temperature: float
+temperature = 300
+
+# Solver solver
+#   solver_mode: str
+#       - "gf" for Green's Function computation
+#       - "gw" for electron-electron GW computation
+solver_mode = "gw"
+
+# Energy grid
+#   start_energy: float = start of the energy range [eV]
+#   end_energy: float = end of the energy range [eV]
+#   energy_step: float = energy step of the grid [eV]
+#
+#   The energy array will be computed using the left energy range and the
+#   energy step. Stepping up to the right energy range.
+[energy_grid]
+start_energy = 0
+end_energy = 1
+energy_step = 0.1
+
+# Fermi levels
+#  left_fermi_level: float = Fermi level of the left electrode
+#  right_fermi_level: float = Fermi level of the right electrode
+#  applied_voltage: float = applied voltage
+#
+#  Data validation will be performed to ensure that the given fermi levels
+#  and applied voltage are consistent with each other. If one is set to "None",
+#  it will be computed from the other two.
+[fermi_levels]
+left_fermi_level = 1
+right_fermi_level = 0.5
+applied_voltage = 0.5

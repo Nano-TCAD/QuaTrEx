@@ -18,6 +18,7 @@ dependencies = [
     "numpy",
     "scipy",
     "toml",
+    "pydantic",
     "bsparse",
 ]
 dynamic = ["version"]
