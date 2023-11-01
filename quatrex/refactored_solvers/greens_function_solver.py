@@ -3,37 +3,10 @@
 import numpy as np
 from scipy.sparse import csr_matrix
 
-from quatrex.refactored_utils.constants import e, k
+from quatrex.constants import e, k
 from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
 from quatrex.refactored_utils.utils import csr_to_flattened, flattened_to_list_of_csr
-
-
-# To move into solver method
-def compute_observables(
-    G_retarded_diag_blocks: np.ndarray,
-    G_lesser_diag_blocks: np.ndarray,
-    G_greater_diag_blocks: np.ndarray
-):
-    number_of_blocks = G_retarded_diag_blocks.shape[1]
-    number_of_energy_points = G_retarded_diag_blocks.shape[0]
-
-    density_of_states = np.zeros(
-        (number_of_energy_points, number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
-    electron_density = np.zeros(
-        (number_of_energy_points, number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
-    hole_density = np.zeros(
-        (number_of_energy_points, number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
-    current_density = np.zeros(
-        (number_of_energy_points, number_of_blocks), dtype=G_retarded_diag_blocks.dtype)
-
-    for i in range(number_of_energy_points):
-        for j in range(number_of_blocks):
-            density_of_states[i, j] = 1j * np.trace(
-                G_retarded_diag_blocks[i, j] - G_retarded_diag_blocks[i, j].T.conj())
-            electron_density[i, j] = -1j * np.trace(G_lesser_diag_blocks[i, j])
-            hole_density[i, j] = 1j * np.trace(G_greater_diag_blocks[i, j])
-            # current_density[i,j] = np.real(np.trace(G_lesser_diag_blocks[i,j] - G_greater_diag_blocks[i,j])) TODO Correct this formula
 
 
 def greens_function_solver(
@@ -77,7 +50,8 @@ def greens_function_solver(
                                    indices_of_neighboring_matrix["row"].size),
                                   dtype=Self_energy_retarded_list[0].dtype)
 
-    fermi_distribution = compute_fermi_distribution(energy_array, energy_fermi, temperature)
+    fermi_distribution = compute_fermi_distribution(
+        energy_array, energy_fermi, temperature)
 
     for i, energy in enumerate(energy_array):
 
@@ -92,8 +66,6 @@ def greens_function_solver(
                                                   blocksize=blocksize,
                                                   caller_function_name="G")
 
-        
-
         apply_obc_to_system_matrix(System_matrix, OBCs, blocksize)
 
         apply_obc_to_self_energy(Self_energy_lesser_list[i],
@@ -103,13 +75,9 @@ def greens_function_solver(
                                  fermi_distribution["right"][i],
                                  blocksize)
 
-        G_retarded = np.linalg.inv(System_matrix.toarray())
-
-        G_lesser = compute_greens_function(
-            G_retarded, Self_energy_lesser_list[i])
-
-        G_greater = compute_greens_function(
-            G_retarded, Self_energy_greater_list[i])
+        G_lesser, G_greater = compute_greens_function_lesser_greater(System_matrix,
+                                                                     Self_energy_lesser_list[i],
+                                                                     Self_energy_greater_list[i])
 
         G_lesser_flattened[i] = csr_to_flattened(
             G_lesser, indices_of_neighboring_matrix)
@@ -162,7 +130,6 @@ def apply_obc_to_self_energy(
                         blocksize:] += Self_energy_greater_right_boundary
 
 
-
 def compute_greens_function(
     System_matrix_inv: np.ndarray,
     Self_energy: np.ndarray
@@ -171,6 +138,17 @@ def compute_greens_function(
     G = System_matrix_inv @ Self_energy @ System_matrix_inv.conj().T
 
     return G
+
+
+def compute_greens_function_lesser_greater(
+    System_matrix: csr_matrix,
+    Self_energy_lesser: csr_matrix,
+    Self_energy_greater: csr_matrix
+):
+    System_matrix_inv = np.linalg.inv(System_matrix.toarray())
+    G_lesser = System_matrix_inv @ Self_energy_lesser @ System_matrix_inv.conj().T
+    G_greater = System_matrix_inv @ Self_energy_greater @ System_matrix_inv.conj().T
+    return G_lesser, G_greater
 
 
 def symmetrize_self_energy(
@@ -192,13 +170,14 @@ def symmetrize_self_energy(
 
     return Self_energy_retarded_sym, Self_energy_lesser_sym, Self_energy_greater_sym
 
+
 def compute_fermi_distribution(
-    energy_array : np.ndarray,
-    energy_fermi : dict[float],
-    temperature : float
-)-> dict[np.ndarray]:
+    energy_array: np.ndarray,
+    energy_fermi: dict[float],
+    temperature: float
+) -> dict[np.ndarray]:
     fermi_distribution_left = 1 / (1 + np.exp((energy_array - energy_fermi["left"]) * e
-                            / (k * temperature)))
+                                              / (k * temperature)))
     fermi_distribution_right = 1 / (1 + np.exp((energy_array - energy_fermi["right"]) * e
-                            / (k * temperature)))
+                                               / (k * temperature)))
     return {"left": fermi_distribution_left, "right": fermi_distribution_right}
