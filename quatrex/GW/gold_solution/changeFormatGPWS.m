@@ -162,5 +162,5 @@ function changeFormatGPWS(path)
     formatted.imgsr = imgsr;
 
     % save to file
-    save("data_GPWS_dl_memory1_InAs_0V.mat", "formatted","-v7.3","-nocompression");
+    save("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32/data_GPWS_pr_memory2_CNTNBC3_0V.mat", "formatted","-v7.3","-nocompression");
 end
