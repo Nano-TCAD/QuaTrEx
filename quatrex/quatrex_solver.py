@@ -237,17 +237,15 @@ class QuatrexSolver:
 
         # determine new tilling strategy
         divisible = (block_sizes.size % increase_range) == 0
-        if divisible:
-            new_sizes = np.zeros(
+        new_sizes = np.zeros(
                 block_sizes.size//increase_range, dtype=block_sizes.dtype)
+        if divisible:
             for i in range(new_sizes.size):
                 for j in range(increase_range):
                     new_sizes[i] += block_sizes[increase_range*i + j]
         else:
             # not divisible number of blocks
             # idea: fuse the addional blocks with the second to last block
-            new_sizes = np.zeros(
-                block_sizes.size//increase_range - 1, dtype=block_sizes.dtype)
             # make contact blocks larger
             for j in range(increase_range):
                 new_sizes[0] += block_sizes[j]
@@ -256,6 +254,8 @@ class QuatrexSolver:
                 for j in range(increase_range):
                     new_sizes[i] = block_sizes[increase_range*i + j]
             # add the additional blocks to the second to last block
+            # TODO: optimize such that the additional blocks are distributed
+            # to the smallest blocks
             for i in range(block_sizes.size % increase_range):
                 new_sizes[-2] += block_sizes[-increase_range-1 - i]
         return new_sizes
