@@ -7,6 +7,7 @@ from quatrex.refactored_solvers.greens_function_solver import greens_function_so
 from quatrex.refactored_solvers.gw_solver import gw_solver
 
 import bsparse
+import scipy
 
 import numpy as np
 
@@ -15,9 +16,9 @@ class QuatrexSolver:
 
     def __init__(
         self,
-        Hamiltonian: bsparse,
-        Overlap_matrix: bsparse,
-        Coulomb_matrix: bsparse,
+        Hamiltonian: bsparse.BSparse,
+        Overlap_matrix: bsparse.BSparse,
+        Coulomb_matrix: bsparse.BSparse,
         Neighboring_matrix_indices: dict[np.ndarray],
         energy_array: np.ndarray,
         fermi_levels: [float, float],
@@ -116,25 +117,33 @@ class QuatrexSolver:
 
         return status
 
-    def get_current(
+    def get_current_density(
         self
     ):
-        pass
+        if self._current_density is None:
+            raise RuntimeError("The current density has not been computed yet")
+        return self._current_density
 
     def get_electron_density(
         self
     ):
-        pass
+        if self._electron_density is None:
+            raise RuntimeError("The electron density has not been computed yet")
+        return self._electron_density
 
     def get_hole_density(
         self
     ):
-        pass
+        if self._hole_density is None:
+            raise RuntimeError("The hole density has not been computed yet")
+        return self._hole_density
 
     def get_density_of_states(
         self
     ):
-        pass
+        if self._density_of_states is None:
+            raise RuntimeError("The density of states has not been computed yet")
+        return self._density_of_states
 
     # ----- Private methods -----
 
@@ -146,7 +155,70 @@ class QuatrexSolver:
     def _compute_matmult_blocksize(
         self
     ):
-        pass
+        block_sizes = self._Coulomb_matrix.row_sizes
+
+        # TODO easier to determine from a device
+        # which is a repetition of unit cells
+
+        # consider sparsity of the underlying data
+        # create matrix with Neighboring_matrix_indices sparsity
+        constant = 1000000
+        Polarization_ones = scipy.sparse.coo_matrix(
+            (constant*np.ones_like(self._Neighboring_matrix_indices["row"]),
+                (self._Neighboring_matrix_indices["row"],
+                self._Neighboring_matrix_indices["col"])),
+            shape=self._Hamiltonian.shape)
+        # to bsparse
+        Polarization_ones = bsparse.BCOO.from_sparray(Polarization_ones,
+                                                    sizes=(block_sizes,block_sizes))
+        # TODO hack: difficult to make a copy with only constant
+        # assume that the elements are much smaller than the constant
+        Coulomb_matrix_ones = self._Coulomb_matrix.copy() + constant
+
+        # idea: compute the sparsity of the matrix product
+        # check if far away blocks are zero
+        L = Coulomb_matrix_ones @ Polarization_ones @ Coulomb_matrix_ones.T
+
+        third_blocks_zero = True
+        second_blocks_zero = True
+        for i in range(L.bshape[0]):
+            for j in range(L.bshape[1]):
+                if abs(i-j) == 3:
+                    if L[i,j].nnz != 0:
+                        third_blocks_zero = False
+                if abs(i-j) == 2:
+                    if L[i,j].nnz != 0:
+                        second_blocks_zero = False
+        if (third_blocks_zero and second_blocks_zero):
+            increase_range = 1
+        elif third_blocks_zero:
+            increase_range = 2
+        else:
+            increase_range = 3
+        
+        # determine new tilling strategy
+        divisible = (block_sizes.size % increase_range) == 0
+        if divisible:
+            new_sizes = np.zeros(block_sizes.size//increase_range, dtype=block_sizes.dtype)
+            for i in range(new_sizes.size):
+                for j in range(increase_range):
+                    new_sizes[i] += block_sizes[increase_range*i + j]
+        else:
+            # not divisible number of blocks
+            # idea: fuse the addional blocks with the second to last block
+            new_sizes = np.zeros(block_sizes.size//increase_range - 1, dtype=block_sizes.dtype)
+            # make contact blocks larger
+            for j in range(increase_range):
+                new_sizes[0] += block_sizes[j]
+                new_sizes[-1] += block_sizes[-j]
+            for i in range(1, new_sizes.size-1):
+                for j in range(increase_range):
+                    new_sizes[i] = block_sizes[increase_range*i + j]
+            # add the additional blocks to the second to last block
+            for i in range(block_sizes.size % increase_range):
+                new_sizes[-2] += block_sizes[-increase_range-1 - i]
+        return new_sizes
+
 
     def _init_gw_storage(
         self
@@ -173,7 +245,7 @@ class QuatrexSolver:
             (number_of_energy_points, number_of_neighboring_matrix_indices),
             dtype=self._base_type)
 
-    def _compute_current(
+    def _compute_current_density(
         self,
         G_lesser,
         G_greater
@@ -199,14 +271,14 @@ class QuatrexSolver:
             self._current_density = current_density
                 
         elif self._solver_mode == "gf":
-            # use the landauer büttiker formula
+            # TODO: use the landauer büttiker formula
+            pass
         else:
             raise ValueError("The solver mode is not supported")
 
-
     def _compute_electron_density(
         self,
-        G_lesser: list[bsparse]
+        G_lesser: list[bsparse.BSparse]
     ):
         number_of_energy_points = self._energy_array.size
         number_of_blocks = G_lesser[0].bshape
@@ -218,7 +290,7 @@ class QuatrexSolver:
 
     def _compute_hole_density(
         self,
-        G_greater: list[bsparse]
+        G_greater: list[bsparse.BSparse]
     ):
         number_of_energy_points = self._energy_array.size
         number_of_blocks = G_greater[0].bshape
@@ -230,7 +302,7 @@ class QuatrexSolver:
 
     def _compute_density_of_states(
         self,
-        G_retarded: list[bsparse]
+        G_retarded: list[bsparse.BSparse]
     ):
         number_of_energy_points = self._energy_array.size
         number_of_blocks = G_retarded[0].bshape
