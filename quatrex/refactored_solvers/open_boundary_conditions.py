@@ -4,7 +4,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 
 from quatrex.files_to_refactor.beyn_cpu import beyn
-from quatrex.obc.sancho_rubio import sancho_rubio
+from quatrex.open_boundary_conditions.sancho_rubio import sancho_rubio
 
 
 def compute_open_boundary_condition(

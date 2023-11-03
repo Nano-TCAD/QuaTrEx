@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from quatrex.obc.sancho_rubio import sancho_rubio
+from quatrex.open_boundary_conditions.sancho_rubio import sancho_rubio
 from quatrex.test_utils.create_matrices import create_invertible_block
 
 @pytest.mark.parametrize(

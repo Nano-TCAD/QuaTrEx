@@ -7,7 +7,7 @@ from quatrex.constants import e, k
 from quatrex.refactored_solvers.open_boundary_conditions import compute_open_boundary_condition
 from quatrex.refactored_solvers.open_boundary_conditions import apply_obc_to_system_matrix
 from quatrex.refactored_utils.utils import csr_to_flattened, flattened_to_list_of_csr
-
+from quatrex.observables.compute_current_meir_wingreen import compute_current_meir_wingreen
 
 def greens_function_solver(
     Hamiltonian: csr_matrix,
@@ -19,7 +19,8 @@ def greens_function_solver(
     energy_fermi: dict[float],
     temperature: float,
     Neighboring_matrix_indices: dict[np.ndarray],
-    blocksize: int
+    blocksize: int,
+    if_compute_current_density: bool = False
 ) -> tuple[np.ndarray, np.ndarray]:
 
     # transform the self energy from flattened to list
@@ -43,6 +44,9 @@ def greens_function_solver(
         Self_energy_lesser_list,
         Self_energy_greater_list)
 
+    fermi_distribution = compute_fermi_distribution(
+            energy_array, energy_fermi, temperature)
+
     G_greater_flattened = np.zeros((energy_array.size,
                                     Neighboring_matrix_indices["row"].size),
                                    dtype=Self_energy_retarded_list[0].dtype)
@@ -50,8 +54,9 @@ def greens_function_solver(
                                    Neighboring_matrix_indices["row"].size),
                                   dtype=Self_energy_retarded_list[0].dtype)
 
-    fermi_distribution = compute_fermi_distribution(
-        energy_array, energy_fermi, temperature)
+    current_density = np.zeros((energy_array.size, Hamiltonian.bshape[0]),
+                               dtype=Hamiltonian.dtype)
+
 
     for i, energy in enumerate(energy_array):
 
@@ -84,7 +89,17 @@ def greens_function_solver(
         G_greater_flattened[i] = csr_to_flattened(
             G_greater, Neighboring_matrix_indices)
 
-    return G_greater_flattened, G_lesser_flattened
+        if if_compute_current_density:
+            current_density[i] = compute_current_meir_wingreen(
+                                    System_matrix,
+                                    G_lesser,
+                                    G_greater,
+                                    Self_energy_lesser_list[i],
+                                    Self_energy_greater_list[i],
+                                    OBCs,
+                                    fermi_distribution["right"][i])
+
+    return G_greater_flattened, G_lesser_flattened, current_density
 
 
 def get_system_matrix(

@@ -1,13 +1,10 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 import numpy as np
 
-from quatrex.refactored_utils.read_reference import load_a_gw_matrix_flattened, save_inputs, save_outputs, save_parameters
+from quatrex.files_to_refactor.read_reference import load_a_gw_matrix_flattened, save_inputs, save_outputs, save_parameters
 
 
 from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
-from quatrex.refactored_solvers.screened_interaction_solver import screened_interaction_solver
-from quatrex.refactored_solvers.polarization_solver import compute_polarization
-from quatrex.refactored_solvers.gw_self_energy_solver import compute_gw_self_energy
 from quatrex.refactored_solvers.gw_solver import gw_solver
 
 # TODO refactor
@@ -111,7 +108,7 @@ if __name__ == "__main__":
                         "right": energy_conduction_band_minimum + energy_difference_fermi_minimum_right}
 
         (G_greater,
-         G_lesser) = greens_function_solver(
+         G_lesser, _) = greens_function_solver(
             Hamiltonian,
             Overlap_matrix,
             Self_energy_retarded,

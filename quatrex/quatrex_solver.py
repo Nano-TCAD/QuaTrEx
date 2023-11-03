@@ -57,9 +57,16 @@ class QuatrexSolver:
         self,
     ):
 
-        for _ in range(self._max_iterations):
+        for i in range(self._max_iterations):
+
+            
+            if self._solver_mode == "gw":
+                # Adjust band edge to track band gap
+
+                # change fermi energy accordingly
+
             # TODO remove blocksize argument
-            G_lesser, G_greater = greens_function_solver(
+            G_lesser, G_greater, current_density = greens_function_solver(
                 self._Hamiltonian,
                 self._Overlap_matrix,
                 self._Self_energy_retarded,
@@ -69,7 +76,9 @@ class QuatrexSolver:
                 self._fermi_levels,
                 self._temperature,
                 self._Neighboring_matrix_indices,
-                self._blocksize)
+                self._blocksize,
+                if_compute_current_density=(i%check_convergence_every_n_iterations==
+                                            check_convergence_every_n_iterations-1))
 
             if self._solver_mode == "gw":
                 # changes inplace the self energy and screened interaction
@@ -89,9 +98,9 @@ class QuatrexSolver:
                     self._blocksize,
                     self._screened_interaction_stepping_factor,
                     self._self_energy_stepping_factor)
-
-            if self._current_converged():
-                break
+            if i % check_convergence_every_n_iterations == 0:
+                if self._current_converged(current_density):
+                    break
 
         else:
             print("Maximum number of iterations reached")
@@ -166,27 +175,34 @@ class QuatrexSolver:
 
     def _compute_current(
         self,
-        G_lesser: list[bsparse],
-        G_greater: list[bsparse]
+        G_lesser,
+        G_greater
     ):
-        # uses the meir wingreen formula
-        # to calculate the current
-        number_of_energy_points = self._energy_array.size
-        number_of_blocks = G_lesser[0].bshape
-        self._current_density = np.zeros(
-            (number_of_energy_points, number_of_blocks), dtype=G_lesser[0].dtype)
+        # depending on mode different current formula is used
+        if self._solver_mode == "gw":
+            # uses the meir wingreen formula
+            # the calculation of the current density is intertwined
+            # with the calculation of the lesser and greater greens function
+            _, _, current_density = greens_function_solver(
+                self._Hamiltonian,
+                self._Overlap_matrix,
+                self._Self_energy_retarded,
+                self._Self_energy_lesser,
+                self._Self_energy_greater,
+                self._energy_array,
+                self._fermi_levels,
+                self._temperature,
+                self._Neighboring_matrix_indices,
+                self._blocksize,
+                if_compute_current_density=True)
 
-        # middle blocks
-        for i in range(number_of_energy_points):
-            for j in range(1, number_of_blocks-1):
-                self._current_density[i, j] = np.real(
-                    np.trace(G_lesser[i][j, j] - G_greater[i][j, j]))
-        # first and last block
-        for i in range(number_of_energy_points):
-            self._current_density[i, 0] = np.real(
-                np.trace(G_lesser[i][0, 0] - G_greater[i][0, 0]))
-            self._current_density[i, -1] = np.real(
-                np.trace(G_lesser[i][-1, -1] - G_greater[i][-1, -1]))
+            self._current_density = current_density
+                
+        elif self._solver_mode == "gf":
+            # use the landauer büttiker formula
+        else:
+            raise ValueError("The solver mode is not supported")
+
 
     def _compute_electron_density(
         self,
@@ -226,10 +242,11 @@ class QuatrexSolver:
                     G_retarded[i][j, j] - G_retarded[i][j, j].T.conj())
 
     def _current_converged(
-        self
+        self,
+        current_density: np.ndarray
     ) -> bool:
         
-        if self._current_density is None:
+        if current_density is None:
             return False
         current_left = np.sum(self._current_density[:, 0])
         current_right = np.sum(self._current_density[:, -1])
