@@ -54,8 +54,9 @@ def greens_function_solver(
                                    Neighboring_matrix_indices["row"].size),
                                   dtype=Self_energy_retarded_list[0].dtype)
 
-    current_density = np.zeros((energy_array.size, Hamiltonian.bshape[0]),
-                               dtype=Hamiltonian.dtype)
+    current_density = None
+    # current_density = np.zeros((energy_array.size, Hamiltonian.bshape[0]),
+    #                            dtype=Hamiltonian.dtype)
 
 
     for i, energy in enumerate(energy_array):

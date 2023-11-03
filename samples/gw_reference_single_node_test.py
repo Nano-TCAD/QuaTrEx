@@ -6,6 +6,7 @@ from quatrex.files_to_refactor.read_reference import load_a_gw_matrix_flattened,
 
 from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
 from quatrex.refactored_solvers.gw_solver import gw_solver
+from quatrex.solvers_parameters import SolverParameters
 
 # TODO refactor
 from quatrex.files_to_refactor.adjust_conduction_band_edge import adjust_conduction_band_edge
@@ -17,8 +18,6 @@ if __name__ == "__main__":
     number_of_gw_iterations = 2
     base_type = np.complex128
     energy_array = np.linspace(-10.0, 5.0, 5, endpoint=True, dtype=float)
-    screened_interaction_stepping_factor = 0.1
-    self_energy_stepping_factor = 0.5
     save_reference = False
 
     save_path = "/usr/scratch/mont-fort17/almaeder/test_gw/InAs/"
@@ -90,6 +89,9 @@ if __name__ == "__main__":
         (number_of_energy_points, number_of_elements_kept),
         dtype=base_type)
 
+    solver_parameters = SolverParameters()
+
+
     for gw_iteration in range(number_of_gw_iterations):
 
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
@@ -133,8 +135,7 @@ if __name__ == "__main__":
             Neighboring_matrix_indices,
             energy_array,
             blocksize,
-            screened_interaction_stepping_factor,
-            self_energy_stepping_factor)
+            solver_parameters)
 
 
     # load reference solution
@@ -203,8 +204,6 @@ if __name__ == "__main__":
         parameters_reference["number_of_orbital_per_atom"] = number_of_orbital_per_atom
         parameters_reference["temperature"] = temperature
         parameters_reference["relative_permittivity"] = relative_permittivity
-        parameters_reference["screened_interaction_stepping_factor"] = screened_interaction_stepping_factor
-        parameters_reference["self_energy_stepping_factor"] = self_energy_stepping_factor
         parameters_reference["blocksize"] = blocksize
         outputs_reference = {}
         outputs_reference["G_greater"] = G_greater.T

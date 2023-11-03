@@ -1,13 +1,13 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-import quatrex.constants
-import quatrex.solvers_parameters
-
 from quatrex.refactored_solvers.greens_function_solver import greens_function_solver
 from quatrex.refactored_solvers.gw_solver import gw_solver
+from quatrex.solvers_parameters import SolverParameters
+from quatrex.files_to_refactor.adjust_conduction_band_edge import adjust_conduction_band_edge
 
 import bsparse
 import scipy
+import tomllib
 
 import numpy as np
 
@@ -21,10 +21,11 @@ class QuatrexSolver:
         Coulomb_matrix: bsparse.BSparse,
         Neighboring_matrix_indices: dict[np.ndarray],
         energy_array: np.ndarray,
-        fermi_levels: [float, float],
+        fermi_levels: dict[float],
         conduction_band_energy: float,
         temperature: float,
         solver_mode: str,
+        solver_parameter_path: str = None,
     ):
         self._Hamiltonian = Hamiltonian
         self._Overlap_matrix = Overlap_matrix
@@ -32,22 +33,29 @@ class QuatrexSolver:
         self._Neighboring_matrix_indices = Neighboring_matrix_indices
         self._energy_array = energy_array
         self._fermi_levels = fermi_levels
+
+        # TODO: calibrate band edge
+        # DFT result is from k=0,
+        # but the band edge is not necessarily at k=0
         self._conduction_band_energy = conduction_band_energy
+        self._energy_difference_fermi_conduction_band = \
+            {"left": fermi_levels["left"] - conduction_band_energy,
+             "right": fermi_levels["right"] - conduction_band_energy}
+
         self._temperature = temperature
         self._solver_mode = solver_mode
-
         self._base_type = np.complex128
 
         self._Coulomb_matrix_at_neighbor_indices = \
             self._Coulomb_matrix[self._Neighboring_matrix_indices["row"],
                                  self._Neighboring_matrix_indices["col"]]
 
-        self._load_solver_parameters()
+        self._load_solver_parameters(solver_parameter_path)
         self._compute_matmult_blocksize()
 
         if self._solver_mode == "gw":
             self._init_gw_storage()
-        
+
         self._current_density = None
         self._electron_density = None
         self._hole_density = None
@@ -58,13 +66,8 @@ class QuatrexSolver:
         self,
     ):
 
-        for i in range(self._max_iterations):
+        for i in range(self._solver_parameters.self_consistency_loop_max_iterations):
 
-            
-            if self._solver_mode == "gw":
-                # Adjust band edge to track band gap
-
-                # change fermi energy accordingly
 
             # TODO remove blocksize argument
             G_lesser, G_greater, current_density = greens_function_solver(
@@ -78,8 +81,8 @@ class QuatrexSolver:
                 self._temperature,
                 self._Neighboring_matrix_indices,
                 self._blocksize,
-                if_compute_current_density=(i%check_convergence_every_n_iterations==
-                                            check_convergence_every_n_iterations-1))
+                if_compute_current_density=(i % self._solver_parameters.check_convergence_every_n_iterations ==
+                                            self._solver_parameters.check_convergence_every_n_iterations-1))
 
             if self._solver_mode == "gw":
                 # changes inplace the self energy and screened interaction
@@ -97,9 +100,29 @@ class QuatrexSolver:
                     self._Neighboring_matrix_indices,
                     self._energy_array,
                     self._blocksize,
-                    self._screened_interaction_stepping_factor,
-                    self._self_energy_stepping_factor)
-            if i % check_convergence_every_n_iterations == 0:
+                    self._solver_parameters)
+
+                # Adjust band edge to track band gap
+                conduction_band_energy = adjust_conduction_band_edge(
+                    self._conduction_band_energy,
+                    self._energy_array,
+                    self._Overlap_matrix,
+                    self._Hamiltonian,
+                    self._Self_energy_retarded,
+                    self._Self_energy_lesser,
+                    self._Self_energy_greater,
+                    self._Neighboring_matrix_indices,
+                    self._blocksize)
+
+                # change fermi energy accordingly
+                self._conduction_band_energy = conduction_band_energy
+                self._fermi_levels = self._energy_difference_fermi_conduction_band = \
+                    {"left": conduction_band_energy +
+                     self._energy_difference_fermi_conduction_band["left"],
+                     "right": conduction_band_energy +
+                     self._energy_difference_fermi_conduction_band["right"]}
+
+            if i % self._solver_parameters.check_convergence_every_n_iterations == 0:
                 if self._current_converged(current_density):
                     break
 
@@ -108,14 +131,14 @@ class QuatrexSolver:
             raise RuntimeError("The self consistency loop did not converge")
 
         # TODO add mode which computes additionally the retarded greens function
-        G_retarded = greens_function_solver()
+        # G_retarded = greens_function_solver()
 
-        self._compute_current(G_lesser, G_greater)
+        self._compute_current_density(G_lesser, G_greater)
         self._compute_electron_density(G_lesser)
         self._compute_hole_density(G_greater)
-        self._compute_density_of_states(G_retarded)
+        # self._compute_density_of_states(G_retarded)
 
-        return status
+        #return status
 
     def get_current_density(
         self
@@ -142,23 +165,40 @@ class QuatrexSolver:
         self
     ):
         if self._density_of_states is None:
-            raise RuntimeError("The density of states has not been computed yet")
+            raise RuntimeError(
+                "The density of states has not been computed yet")
         return self._density_of_states
 
     # ----- Private methods -----
 
     def _load_solver_parameters(
-        self
+        self,
+        solver_parameter_path: str
     ):
-        pass
+        if solver_parameter_path is None:
+            self._solver_parameters = SolverParameters()
+        else:
+            with open(solver_parameter_path, "rb") as f:
+                config = tomllib.load(f)
+            self._solver_parameters = SolverParameters.model_validate(config)
 
     def _compute_matmult_blocksize(
         self
     ):
+        """
+        idea: compute the sparsity of the matrix product V @ P @ V.H
+        and check if far away blocks are zero
+        such that only the sparsity of the matrices matter
+        and not the values
+        """
+
         block_sizes = self._Coulomb_matrix.row_sizes
 
         # TODO easier to determine from a device
         # which is a repetition of unit cells
+        # i.e. constant block size and same sparsity
+        # in constant sparsity among the diagonal blocks
+        # and off diagonal blocks
 
         # consider sparsity of the underlying data
         # create matrix with Neighboring_matrix_indices sparsity
@@ -166,17 +206,16 @@ class QuatrexSolver:
         Polarization_ones = scipy.sparse.coo_matrix(
             (constant*np.ones_like(self._Neighboring_matrix_indices["row"]),
                 (self._Neighboring_matrix_indices["row"],
-                self._Neighboring_matrix_indices["col"])),
+                 self._Neighboring_matrix_indices["col"])),
             shape=self._Hamiltonian.shape)
         # to bsparse
         Polarization_ones = bsparse.BCOO.from_sparray(Polarization_ones,
-                                                    sizes=(block_sizes,block_sizes))
+                                                      sizes=(block_sizes, block_sizes))
         # TODO hack: difficult to make a copy with only constant
         # assume that the elements are much smaller than the constant
         Coulomb_matrix_ones = self._Coulomb_matrix.copy() + constant
 
-        # idea: compute the sparsity of the matrix product
-        # check if far away blocks are zero
+
         L = Coulomb_matrix_ones @ Polarization_ones @ Coulomb_matrix_ones.T
 
         third_blocks_zero = True
@@ -184,10 +223,10 @@ class QuatrexSolver:
         for i in range(L.bshape[0]):
             for j in range(L.bshape[1]):
                 if abs(i-j) == 3:
-                    if L[i,j].nnz != 0:
+                    if L[i, j].nnz != 0:
                         third_blocks_zero = False
                 if abs(i-j) == 2:
-                    if L[i,j].nnz != 0:
+                    if L[i, j].nnz != 0:
                         second_blocks_zero = False
         if (third_blocks_zero and second_blocks_zero):
             increase_range = 1
@@ -195,18 +234,20 @@ class QuatrexSolver:
             increase_range = 2
         else:
             increase_range = 3
-        
+
         # determine new tilling strategy
         divisible = (block_sizes.size % increase_range) == 0
         if divisible:
-            new_sizes = np.zeros(block_sizes.size//increase_range, dtype=block_sizes.dtype)
+            new_sizes = np.zeros(
+                block_sizes.size//increase_range, dtype=block_sizes.dtype)
             for i in range(new_sizes.size):
                 for j in range(increase_range):
                     new_sizes[i] += block_sizes[increase_range*i + j]
         else:
             # not divisible number of blocks
             # idea: fuse the addional blocks with the second to last block
-            new_sizes = np.zeros(block_sizes.size//increase_range - 1, dtype=block_sizes.dtype)
+            new_sizes = np.zeros(
+                block_sizes.size//increase_range - 1, dtype=block_sizes.dtype)
             # make contact blocks larger
             for j in range(increase_range):
                 new_sizes[0] += block_sizes[j]
@@ -218,7 +259,6 @@ class QuatrexSolver:
             for i in range(block_sizes.size % increase_range):
                 new_sizes[-2] += block_sizes[-increase_range-1 - i]
         return new_sizes
-
 
     def _init_gw_storage(
         self
@@ -269,7 +309,7 @@ class QuatrexSolver:
                 if_compute_current_density=True)
 
             self._current_density = current_density
-                
+
         elif self._solver_mode == "gf":
             # TODO: use the landauer büttiker formula
             pass
@@ -317,16 +357,17 @@ class QuatrexSolver:
         self,
         current_density: np.ndarray
     ) -> bool:
-        
+
         if current_density is None:
             return False
         current_left = np.sum(self._current_density[:, 0])
         current_right = np.sum(self._current_density[:, -1])
-        current_convergence = np.abs(current_left - current_right)/np.abs(current_left)
-        
-        return current_convergence < current_convergence_threshold
+        current_convergence = np.abs(
+            current_left - current_right)/np.abs(current_left)
+
+        return current_convergence < self._solver_parameters.current_convergence_threshold
 
     # ----- Private attributes -----
 
     _solver_mode: str
-    _max_iterations: int
+    _solver_parameters: SolverParameters

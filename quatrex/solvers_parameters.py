@@ -16,6 +16,3 @@ class SolverParameters(BaseModel):
     G_beyn_imaginary_limit: float = 5e-4
     Screened_interaction_beyn_contour_integration_radius: float = 1e6
     Screened_interaction_beyn_imaginary_limit: float = 1e-4
-
-
-solver_parameters = SolverParameters()
