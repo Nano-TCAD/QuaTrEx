@@ -1,8 +1,28 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
+# Path to the system-matrices
+#   path_to_hamiltonian: str = path to the Hamiltonian matrix
+#   path_to_overlap_matrix: str = path to the overlap matrix
+#   path_to_coulomb_matrix: str = path to the Coulomb matrix
+#
+#   The system-matrices are given in complex-number float128 binary format.
+path_to_hamiltonian = "data/hamiltonian.bin"
+path_to_overlap_matrix = "data/overlap_matrix.bin"
+path_to_coulom_matrix = "data/coulomb_matrix.bin"
+
 # Blocksize of the system-matrices
 #   blocksize: int 
 blocksize = 1
+
+# Path to the atoms positions and the position per orbitals matrices.
+#   path_to_atoms_positions: str = path to the atoms positions
+#   path_to_position_per_orbitals: str = path to the position per orbitals
+#
+#   The atoms positions and positions per orbitals are given in the xyz format. 
+#   If atoms positions are given, intern function will deduce the position per
+#   orbitals from the atoms positions.
+path_to_atoms_positions = "data/atoms_positions.xyz"
+path_to_position_per_orbitals = "data/position_per_orbitals.yaml"
 
 # Conduction band energy [eV]
 #   conduction_band_energy: float
