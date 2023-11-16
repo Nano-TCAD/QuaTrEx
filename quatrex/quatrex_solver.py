@@ -19,7 +19,7 @@ class QuatrexSolver:
         Hamiltonian: bsparse.BSparse,
         Overlap_matrix: bsparse.BSparse,
         Coulomb_matrix: bsparse.BSparse,
-        Neighboring_matrix_indices: dict[np.ndarray],
+        neighboring_matrix_indices: dict[np.ndarray],
         energy_array: np.ndarray,
         fermi_levels: dict[float],
         conduction_band_energy: float,
@@ -30,7 +30,7 @@ class QuatrexSolver:
         self._Hamiltonian = Hamiltonian
         self._Overlap_matrix = Overlap_matrix
         self._Coulomb_matrix = Coulomb_matrix
-        self._Neighboring_matrix_indices = Neighboring_matrix_indices
+        self._neighboring_matrix_indices = neighboring_matrix_indices
         self._energy_array = energy_array
         self._fermi_levels = fermi_levels
 
@@ -47,8 +47,8 @@ class QuatrexSolver:
         self._base_type = np.complex128
 
         self._Coulomb_matrix_at_neighbor_indices = \
-            self._Coulomb_matrix[self._Neighboring_matrix_indices["row"],
-                                 self._Neighboring_matrix_indices["col"]]
+            self._Coulomb_matrix[self._neighboring_matrix_indices["row"],
+                                 self._neighboring_matrix_indices["col"]]
 
         self._load_solver_parameters(solver_parameter_path)
         self._compute_matmult_blocksize()
@@ -79,7 +79,7 @@ class QuatrexSolver:
                 self._energy_array,
                 self._fermi_levels,
                 self._temperature,
-                self._Neighboring_matrix_indices,
+                self._neighboring_matrix_indices,
                 self._blocksize,
                 if_compute_current_density=(i % self._solver_parameters.check_convergence_every_n_iterations ==
                                             self._solver_parameters.check_convergence_every_n_iterations-1))
@@ -97,7 +97,7 @@ class QuatrexSolver:
                     G_greater,
                     self._Coulomb_matrix,
                     self._Coulomb_matrix_at_neighbor_indices,
-                    self._Neighboring_matrix_indices,
+                    self._neighboring_matrix_indices,
                     self._energy_array,
                     self._blocksize,
                     self._solver_parameters)
@@ -111,7 +111,7 @@ class QuatrexSolver:
                     self._Self_energy_retarded,
                     self._Self_energy_lesser,
                     self._Self_energy_greater,
-                    self._Neighboring_matrix_indices,
+                    self._neighboring_matrix_indices,
                     self._blocksize)
 
                 # change fermi energy accordingly
@@ -201,12 +201,12 @@ class QuatrexSolver:
         # and off diagonal blocks
 
         # consider sparsity of the underlying data
-        # create matrix with Neighboring_matrix_indices sparsity
+        # create matrix with neighboring_matrix_indices sparsity
         constant = 1000000
         Polarization_ones = scipy.sparse.coo_matrix(
-            (constant*np.ones_like(self._Neighboring_matrix_indices["row"]),
-                (self._Neighboring_matrix_indices["row"],
-                 self._Neighboring_matrix_indices["col"])),
+            (constant*np.ones_like(self._neighboring_matrix_indices["row"]),
+                (self._neighboring_matrix_indices["row"],
+                 self._neighboring_matrix_indices["col"])),
             shape=self._Hamiltonian.shape)
         # to bsparse
         Polarization_ones = bsparse.BCOO.from_sparray(Polarization_ones,
@@ -263,7 +263,7 @@ class QuatrexSolver:
     def _init_gw_storage(
         self
     ):
-        number_of_neighboring_matrix_indices = self._Neighboring_matrix_indices["row"].size
+        number_of_neighboring_matrix_indices = self._neighboring_matrix_indices["row"].size
         number_of_energy_points = self._energy_array.size
         self._Self_energy_retarded = np.zeros(
             (number_of_energy_points, number_of_neighboring_matrix_indices),
@@ -304,7 +304,7 @@ class QuatrexSolver:
                 self._energy_array,
                 self._fermi_levels,
                 self._temperature,
-                self._Neighboring_matrix_indices,
+                self._neighboring_matrix_indices,
                 self._blocksize,
                 if_compute_current_density=True)
 
