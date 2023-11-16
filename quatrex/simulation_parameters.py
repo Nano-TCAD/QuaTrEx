@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 import toml
 
+
 class SimulationParameters(BaseModel):
     # Path to the system-matrices
     #   The system-matrices are given in complex-number float128 binary format.
@@ -41,6 +42,3 @@ class SimulationParameters(BaseModel):
     #  and applied voltage are consistent with each other. If one is set to 
     # "None", it will be computed from the other two.
     fermi_levels: dict
-    
-    
-    

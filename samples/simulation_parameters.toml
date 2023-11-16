@@ -51,9 +51,9 @@ end_energy = 1
 energy_step = 0.1
 
 # Fermi levels
-#  left_fermi_level: float = Fermi level of the left electrode
-#  right_fermi_level: float = Fermi level of the right electrode
-#  applied_voltage: float = applied voltage
+#  left_fermi_level: float = Fermi level of the left electrode [eV]
+#  right_fermi_level: float = Fermi level of the right electrode [eV]
+#  applied_voltage: float = applied voltage [V]
 #
 #  Data validation will be performed to ensure that the given fermi levels
 #  and applied voltage are consistent with each other. If one is set to "None",

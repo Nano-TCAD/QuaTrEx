@@ -17,17 +17,17 @@ def screened_interaction_solver(
     Polarization_lesser_flattened: np.ndarray,
     Polarization_greater_flattened: np.ndarray,
     number_of_energy_points: int,
-    indices_of_neighboring_matrix: dict[np.ndarray],
+    Neighboring_matrix_indices: dict[np.ndarray],
     blocksize: int
 ):
 
     Polarization_greater_list = flattened_to_list_of_csr(
         Polarization_greater_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Coulomb_matrix.shape[0])
     Polarization_lesser_list = flattened_to_list_of_csr(
         Polarization_lesser_flattened,
-        indices_of_neighboring_matrix,
+        Neighboring_matrix_indices,
         Coulomb_matrix.shape[0])
 
     (Polarization_retarded_list,
@@ -37,10 +37,10 @@ def screened_interaction_solver(
         Polarization_lesser_list)
 
     Screened_interaction_greater_flattened = np.zeros((number_of_energy_points,
-                                                       indices_of_neighboring_matrix["row"].size),
+                                                       Neighboring_matrix_indices["row"].size),
                                                       dtype=Polarization_greater_list[0].dtype)
     Screened_interaction_lesser_flattened = np.zeros((number_of_energy_points,
-                                                      indices_of_neighboring_matrix["row"].size),
+                                                      Neighboring_matrix_indices["row"].size),
                                                      dtype=Polarization_greater_list[0].dtype)
 
     # TODO: explanation why the first point is skipped
@@ -56,18 +56,18 @@ def screened_interaction_solver(
             Coulomb_matrix, Polarization_greater_list[i], blocksize)
         L_lesser = get_L(Coulomb_matrix, Polarization_lesser_list[i], blocksize)
 
-        OBCs, beyn_gr = compute_open_boundary_condition(System_matrix,
-                                                        imaginary_limit=1e-4,
-                                                        contour_integration_radius=1e6,
-                                                        blocksize=blocksize_after_matmult,
-                                                        caller_function_name="W")
+        OBCs, surface_greens_function = compute_open_boundary_condition(System_matrix,
+                                                                        imaginary_limit=1e-4,
+                                                                        contour_integration_radius=1e6,
+                                                                        blocksize=blocksize_after_matmult,
+                                                                        caller_function_name="W")
 
         apply_obc_to_system_matrix(System_matrix, OBCs, blocksize_after_matmult)
 
         System_matrix_inv = np.linalg.inv(System_matrix.toarray())
 
         L_correction_of_obc(L_greater, L_lesser, System_matrix,
-                            beyn_gr, blocksize_after_matmult)
+                            surface_greens_function, blocksize_after_matmult)
 
         Screened_interaction_lesser = compute_screened_interaction(
             System_matrix_inv, L_lesser)
@@ -75,11 +75,11 @@ def screened_interaction_solver(
             System_matrix_inv, L_greater)
 
         Screened_interaction_lesser_flattened[i] = csr_to_flattened(
-            Screened_interaction_lesser, indices_of_neighboring_matrix)
+            Screened_interaction_lesser, Neighboring_matrix_indices)
         Screened_interaction_greater_flattened[i] = csr_to_flattened(
-            Screened_interaction_greater, indices_of_neighboring_matrix)
+            Screened_interaction_greater, Neighboring_matrix_indices)
 
-    return  Screened_interaction_lesser_flattened, Screened_interaction_greater_flattened
+    return Screened_interaction_lesser_flattened, Screened_interaction_greater_flattened
 
 
 def get_system_matrix(
@@ -196,12 +196,12 @@ def L_correction_of_obc(
     L_greater,
     L_lesser,
     System_matrix,
-    beyn_gr: dict[np.ndarray],
+    surface_greens_function: dict[np.ndarray],
     blocksize
 ):
 
     L_greater_left_OBC_block, L_lesser_left_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
-        beyn_gr["left"],
+        surface_greens_function["left"],
         L_greater[:blocksize, :blocksize].toarray(),
         L_greater[:blocksize, blocksize:2*blocksize].toarray(),
         L_lesser[:blocksize, :blocksize].toarray(),
@@ -218,7 +218,7 @@ def L_correction_of_obc(
     L_lesser[:blocksize, :blocksize] += L_lesser_left_OBC_block
 
     L_greater_right_OBC_block, L_lesser_right_OBC_block = dL_OBC_eigenmode_cpu.get_dl_obc_alt(
-        beyn_gr["right"],
+        surface_greens_function["right"],
         L_greater[-blocksize:, -blocksize:].toarray(),
         L_greater[-blocksize:, -2*blocksize:-blocksize].toarray(),
         L_lesser[-blocksize:, -blocksize:].toarray(),
