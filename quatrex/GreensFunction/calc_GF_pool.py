@@ -10,7 +10,8 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix
+from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
+                                            homogenize_matrix_Rnosym
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.block_tri_solvers.rgf_GF import rgf_GF
 
@@ -161,6 +162,10 @@ def calc_GF_pool_mpi(
         if homogenize:
             SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')
+            # SigR[ie] = homogenize_matrix_Rnosym(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
+            #                                     SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], 
+            #                                     SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], 
+            #                                     len(bmax))
             SigL[ie] = homogenize_matrix(SigL[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigL[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'L')
             SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],

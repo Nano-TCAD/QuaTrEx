@@ -58,6 +58,7 @@ from functools import partial
 from quatrex.OBC import beyn_cpu
 from quatrex.OBC import sancho
 from quatrex.OBC import dL_OBC_eigenmode_cpu
+from quatrex.OBC import periodic_matmul_correction
 
 
 def rgf_W(
@@ -861,6 +862,13 @@ def rgf_w_opt(
     # dmr_s[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # dmr_e[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # correction for matrix multiplication--------------------------------------
+
+    # # new correction of matrix multiplication
+    # mr_st, mr_et, lg_st, lg_et, ll_st, ll_et, dmr_st, dmr_et, dlg_st, dlg_et, dll_st, dll_et, vh_st, vh_et = \
+    #     periodic_matmul_correction.correction_system_matrix(mr, vh, pr, pl, pg, ll, lg, bmin, bmax, bmin_mm, bmax_mm)
+    
+    if ie == 40:
+        print("stop")
 
     # correct first and last block to account for the contacts in multiplication
     dmr_sd = dmr_s[0]

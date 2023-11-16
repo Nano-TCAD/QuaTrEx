@@ -547,6 +547,7 @@ def get_mm_obc(
         vhpg_l1d1 = vh_l1 @ pg_d1
         vhpg_l1u1 = vh_l1 @ pg_u1
         vhpg_l1l1 = vh_l1 @ pg_l1
+
         vhpgvh_d1d1d1 = (vhpl_d1d1 @ vh_d1).toarray()
         vhpgvh_d1d1u1 = (vhpl_d1d1 @ vh_u1).toarray()
         vhpgvh_d1d1l1 = (vhpl_d1d1 @ vh_l1).toarray()
@@ -633,7 +634,7 @@ def get_mm_obc(
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
         lg_d2[:lb,
               lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_d2[lb:2 *
               lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
         lg_d2[
@@ -653,7 +654,7 @@ def get_mm_obc(
         lg_u2[lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
         lg_u2[2 *
               lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
         lg_u2[2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
 
         ll_d2[:lb, :
@@ -1093,7 +1094,7 @@ def get_mm_obc_dense(
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
         lg_d2[:lb,
               lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_d2[lb:2 *
               lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
         lg_d2[
@@ -1109,11 +1110,11 @@ def get_mm_obc_dense(
             lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
 
         lg_u2[:lb, :lb] = vhpgvh_u1u1u1
-        lg_u2[lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_u2[lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_u2[lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
         lg_u2[2 *
               lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
         lg_u2[2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
 
         ll_d2[:lb, :

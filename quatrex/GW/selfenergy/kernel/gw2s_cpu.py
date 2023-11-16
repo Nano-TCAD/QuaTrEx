@@ -352,15 +352,15 @@ def gw2s_fft_mpi_cpu_3part_sr(
 
     return (sg, sl, sr)
 
-@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
             parallel=True,
             cache=True,
             nogil=True,
             error_model="numpy")
 def gw2s_fft_mpi_cpu_PI_sr(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128], vh1D: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128], vh1D: npt.NDArray[np.complex128],
     energy: npt.NDArray[np.float64], rank: np.int32, disp: npt.NDArray[np.int32], count: npt.NDArray[np.int32]
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculate the self energy with fft on the cpu(see file description todo). 
@@ -374,10 +374,8 @@ def gw2s_fft_mpi_cpu_PI_sr(
         ij2ji   (npt.NDArray[np.int32]): mapping to transposed matrix, (#orbital)
         gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
         gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
-        gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
         wg (npt.NDArray[np.complex128]): Greater screened interaction, (#orbital, #energy)
         wl (npt.NDArray[np.complex128]): Lesser screened interaction,  (#orbital, #energy)
-        wr (npt.NDArray[np.complex128]): Retarded screened interaction,(#orbital, #energy)
         wg_transposed (npt.NDArray[np.complex128]): Greater screened interaction, transposed in orbitals, (#orbital, #energy)
         wl_transposed (npt.NDArray[np.complex128]): Lesser screened interaction, transposed in orbitals,  (#orbital, #energy)
 
@@ -392,18 +390,6 @@ def gw2s_fft_mpi_cpu_PI_sr(
     no = gg.shape[0]
     ne2 = 2 * ne
 
-    wl_full = np.zeros((wl.shape[0], wl.shape[1] + (wl.shape[1] -1)), dtype = np.complex128)
-    wg_full = np.zeros((wg.shape[0], wg.shape[1] + (wg.shape[1] -1)), dtype = np.complex128)
-
-    ne_full = wl_full.shape[1]
-    ne2_full = 2 * ne_full
-
-    wl_full[:, (wl.shape[1]-1):] = wl
-    wl_full[:, 0:wl.shape[1]-1] = linalg_cpu.flip(wg_transposed)[:,0:(wl.shape[1]-1)]
-
-    wg_full[:, (wg.shape[1]-1):] = wg
-    wg_full[:, 0:wg.shape[1]-1] = linalg_cpu.flip(wl_transposed)[:,0:(wg.shape[1]-1)]
-
     # todo possibility to avoid fft in global chain
     # fft
     gg_t = linalg_cpu.fft_numba(gg, ne2, no)
@@ -416,10 +402,8 @@ def gw2s_fft_mpi_cpu_PI_sr(
     # gl_periodic_t = linalg_cpu.fft_numba(gl_periodic, ne2-1, no)
     # gr_t = linalg_cpu.fft_numba(gr, ne2, no)
     wg_t = linalg_cpu.fft_numba(wg, ne2, no)
-    wg_full_t = linalg_cpu.fft_numba(wg_full, ne2_full, no)
     wl_t = linalg_cpu.fft_numba(wl, ne2, no)
-    wl_full_t = linalg_cpu.fft_numba(wl_full, ne2_full, no)
-    wr_t = linalg_cpu.fft_numba(wr, ne2, no)
+    #wr_t = linalg_cpu.fft_numba(wr, ne2, no)
     wg_transposed_t = linalg_cpu.fft_numba(wg_transposed, ne2, no)
     wl_transposed_t = linalg_cpu.fft_numba(wl_transposed, ne2, no)
 
@@ -436,7 +420,7 @@ def gw2s_fft_mpi_cpu_PI_sr(
     # sr_2part_a_t_1 = linalg_cpu.elementmul(gr_t, wl_t) + linalg_cpu.elementmul(gg_t, wr_t)
     # sr_2part_b_t_1 = linalg_cpu.elementmul(gr_t, wg_t) + linalg_cpu.elementmul(gl_t, wr_t)
     # time reverse
-    wr_t_mod = linalg_cpu.reversal(wr_t)
+    #wr_t_mod = linalg_cpu.reversal(wr_t)
 
     # multiply elementwise the energy reversed with difference of transposed and energy zero
     # see the README for derivation

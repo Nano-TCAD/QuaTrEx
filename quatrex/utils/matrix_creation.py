@@ -227,6 +227,32 @@ def homogenize_matrix(M00, M01, NB, type):
     M = M00.tocsr()[:N0 * NB, :N0 * NB]
     return M
 
+def homogenize_matrix_Rnosym(M00, M01, M10, NB):
+    N0 = M00.shape[0]
+
+    M00 = M00.tocoo()
+    M01 = M01.tocoo()
+    M10 = M10.tocoo()
+
+    max_iteration = np.ceil(np.log2(NB)).astype(int)
+
+    N = N0
+    for I in range(max_iteration):
+        
+        M00 = sparse.vstack([sparse.hstack([M00, M01]), sparse.hstack([M10, M00])])
+        
+        M01 = sparse.vstack([sparse.coo_matrix(
+            (N, 2 * N)), sparse.hstack([M01, sparse.coo_matrix((N, N))])],
+                            dtype=M00.dtype)
+
+        M10 = sparse.vstack([sparse.hstack([sparse.coo_matrix((N, N)), M10]), sparse.coo_matrix(
+            (N, 2 * N))], dtype=M00.dtype)
+
+        N = 2 * N
+
+    M = M00.tocsr()[:N0 * NB, :N0 * NB]
+    return M
+
 
 def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
     N = Bmax[0] - Bmin[0] + 1
@@ -281,8 +307,8 @@ if __name__ == '__main__':
     # transform from 2D format to list/vector of sparse arrays format-----------
     sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
-    sr_h2g_homogenized = homogenize_matrix(sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[0]:bmax[0] + 1],
-                                           sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[1]:bmax[1] + 1], len(bmax), 'R')
+    sr_h2g_homogenized = homogenize_matrix_Rnosym(sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[0]:bmax[0] + 1],
+                                           sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[1]:bmax[1] + 1], sr_h2g_vec[0][bmin[1]:bmax[1] + 1, bmin[0]:bmax[0] + 1] , len(bmax))
 
     assert (np.allclose(sr_h2g_homogenized.toarray(), sr_h2g_vec[0].toarray(), rtol=1e-4, atol=1e-4))
 

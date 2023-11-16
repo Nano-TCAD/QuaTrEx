@@ -10,7 +10,7 @@ import numpy.typing as npt
 from scipy import sparse
 from quatrex.utils import matrix_creation
 from quatrex.utils import change_format
-from quatrex.utils.matrix_creation import homogenize_matrix
+from quatrex.utils.matrix_creation import homogenize_matrix, homogenize_matrix_Rnosym
 from quatrex.block_tri_solvers import rgf_W
 #from quatrex.block_tri_solvers import matrix_inversion_w
 from quatrex.OBC import obc_w_cpu
@@ -111,6 +111,9 @@ def p2w_pool_mpi_cpu(
         if homogenize:
             pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
+            # pr[ie] = homogenize_matrix_Rnosym(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+            #                             pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
+            #                             pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], len(bmax))
             pl[ie] = homogenize_matrix(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'L')
             pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
@@ -392,6 +395,7 @@ def p2w_mpi_cpu_alt(
     map_diag_mm2m: npt.NDArray[np.int32],
     map_upper_mm2m: npt.NDArray[np.int32],
     map_lower_mm2m: npt.NDArray[np.int32],
+    nbc: np.int32,
     mkl_threads: int = 1
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """
