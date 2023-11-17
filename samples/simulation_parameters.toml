@@ -6,7 +6,7 @@
 #   path_to_coulomb_matrix: str = path to the Coulomb matrix
 #
 #   The system-matrices are given in complex-number float128 binary format.
-path_to_hamiltonian = "data/hamiltonian.bin"
+path_to_hamiltonian = "/home/vmaillou/Documents/Quatrex_data/CNT/H_4.bin"
 path_to_overlap_matrix = "data/overlap_matrix.bin"
 path_to_coulom_matrix = "data/coulomb_matrix.bin"
 
