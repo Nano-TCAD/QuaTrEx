@@ -160,12 +160,12 @@ def calc_GF_pool_mpi(
         SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
         #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
         if homogenize:
-            SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
-                                         SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')
-            # SigR[ie] = homogenize_matrix_Rnosym(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
-            #                                     SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], 
-            #                                     SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], 
-            #                                     len(bmax))
+            # SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
+            #                              SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')
+            SigR[ie] = homogenize_matrix_Rnosym(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
+                                                SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], 
+                                                SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], 
+                                                len(bmax))
             SigL[ie] = homogenize_matrix(SigL[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigL[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'L')
             SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],

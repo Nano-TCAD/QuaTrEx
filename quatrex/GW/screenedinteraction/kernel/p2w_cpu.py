@@ -109,11 +109,11 @@ def p2w_pool_mpi_cpu(
         pr[ie] = (pg[ie] - pl[ie]) / 2
         #pr[ie] = (pr[ie] + pr[ie].T) / 2
         if homogenize:
-            pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
-            # pr[ie] = homogenize_matrix_Rnosym(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-            #                             pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
-            #                             pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], len(bmax))
+            # pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+            #                            pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
+            pr[ie] = homogenize_matrix_Rnosym(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                        pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
+                                        pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], len(bmax))
             pl[ie] = homogenize_matrix(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'L')
             pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
