@@ -1,7 +1,7 @@
 """
 Example a sc-GW iteration with MPI+CUDA.
 With transposition through network.
-Applied to a (8-0)-CNT and 7 AGNR 
+Applied to a (8-0)-CNT and 7 AGNR
 See the different GW step folders for more explanations.
 """
 import sys
@@ -33,6 +33,7 @@ from quatrex.utils import change_format
 from quatrex.utils import utils_gpu
 from quatrex.utils.bsr import bsr_matrix
 from quatrex.utils.matrix_creation import get_number_connected_blocks
+from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
@@ -126,8 +127,10 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 4])
     Vappl = 0.6
-    energy = np.linspace(-4.695, 1.391, 1000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-4.695, 1.391, 100, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
+    EPHN = np.array([0.0])  # Phonon energy
+    DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 13, rank = rank, layer_matrix = '/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -366,6 +369,11 @@ if __name__ == "__main__":
     sl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
 
+    # phonon self energy. Only diagonal so far----------------------------------
+    sg_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
@@ -435,7 +443,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/quatrex/results/SINW_biased_epsR1_n50/'
+    folder = '/quatrex/results/phonon_test/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -466,7 +474,33 @@ if __name__ == "__main__":
         sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
         sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
-        
+        # Extract diagonal bands
+        gg_diag_band = gg_h2g[:, rows == columns]
+        gl_diag_band = gl_h2g[:, rows == columns]
+        # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
+        # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
+        # at the beginning of this script. Only diagonal part now!
+        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+                                                                            gl_diag_band,
+                                                                            gg_diag_band,
+                                                                            sg_phn,
+                                                                            sl_phn,
+                                                                            sr_phn,
+                                                                            EPHN,
+                                                                            DPHN,
+                                                                            temp,
+                                                                            mem_s)
+
+        # transform from 2D format to list/vector of sparse arrays format-----------
+        sg_phn_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
+        sl_phn_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
+        sr_phn_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
+
+        # Update self-energy with phonon part
+        sg_h2g_vec += sg_phn_vec
+        sl_h2g_vec += sl_phn_vec
+        sr_h2g_vec += sr_phn_vec
+
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
         ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.02,
@@ -609,7 +643,9 @@ if __name__ == "__main__":
             # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
             #                                                 map_lower, gr_diag, gr_upper,
             #                                                 gr_lower, no, count[1,rank],
-            #                                                 energy_contiguous=False) + mem_g * gr_h2g
+            #                                                 energy_contiguous=False) + mem_g * gr_h2g 
+
+
         # calculate the transposed
         gl_transposed_h2g = np.copy(gl_h2g[:,ij2ji], order="C")
         # # create local buffers
