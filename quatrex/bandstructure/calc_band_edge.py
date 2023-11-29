@@ -185,6 +185,7 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
                       SigmaL_GW,
                       SigmaG_GW,
                       SigmaR_PHN,
+                      ind_ek_plus,
                       rows,
                       columns,
                       Bmin,
@@ -207,7 +208,8 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
                                    send_rank_1, send_rank_2, min_ind, rank, comm, disp,  SigmaR_GW, SigmaL_GW, SigmaG_GW, SigmaR_PHN, rows, columns, nao)
     if rank == 0:
         Ek = calc_bandstructure_mpi_interpol(E, S, H, ECmin_DFT, SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec, min_ind, Bmin, Bmax, side)
-        ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
+        if(ind_ek_plus == -1):
+            ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
         ECmin_int = Ek[ind_ek_plus]
         # broadcasting the band edge (this is actually not necessary, but it is done for consistency), non-root nodes will not use it in get_send_ranks_interpol 
         comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
@@ -222,7 +224,7 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
                                    send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, SigmaL_GW, SigmaG_GW, SigmaR_PHN, rows, columns, nao)
     if rank == 0:
         Ek = calc_bandstructure_mpi_interpol(E, S, H, ECmin_int, SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec, min_ind, Bmin, Bmax, side)
-        ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
+        # ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
         ECmin = Ek[ind_ek_plus]
         # broadcasting the band edge
         comm.Bcast([ECmin, MPI.DOUBLE], root=0)
@@ -231,8 +233,8 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
         ECmin = np.empty(1, dtype=np.float64)
         comm.Bcast([ECmin, MPI.DOUBLE], root=0)
         ECmin = ECmin[0]
-    # returning the band edge
-    return ECmin
+    # returning the band edge and the index of the band edge in the eigenvalue problem
+    return ECmin, ind_ek_plus
 
 
 
