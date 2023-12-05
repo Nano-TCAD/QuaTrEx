@@ -277,6 +277,71 @@ def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
         nbc = 1
     return nbc
 
+def extract_small_matrix_blocks(M00, M01, M10, factor, type):
+    N = M00.shape[0] // factor
+    num_blocks = 2 * factor + 1
+
+    # matrix_blocks = {}
+    matrix_blocks = np.empty((num_blocks, N, N), dtype=M00.dtype)
+
+    if type == 'L':
+        # index = 1
+        # for I in range(factor, 1, -1):
+        #     matrix_blocks[I] = M00[index * N:(index + 1) * N, :N]
+        #     matrix_blocks[2 * factor + 1 + 1 - I] = M00[:N, index * N:(index + 1) * N]
+        #     index += 1
+
+        # matrix_blocks[factor + 1] = M00[:N, :N]
+        # matrix_blocks[1] = M10[:N, :N]
+        # matrix_blocks[2 * factor + 1] = M01[:N, :N]
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[index * N:(index + 1) * N, :N]
+            matrix_blocks[2 * factor + 1 - I] = M00[:N, index * N:(index + 1) * N]
+
+        matrix_blocks[factor] = M00[:N, :N]
+        matrix_blocks[0] = M10[:N, :N]
+        matrix_blocks[2 * factor] = M01[:N, :N]
+    else:
+        NM = N * factor
+        index = 1
+        for I in range(factor, 1, -1):
+            matrix_blocks[I] = M00[NM - N:NM, NM - (index + 1) * N:NM - index * N]
+            matrix_blocks[2 * factor + 1 + 1 - I] = M00[NM - (index + 1) * N:NM - index * N, NM - N:NM]
+            index += 1
+
+        matrix_blocks[factor + 1] = M00[NM - N:NM, NM - N:NM]
+        matrix_blocks[1] = M10[NM - N:NM, NM - N:NM]
+        matrix_blocks[2 * factor + 1] = M01[NM - N:NM, NM - N:NM]
+
+    m00 = np.zeros((N * factor, N * factor), dtype=M00.dtype)
+    m01 = np.zeros((N * factor, N * factor), dtype=M01.dtype)
+    m10 = np.zeros((N * factor, N * factor), dtype=M10.dtype)
+
+    # for I in range(1, factor + 1):
+    #     for J in range(1, factor + 1):
+    #         m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor + 1 - I + J]
+    #         if I >= J:
+    #             m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor + 1 - I + J]
+    #         if I <= J:
+    #             m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[1 - I + J]
+
+    for I in range(1, factor + 1):
+        for J in range(1, factor + 1):
+            m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor - I + J]
+            if I >= J:
+                m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor - I + J]
+            if I <= J:
+                m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[- I + J]
+
+    m00 = csr_matrix(m00)
+    m01 = csr_matrix(m01)
+    m10 = csr_matrix(m10)
+
+    return m00, m01, m10, matrix_blocks
+
 
 if __name__ == '__main__':
     print('main')

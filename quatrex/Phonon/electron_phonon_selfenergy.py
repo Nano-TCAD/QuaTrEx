@@ -39,3 +39,5 @@ def calc_Sigma_el_phon(g, fup, fdown, homega_ph, D, dE):
 
     Sigma[neph:ne, :] = D * fup * g[:ne-neph, :]
     Sigma[:ne-neph, :] = Sigma[:ne-neph, :] + D * fdown * g[neph:ne, :]
+
+    return Sigma

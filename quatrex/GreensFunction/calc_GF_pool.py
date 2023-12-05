@@ -99,6 +99,9 @@ def calc_GF_pool_mpi(
     SigR,
     SigL,
     SigG,
+    SigR_ephn,
+    SigL_ephn,
+    SigG_ephn,
     Efl,
     Efr,
     Temp,
@@ -159,6 +162,11 @@ def calc_GF_pool_mpi(
         #SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
         SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
         #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
+
+        SigL[ie] += SigL_ephn[ie]
+        SigG[ie] += SigG_ephn[ie]
+        SigR[ie] += SigR_ephn[ie]
+
         if homogenize:
             # SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
             #                              SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')
