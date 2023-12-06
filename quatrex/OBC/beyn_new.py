@@ -10,6 +10,30 @@ from numpy.linalg import eig
 from scipy.sparse import csr_matrix
 
 
+@cpx.jit.rawkernel()
+def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
+
+    idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    if idx < z_size * b_size * b_size:
+
+        i = idx // (b_size * b_size)
+        jk = idx % (b_size * b_size)
+        j = jk // b_size
+        k = jk % b_size
+        t_idx = i * b_size * b_size + j * b_size + k
+
+        z_i = z[i]
+
+        if isL:
+            for l in range(2 * factor + 1):
+                m_idx = l * b_size * b_size + j * b_size + k
+                T[t_idx] += matrix_blocks[m_idx] * z_i ** (factor - l)
+        else:
+            for l in range(2 * factor + 1):
+                m_idx = l * b_size * b_size + j * b_size + k
+                T[t_idx] += matrix_blocks[m_idx] * z_i ** (l - factor)
+
+
 def extract_small_matrix_blocks(M00, M01, M10, factor, type):
     N = M00.shape[0] // factor
     num_blocks = 2 * factor + 1
@@ -150,7 +174,7 @@ def contour_integral_batched_gpu(factor: int,
 
     zC1 = c + r1 * cp.exp(1j * theta)
     zC2 = c + r2 * cp.exp(1j * theta)
-    z = np.hstack((zC1, zC2))
+    z = cp.hstack((zC1, zC2))
 
     dzC1_dtheta = 1j * r1 * cp.exp(1j * theta)
     dzC2_dtheta = 1j * r2 * cp.exp(1j * theta)
@@ -173,12 +197,16 @@ def contour_integral_batched_gpu(factor: int,
 
     T = cp.zeros((len(z), N, N), dtype=np.complex128)
 
-    for I in range(len(z)):
-        for J in range(2 * factor + 1):
-            if type == 'L':
-                T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
-            else:
-                T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
+    # for I in range(len(z)):
+    #     for J in range(2 * factor + 1):
+    #         if type == 'L':
+    #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
+    #         else:
+    #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
+    num_threads = 1024
+    num_blocks = (len(z) * N * N + num_threads - 1) // num_threads
+    contour[num_blocks, num_threads](T.reshape(-1), matrix_blocks.reshape(-1), z, factor, len(z), N, np.bool_(type=='L'))
+    cp.cuda.stream.get_current_stream().synchronize()
 
     iT = cp.linalg.inv(T)
 
