@@ -10,7 +10,8 @@ import numpy.typing as npt
 from scipy import sparse
 from quatrex.utils import matrix_creation
 from quatrex.utils import change_format
-from quatrex.utils.matrix_creation import homogenize_matrix, homogenize_matrix_Rnosym
+from quatrex.utils.matrix_creation import homogenize_matrix, homogenize_matrix_Rnosym, \
+                                            extract_small_matrix_blocks
 from quatrex.block_tri_solvers import rgf_W
 #from quatrex.block_tri_solvers import matrix_inversion_w
 from quatrex.OBC import obc_w_cpu
@@ -34,6 +35,7 @@ def p2w_pool_mpi_cpu(
     size,
     nbc,
     homogenize: bool = False,
+    NCpSC: int = 1,
     mkl_threads: int = 1,
     worker_num: int = 1,
     block_inv: bool = False,
@@ -109,15 +111,26 @@ def p2w_pool_mpi_cpu(
         pr[ie] = (pg[ie] - pl[ie]) / 2
         #pr[ie] = (pr[ie] + pr[ie].T) / 2
         if homogenize:
-            # pr[ie] = homogenize_matrix(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-            #                            pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'R')
-            pr[ie] = homogenize_matrix_Rnosym(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                        pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
-                                        pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], len(bmax))
-            pl[ie] = homogenize_matrix(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'L')
-            pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                       pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'G')
+            (PR00, PR01, PR10, _) = extract_small_matrix_blocks(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],\
+                                                                      pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], \
+                                                                      pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
+            pr[ie] = homogenize_matrix_Rnosym(PR00,
+                                        PR01,
+                                        PR10, len(bmax))
+            (PL00, PL01, PL10, _) = extract_small_matrix_blocks(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],\
+                                                                        pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], \
+                                                                        pl[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
+            pl[ie] = homogenize_matrix_Rnosym(PL00,
+                                        PL01,
+                                        PL10,
+                                        len(bmax))
+            (PG00, PG01, PG10, _) = extract_small_matrix_blocks(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],\
+                                                                        pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], \
+                                                                        pg[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
+            pg[ie] = homogenize_matrix_Rnosym(PG00,
+                                        PG01,
+                                        PG10,
+                                        len(bmax))
 
     # Create a process pool with num_worker workers
 
@@ -135,6 +148,7 @@ def p2w_pool_mpi_cpu(
                     wr_diag, wr_upper,
                     xr_diag, dosw, new, npw, repeat(nbc),
                     idx_e, factor,
+                    repeat(NCpSC),
                     repeat(block_inv),
                     repeat(use_dace),
                     repeat(validate_dace),repeat(ref_flag))

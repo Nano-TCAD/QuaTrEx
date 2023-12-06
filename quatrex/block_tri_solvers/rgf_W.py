@@ -673,6 +673,7 @@ def rgf_w_opt(
     nbc: np.int64,
     ie: np.int32,
     factor: np.float64 = 1.0,
+    NCpSC: np.int32 = 1,
     block_inv: bool = False,
     use_dace: bool = False,
     validate_dace: bool = False,
@@ -836,7 +837,7 @@ def rgf_w_opt(
         pr_s2 = np.ascontiguousarray(pr[slb_sd, slb_so].toarray(order="C"))
         pr_s3 = np.ascontiguousarray(pr[slb_so, slb_sd].toarray(order="C"))
     mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
-        vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3, nbc)
+        vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3, nbc, NCpSC, 'L')
     # (diagonal, upper, lower block of the end block at the right)
     if bsr:
         vh_e1 = vh[slb_ed, slb_ed]
@@ -858,7 +859,7 @@ def rgf_w_opt(
         pr_e2 = np.ascontiguousarray(pr[slb_eo, slb_ed].toarray(order="C"))
         pr_e3 = np.ascontiguousarray(pr[slb_ed, slb_eo].toarray(order="C"))
     mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
-        vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3, nbc)
+        vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3, nbc, NCpSC, 'R')
     # dmr_s[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # dmr_e[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # correction for matrix multiplication--------------------------------------

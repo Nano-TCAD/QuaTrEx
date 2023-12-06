@@ -8,6 +8,7 @@ import numpy.typing as npt
 from scipy import sparse
 import typing
 import numba
+from utils.matrix_creation import extract_small_matrix_blocks
 
 
 def stack_three(a: sparse.csr_matrix, b: sparse.csr_matrix, c: sparse.csr_matrix) -> sparse.csr_matrix:
@@ -724,7 +725,8 @@ def get_mm_obc(
 def get_mm_obc_dense(
     vh_1: npt.NDArray[np.complex128], vh_2: npt.NDArray[np.complex128], pg_1: npt.NDArray[np.complex128],
     pg_2: npt.NDArray[np.complex128], pl_1: npt.NDArray[np.complex128], pl_2: npt.NDArray[np.complex128],
-    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], pr_3: npt.NDArray[np.complex128], nbc: int
+    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], pr_3: npt.NDArray[np.complex128], nbc: int,
+    NCpSC: int, type: str = "L"
 ) -> typing.Tuple[typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
@@ -764,19 +766,47 @@ def get_mm_obc_dense(
     # block size after mm
     lb_mm = nbc * lb
     # define the right blocks
-    vh_d1 = vh_1
-    vh_u1 = vh_2
-    vh_l1 = vh_u1.conjugate().transpose()
-    pg_d1 = pg_1
-    pg_u1 = pg_2
-    pg_l1 = -pg_u1.conjugate().transpose()
-    pl_d1 = pl_1
-    pl_u1 = pl_2
-    pl_l1 = -pl_u1.conjugate().transpose()
-    pr_d1 = pr_1
-    pr_u1 = pr_2
-    #pr_l1 = pr_u1.transpose()
-    pr_l1 = pr_3
+    # vh_d1 = vh_1
+    # vh_u1 = vh_2
+    # vh_l1 = vh_u1.conjugate().transpose()
+    if type == "L":
+        (vh_d1, vh_u1, vh_l1, _) = extract_small_matrix_blocks(vh_1, vh_2,
+                                                            vh_2.conjugate().transpose(),
+                                                            NCpSC, "L", format = 'dense')  
+    else:
+        vh_d1 = vh_1
+        vh_u1 = vh_2
+        vh_l1 = vh_u1.conjugate().transpose()
+    # pg_d1 = pg_1
+    # pg_u1 = pg_2
+    # pg_l1 = -pg_u1.conjugate().transpose()
+    if type == "L":
+        (pg_d1, pg_u1, pg_l1, _) = extract_small_matrix_blocks(pg_1, pg_2,
+                                                            -pg_2.conjugate().transpose(),
+                                                            NCpSC, "L", format = 'dense')
+    else:
+        pg_d1 = pg_1
+        pg_u1 = pg_2
+        pg_l1 = -pg_u1.conjugate().transpose()
+
+    if type == "L":
+        (pl_d1, pl_u1, pl_l1, _) = extract_small_matrix_blocks(pl_1, pl_2,
+                                                            -pl_2.conjugate().transpose(),
+                                                            NCpSC, "L", format = 'dense')
+    else: 
+        pl_d1 = pl_1
+        pl_u1 = pl_2
+        pl_l1 = -pl_u1.conjugate().transpose()
+
+    if type == "L":
+        (pr_d1, pr_u1, pr_l1, _) = extract_small_matrix_blocks(pr_1, pr_2,
+                                                            pr_3,
+                                                            NCpSC, "L", format = 'dense')
+    else:
+        pr_d1 = pr_1
+        pr_u1 = pr_2
+        #pr_l1 = pr_u1.transpose()
+        pr_l1 = pr_3
 
     # output matrices
     mr_d2 = np.empty((lb_mm, lb_mm), dtype=np.complex128)
@@ -1171,6 +1201,8 @@ def get_mm_obc_dense(
     lg_l2[:, :] = -lg_u2.conjugate().transpose()
     ll_l2[:, :] = -ll_u2.conjugate().transpose()
     mr_d2 = mr_d2 + np.identity(lb_mm, dtype=np.complex128) * (1 + 1j * 1e-10)
+    if type == "L":
+        (mr_d2, mr_u2, mr_l2, _ ) = extract_small_matrix_blocks(mr_d2, mr_u2, mr_l2, NCpSC, "L", format = 'dense')
 
     return ((mr_d2, mr_u2, mr_l2), (lg_d2, lg_u2, lg_l2), (ll_d2, ll_u2, ll_l2), (dmr_lu, dmr_ul), (dlg_lu, dlg_ul),
             (dll_lu, dll_ul), (vh_u, vh_l))
