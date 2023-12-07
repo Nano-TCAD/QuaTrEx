@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import sparse
 from quatrex.utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
-from quatrex.OBC.beyn_cpu import beyn
+from quatrex.OBC.beyn_new import beyn
 from quatrex.OBC.sancho import open_boundary_conditions
 from functools import partial
 
@@ -28,6 +28,7 @@ def rgf_GF(M,
            Bmax_fi,
            factor=1.0,
            index_E=0,
+           NCpSC=1,
            block_inv=False,
            use_dace=False,
            validate_dace=False,
@@ -80,14 +81,12 @@ def rgf_GF(M,
     #_, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
-        _, condL, _, SigRBL, min_dEkL = beyn_func(M[:LBsize, :LBsize].toarray(),
+        SigRBL, _, condL, min_dEkL = beyn_func(NCpSC, M[:LBsize, :LBsize].toarray(),
                                                   M[:LBsize, LBsize:2 * LBsize].toarray(),
                                                   M[LBsize:2 * LBsize, :LBsize].toarray(),
                                                   imag_lim,
                                                   R,
-                                                  'L',
-                                                  function='G',
-                                                  block=block_inv)
+                                                  'L')
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(),
@@ -105,15 +104,13 @@ def rgf_GF(M,
 
     #GR/GL/GG OBC right
     if not sancho:
-        _, condR, _, SigRBR, min_dEkR = beyn_func(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
+        SigRBR, _, condR, min_dEkR = beyn_func(NCpSC, M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
                                                   M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
                                                   M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
                                                   imag_lim,
                                                   R,
-                                                  'R',
-                                                  function='G',
-                                                  block=block_inv)
-
+                                                  'R')
+                                                  
     if np.isnan(condR) or sancho:
         _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
                                                        M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),

@@ -55,7 +55,8 @@ import time
 import typing
 
 from functools import partial
-from quatrex.OBC import beyn_cpu
+# from quatrex.OBC import beyn_cpu
+from quatrex.OBC import beyn_new
 from quatrex.OBC import sancho
 from quatrex.OBC import dL_OBC_eigenmode_cpu
 from quatrex.OBC import periodic_matmul_correction
@@ -279,7 +280,7 @@ def rgf_W(
     #         dvh_sd = mr_sl @ dxr_sd @ vh_su
     #old wrong version of beyn
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_cpu.beyn_old(mr_sd.toarray(), mr_su.toarray(), mr_sl.toarray(),
+        _, cond_l, dxr_sd, dmr_sd, min_dEkL = beyn_new.beyn_old(mr_sd.toarray(), mr_su.toarray(), mr_sl.toarray(),
                                                                 imag_lim, rr, "L")
         if not np.isnan(cond_l):
             dvh_sd = mr_sl @ dxr_sd @ vh_su
@@ -298,7 +299,7 @@ def rgf_W(
     #         dvh_ed = mr_eu @ dxr_ed @ vh_el
     # old wrong version of beyn
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_cpu.beyn_old(mr_ed.toarray(), mr_eu.toarray(), mr_el.toarray(),
+        _, cond_r, dxr_ed, dmr_ed, min_dEkR = beyn_new.beyn_old(mr_ed.toarray(), mr_eu.toarray(), mr_el.toarray(),
                                                                 imag_lim, rr, "R")
         if not np.isnan(cond_r):
             dvh_ed = mr_eu @ dxr_ed @ vh_el
@@ -714,7 +715,7 @@ def rgf_w_opt(
                   npt.NDArray[np.complex128]     wr from inv
                 ] warning all dense arrays, only returned if ref_flag is True
     """
-    beyn = beyn_cpu.beyn
+    beyn = beyn_new.beyn_new
     if use_dace:
         # from OBC.beyn_dace import beyn, contour_integral_dace, sort_k_dace
         # contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
@@ -836,7 +837,7 @@ def rgf_w_opt(
         pr_s1 = np.ascontiguousarray(pr[slb_sd, slb_sd].toarray(order="C"))
         pr_s2 = np.ascontiguousarray(pr[slb_sd, slb_so].toarray(order="C"))
         pr_s3 = np.ascontiguousarray(pr[slb_so, slb_sd].toarray(order="C"))
-    mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
+    mr_s, lg_s, ll_s, dmr_s, dlg_s, dll_s, vh_s, mb00 = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
         vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3, nbc, NCpSC, 'L')
     # (diagonal, upper, lower block of the end block at the right)
     if bsr:
@@ -858,7 +859,7 @@ def rgf_w_opt(
         pr_e1 = np.ascontiguousarray(pr[slb_ed, slb_ed].toarray(order="C"))
         pr_e2 = np.ascontiguousarray(pr[slb_eo, slb_ed].toarray(order="C"))
         pr_e3 = np.ascontiguousarray(pr[slb_ed, slb_eo].toarray(order="C"))
-    mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
+    mr_e, lg_e, ll_e, dmr_e, dlg_e, dll_e, vh_e, mbNN = dL_OBC_eigenmode_cpu.get_mm_obc_dense(
         vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3, nbc, NCpSC, 'R')
     # dmr_s[0] += np.identity(lb * nbc) * (1+1j*1e-10)
     # dmr_e[0] += np.identity(lb * nbc) * (1+1j*1e-10)
@@ -868,7 +869,7 @@ def rgf_w_opt(
     # mr_st, mr_et, lg_st, lg_et, ll_st, ll_et, dmr_st, dmr_et, dlg_st, dlg_et, dll_st, dll_et, vh_st, vh_et = \
     #     periodic_matmul_correction.correction_system_matrix(mr, vh, pr, pl, pg, ll, lg, bmin, bmax, bmin_mm, bmax_mm)
     
-    if ie == 40:
+    if ie == 57:
         print("stop")
 
     # correct first and last block to account for the contacts in multiplication
@@ -899,7 +900,7 @@ def rgf_w_opt(
 
     # correction for first block
     if not sancho_flag:
-        _, cond_l, dxr_sd, dmr, min_dEkL = beyn(mr_s[0], mr_s[1], mr_s[2], imag_lim, rr, "L", block=block_inv)
+        dmr, dxr_sd, cond_l, min_dEkL = beyn(nbc * NCpSC, mb00, mr_s[0], mr_s[1], mr_s[2], imag_lim, rr, "L")
 
         if not np.isnan(cond_l):
             dmr_sd -= dmr
@@ -922,7 +923,7 @@ def rgf_w_opt(
         dmr_sd -= dmr
     # correction for last block
     if not sancho_flag:
-        _, cond_r, dxr_ed, dmr, min_dEkR = beyn(mr_e[0], mr_e[1], mr_e[2], imag_lim, rr, "R", block=block_inv)
+        dmr, dxr_ed, cond_r, min_dEkR = beyn(nbc * NCpSC, mbNN, mr_e[0], mr_e[1], mr_e[2], imag_lim, rr, "R")
         if not np.isnan(cond_r):
             dmr_ed -= dmr
             dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]

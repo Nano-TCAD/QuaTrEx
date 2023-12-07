@@ -305,16 +305,18 @@ def extract_small_matrix_blocks(M00, M01, M10, factor, type, format='sparse'):
         matrix_blocks[0] = M10[:N, :N]
         matrix_blocks[2 * factor] = M01[:N, :N]
     else:
-        NM = N * factor
-        index = 1
-        for I in range(factor, 1, -1):
-            matrix_blocks[I] = M00[NM - N:NM, NM - (index + 1) * N:NM - index * N]
-            matrix_blocks[2 * factor + 1 + 1 - I] = M00[NM - (index + 1) * N:NM - index * N, NM - N:NM]
-            index += 1
 
-        matrix_blocks[factor + 1] = M00[NM - N:NM, NM - N:NM]
-        matrix_blocks[1] = M10[NM - N:NM, NM - N:NM]
-        matrix_blocks[2 * factor + 1] = M01[NM - N:NM, NM - N:NM]
+        NM = N * factor
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[NM - N:NM, NM - (index + 1) * N:NM - index * N]
+            matrix_blocks[2 * factor + 1 - I] = M00[NM - (index + 1) * N:NM - index * N, NM - N:NM]
+        
+        matrix_blocks[factor] = M00[NM - N:NM, NM - N:NM]
+        matrix_blocks[0] = M10[NM - N:NM, NM - N:NM]
+        matrix_blocks[2 * factor] = M01[NM - N:NM, NM - N:NM]
 
     m00 = np.zeros((N * factor, N * factor), dtype=M00.dtype)
     m01 = np.zeros((N * factor, N * factor), dtype=M01.dtype)

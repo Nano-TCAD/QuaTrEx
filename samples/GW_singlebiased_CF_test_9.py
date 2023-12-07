@@ -50,10 +50,12 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire_small_nobias/")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_sinwNBC1_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_CF_SINW_0v.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_CF_SINW_0v.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_CF_SINW_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -77,13 +79,13 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1,4])
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
-    NCpSC = 1
-    Vappl = 0.0
+    NCpSC = 4
+    Vappl = 0.6
     energy = np.linspace(-5, 1, 61, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = 4)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -102,6 +104,8 @@ if __name__ == "__main__":
     energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x_optimized(solution_path_gw, "s")
     energy_in, rows_sph, columns_sph, sphg_gold, sphl_gold, sphr_gold = read_solution.load_x_optimized(solution_path_gw, "sph")
     rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
+    rowsRefH, columnsRefH, H_gold = read_solution.load_v(solution_path_H)
+    rowsRefS, columnsRefS, S_gold = read_solution.load_v(solution_path_S)
 
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
@@ -113,6 +117,12 @@ if __name__ == "__main__":
     vh = sparse.coo_array((vh_gold, (np.squeeze(rowsRef), np.squeeze(columnsRef))),
                           shape=(nao, nao),
                           dtype=np.complex128).tocsr()
+    H_in = sparse.coo_array((H_gold, (np.squeeze(rowsRefH), np.squeeze(columnsRefH))),
+                            shape=(nao, nao),
+                            dtype=np.complex128).tocsr()
+    S_in = sparse.coo_array((S_gold, (np.squeeze(rowsRefS), np.squeeze(columnsRefS))),
+                            shape=(nao, nao),
+                            dtype=np.complex128).tocsr()
     data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
 
     # Creating the mask for the energy range of the deleted W elements given by the reference solution
@@ -157,7 +167,7 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -2.4
+    energy_fl = -2.0362
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
@@ -165,7 +175,7 @@ if __name__ == "__main__":
     # relative permittivity
     epsR = 1.0
     # DFT Conduction Band Minimum
-    ECmin = -2.0761
+    ECmin = -2.0662
 
     # Phyiscal Constants -----------
 
@@ -193,6 +203,8 @@ if __name__ == "__main__":
     vh1d = np.asarray(vh[rows, columns].reshape(-1))
 
     assert np.allclose(V_sparse.toarray(), vh.toarray())
+    assert np.allclose(H_in.toarray(), hamiltonian_obj.Hamiltonian['H_4'].toarray())
+    assert np.allclose(S_in.toarray(), hamiltonian_obj.Overlap['H_4'].toarray())
 
     # calculation of data distribution per rank---------------------------------
 
@@ -447,8 +459,9 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=True,
+                homogenize=False,
                 return_sigma_boundary=True,
+                NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         else:
@@ -602,7 +615,8 @@ if __name__ == "__main__":
                 rank,
                 size,
                 nbc,
-                homogenize=True,
+                homogenize=False,
+                NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads)
         else:

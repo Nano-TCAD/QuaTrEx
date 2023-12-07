@@ -9,7 +9,7 @@ from numpy.linalg import eig
 from scipy.sparse import csr_matrix
 
 
-def extract_small_matrix_blocks(M00, M01, M10, factor, type):
+def extract_small_matrix_blocks(M00, M01, M10, factor, type, densify = False):
     N = M00.shape[0] // factor
     num_blocks = 2 * factor + 1
 
@@ -52,9 +52,10 @@ def extract_small_matrix_blocks(M00, M01, M10, factor, type):
             if I <= J:
                 m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[- I + J]
 
-    m00 = csr_matrix(m00)
-    m01 = csr_matrix(m01)
-    m10 = csr_matrix(m10)
+    if not densify:
+        m00 = csr_matrix(m00)
+        m01 = csr_matrix(m01)
+        m10 = csr_matrix(m10)
 
     return m00, m01, m10, matrix_blocks
 
@@ -196,7 +197,7 @@ def beyn_sigma(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, type)
     if type == 'L':
 
         ksurfL, VsurfL, inv_VsurfL, dEk_dk = prepare_input_data(kL, kR, phiL, phiR, M01, M10, imag_lim, 1.0)
-        gR = np.linalg.inv(M00 + M10 * VsurfL @ np.diag(np.exp(-1j * ksurfL)) @ inv_VsurfL)
+        gR = np.linalg.inv(M00 + M10 @ VsurfL @ np.diag(np.exp(-1j * ksurfL)) @ inv_VsurfL)
 
         for _ in range(ref_iteration):
             gR = np.linalg.inv(M00 - M10 @ gR @ M01)
@@ -206,7 +207,7 @@ def beyn_sigma(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, type)
     else:
 
         ksurfR, VsurfR, inv_VsurfR, dEk_dk = prepare_input_data(kL, kR, phiL, phiR, M01, M10, imag_lim, -1.0)
-        gR = np.linalg.inv(M00 + M01 * VsurfR @ np.diag(np.exp(1j * ksurfR)) @ inv_VsurfR)
+        gR = np.linalg.inv(M00 + M01 @ VsurfR @ np.diag(np.exp(1j * ksurfR)) @ inv_VsurfR)
 
         for _ in range(ref_iteration):
             gR = np.linalg.inv(M00 - M01 @ gR @ M10)
@@ -374,26 +375,31 @@ def beyn_new(factor: int,
     cond = 0
     min_dEk = 1e8
 
-    try:
-    
-        LP0, LP1, RP0, RP1 = contour_integral(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
-        LV, LS, LW, RV, RS, RW = beyn_svd(LP0, RP0, eps_lim=1e-8)
+    # try:
 
-        if LW.shape[0] == 0 or RW.shape[0] == 0:
-            raise Exception("No singular values above the threshold")
+    LP0, LP1, RP0, RP1 = contour_integral(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
+    LV, LS, LW, RV, RS, RW = beyn_svd(LP0, RP0, eps_lim=1e-8)
 
-        Lu, Llambda, Ru, Rlambda = beyn_eig(LV, LS, LW, LP1, RV, RS, RW, RP1)
-        kL, kR, phiL, phiR = beyn_phi(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
-        Sigma, gR, min_dEk = beyn_sigma(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
-    
-    except Exception as e:
-
-        print("Error in Beyn:")
-        print(e)
-
+    if LS.size == 0 or RS.size == 0:
+        # raise Exception("No singular values above the threshold")
         cond = np.nan
         Sigma = None
         gR = None
+        return Sigma, gR, cond, min_dEk
+
+
+    Lu, Llambda, Ru, Rlambda = beyn_eig(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    kL, kR, phiL, phiR = beyn_phi(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
+    Sigma, gR, min_dEk = beyn_sigma(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
+
+    # except Exception as e:
+
+    #     print("Error in Beyn:")
+    #     print(e)
+
+    #     cond = np.nan
+    #     Sigma = None
+    #     gR = None
 
     return Sigma, gR, cond, min_dEk
 
