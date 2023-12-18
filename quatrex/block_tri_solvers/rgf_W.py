@@ -869,8 +869,6 @@ def rgf_w_opt(
     # mr_st, mr_et, lg_st, lg_et, ll_st, ll_et, dmr_st, dmr_et, dlg_st, dlg_et, dll_st, dll_et, vh_st, vh_et = \
     #     periodic_matmul_correction.correction_system_matrix(mr, vh, pr, pl, pg, ll, lg, bmin, bmax, bmin_mm, bmax_mm)
     
-    if ie == 57:
-        print("stop")
 
     # correct first and last block to account for the contacts in multiplication
     dmr_sd = dmr_s[0]
@@ -980,6 +978,10 @@ def rgf_w_opt(
         wg_diag_rgf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
         wl_diag_rgf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
         wr_diag_rgf = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+
+        # True inverse M^-1 off-diagonal blocks
+        xr_upper = np.zeros((nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
+        xr_lower = np.zeros((nb_mm - 1, lb_max_mm, lb_max_mm), dtype=np.complex128)
 
         # todo
         # find out if IdE, DOS, dWL, dWG are needed
@@ -1133,21 +1135,25 @@ def rgf_w_opt(
             ll_r = ll[slb_c, slb_p]
         else:
             vh_r = vh_cp[slb_c, slb_p].toarray()
+            vh_d = vh_cp[slb_p, slb_c].toarray()
             lg_r = lg[slb_c, slb_p].toarray()
             ll_r = ll[slb_c, slb_p].toarray()
 
         xr_mr = xr_p @ mr_d
         xr_mr_ct = xr_mr.conjugate().transpose()
 
+        # XR_E_00 = xR_E_00
+        xr_diag[0, :lb_f, :lb_f] = xr_diag_rgf[0, :lb_f, :lb_f]
+        xr_upper[0, :lb_f, :lb_p] = -xr_diag_rgf[0, :lb_f, :lb_f] @ mr_r @ xr_p
+        xr_lower[0, :lb_p, :lb_f] = -xr_p @ mr_d @ xr_diag_rgf[0, :lb_f, :lb_f]
+
         # WR_E_00 = wR_E_00
-        wr_diag[0, :lb_f, :lb_f] = wr_diag_rgf[0, :lb_f, :lb_f]
+        #wr_diag[0, :lb_f, :lb_f] = wr_diag_rgf[0, :lb_f, :lb_f]
+        wr_diag[0, :lb_f, :lb_f] = xr_diag[0, :lb_f, :lb_f] @ vh_c + xr_upper[0, :lb_f, :lb_p] @ vh_d
 
         # WR_E_01 = (V_01 - WR_E_00*M_E_10) * xR_E_11
         # todo if vh_r can be used instead of vh_cp[slb_c,slb_p]
         wr_upper[0, :lb_f, :lb_p] = (vh_r - wr_diag[0, :lb_f, :lb_f] @ mr_d.transpose()) @ xr_p.transpose()
-
-        # XR_E_00 = xR_E_00
-        xr_diag[0, :lb_f, :lb_f] = xr_diag_rgf[0, :lb_f, :lb_f]
 
         # W^{\lessgtr}_E_00 = w^{\lessgtr}_E_00
         wg_diag[0, :lb_f, :lb_f] = wg_diag_rgf[0, :lb_f, :lb_f]
@@ -1181,6 +1187,9 @@ def rgf_w_opt(
         _d:  down
         _u:  up
         """
+        if(ie == 5):
+            print("test")
+
 
         for idx_ib in range(1, nb_mm):
             # block length i
@@ -1219,8 +1228,8 @@ def rgf_w_opt(
             # WR_E_kk = wR_E_kk - xR_E_kk*M_E_kk-1*WR_E_k-1k
             wr_diag_rgf_c = wr_diag_rgf[idx_ib, :lb_i, :lb_i]
             # todo if wr_upper_p can be used wr_upper[idx_ib-1,:lb_vec_mm[idx_ib-1],:lb_i]
-            wr_diag_c = wr_diag_rgf_c - xr_mr @ wr_upper[idx_ib - 1, :lb_vec_mm[idx_ib - 1], :lb_i]
-            wr_diag[idx_ib, :lb_i, :lb_i] = wr_diag_c
+            #wr_diag_c = wr_diag_rgf_c - xr_mr @ wr_upper[idx_ib - 1, :lb_vec_mm[idx_ib - 1], :lb_i]
+            #wr_diag[idx_ib, :lb_i, :lb_i] = wr_diag_c
 
             # XR_E_kk = xR_E_kk + (xR_E_kk * M_E_kk-1 * XR_E_k-1k-1 * M_E_k-1k * xR_E_kk)
             xr_diag_c = xr_diag_rgf_c + xr_mr_xr_mr @ xr_diag_rgf_c
@@ -1250,16 +1259,20 @@ def rgf_w_opt(
                 lb_n = lb_vec_mm[idx_ib + 1]
                 # slice of current and previous block
                 slb_n = slice(bmin_mm[idx_ib + 1], bmax_mm[idx_ib + 1] + 1)
+                #slb_p = slice(bmin_mm[idx_ib-1], bmax_mm[idx_ib] + 1)
 
                 # read out blocks needed
                 if bsr:
                     vh_d = vh_cp[slb_n, slb_c]
+                    vh_r = vh_cp[slb_p, slb_c]
                     mr_d = mr[slb_n, slb_c]
                     mr_r = mr[slb_c, slb_n]
                     lg_r = lg[slb_c, slb_n]
                     ll_r = ll[slb_c, slb_n]
                 else:
                     vh_d = vh_cp[slb_n, slb_c].toarray()
+                    vh_r = vh_cp[slb_p, slb_c].toarray()
+                    vh_c = vh_cp[slb_c, slb_c].toarray()
                     mr_d = mr[slb_n, slb_c].toarray()
                     mr_r = mr[slb_c, slb_n].toarray()
                     lg_r = lg[slb_c, slb_n].toarray()
@@ -1274,6 +1287,14 @@ def rgf_w_opt(
                 xr_mr = xr_diag_rgf_n @ mr_d
                 xr_mr_ct = xr_mr.conjugate().transpose()
 
+                #xr_upper and xr_lower
+                xr_upper[idx_ib, :lb_i, :lb_n] = -xr_diag_c @ mr_r @ xr_diag_rgf_n
+                xr_lower[idx_ib, :lb_n, :lb_i] = -xr_diag_rgf_n @ mr_d @ xr_diag_c
+                
+                wr_diag_c = xr_lower[idx_ib - 1, :lb_i, :lb_n] @ vh_r + xr_diag[idx_ib, :lb_i, :lb_i] @ vh_c + \
+                    xr_upper[idx_ib, :lb_i, :lb_n] @ vh_d
+                wr_diag[idx_ib, :lb_i, :lb_i] = wr_diag_c
+
                 # WR_E_kk+1 = (V_k+1k.T - WR_E_kk*M_E_k+1k.T) * xR_E_k+1k+1.T
                 # difference between matlab and python silvio todo
                 # this line is wrong todo in the second part
@@ -1285,6 +1306,10 @@ def rgf_w_opt(
                 wg_upper[idx_ib, :lb_i, :lb_n] = wg_upper_c
                 wl_upper_c = xr_diag_c @ (ll_r @ xr_diag_rgf_n_ct - mr_r @ wl_diag_rgf_n) - wl_diag_c @ xr_mr_ct
                 wl_upper[idx_ib, :lb_i, :lb_n] = wl_upper_c
+            else:
+                vh_r = vh_cp[slb_p, slb_c].toarray()
+                vh_c = vh_cp[slb_c, slb_c].toarray() - dvh_ed
+                wr_diag[idx_ib, :lb_i, :lb_i] = xr_lower[idx_ib - 1, :lb_i, :lb_n] @ vh_r + xr_diag[idx_ib, :lb_i, :lb_i] @ vh_c
 
         for idx_ib in range(0, nb_mm):
             xr_diag[idx_ib, :, :] *= factor

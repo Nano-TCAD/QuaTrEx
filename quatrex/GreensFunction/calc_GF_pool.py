@@ -13,6 +13,7 @@ import mkl
 from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
+from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess
 from quatrex.block_tri_solvers.rgf_GF import rgf_GF
 
 from operator import mul
@@ -153,41 +154,46 @@ def calc_GF_pool_mpi(
 
         SigRBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
         SigRBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
+    
+    # Create a process pool with 4 workers
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
+                     repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
 
-    for ie in range(ne):
-        #SigL[ie] = 1j * np.imag(SigL[ie])
-        #SigG[ie] = 1j * np.imag(SigG[ie])
+    # for ie in range(ne):
+    #     #SigL[ie] = 1j * np.imag(SigL[ie])
+    #     #SigG[ie] = 1j * np.imag(SigG[ie])
 
-        SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
-        SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
-        #SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
-        SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
-        #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
+    #     SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
+    #     SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
+    #     #SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
+    #     SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
+    #     #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
 
-        SigL[ie] += SigL_ephn[ie]
-        SigG[ie] += SigG_ephn[ie]
-        SigR[ie] += SigR_ephn[ie]
+    #     SigL[ie] += SigL_ephn[ie]
+    #     SigG[ie] += SigG_ephn[ie]
+    #     SigR[ie] += SigR_ephn[ie]
 
-        if homogenize:
-            (SigR00, SigR01, SigR10, _) = extract_small_matrix_blocks(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
-                                                                      SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
-                                                                      SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
-            SigR[ie] = homogenize_matrix_Rnosym(SigR00,
-                                                SigR01, 
-                                                SigR10, 
-                                                len(bmax))
-            (SigL00, SigL01, SigL10, _) = extract_small_matrix_blocks(SigL[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
-                                                                      SigL[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
-                                                                      SigL[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
-            SigL[ie] = homogenize_matrix_Rnosym(SigL00,
-                                         SigL01,
-                                         SigL10,
-                                         len(bmax))
-            (SigG00, SigG01, SigG10, _) = extract_small_matrix_blocks(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
-                                                                      SigG[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
-                                                                      SigG[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
-            SigG[ie] = homogenize_matrix_Rnosym(SigG00,
-                                         SigG01, SigG10, len(bmax))
+    #     if homogenize:
+    #         (SigR00, SigR01, SigR10, _) = extract_small_matrix_blocks(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
+    #                                                                   SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
+    #                                                                   SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+    #         SigR[ie] = homogenize_matrix_Rnosym(SigR00,
+    #                                             SigR01, 
+    #                                             SigR10, 
+    #                                             len(bmax))
+    #         (SigL00, SigL01, SigL10, _) = extract_small_matrix_blocks(SigL[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
+    #                                                                   SigL[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
+    #                                                                   SigL[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+    #         SigL[ie] = homogenize_matrix_Rnosym(SigL00,
+    #                                      SigL01,
+    #                                      SigL10,
+    #                                      len(bmax))
+    #         (SigG00, SigG01, SigG10, _) = extract_small_matrix_blocks(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],\
+    #                                                                   SigG[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], \
+    #                                                                   SigG[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+    #         SigG[ie] = homogenize_matrix_Rnosym(SigG00,
+    #                                      SigG01, SigG10, len(bmax))
 
     rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
     rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
