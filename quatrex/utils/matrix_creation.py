@@ -190,6 +190,16 @@ def initialize_block_G(NE, NB, Bsize):
 
     return (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
 
+def initialize_block_G_batched(NE, NB, Bsize):
+    GR_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GRnn1_3D_E = np.zeros((NB -1 , NE, Bsize, Bsize), dtype=np.complex128)
+    GL_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GLnn1_3D_E = np.zeros((NB-1, NE, Bsize, Bsize), dtype=np.complex128)
+    GG_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GGnn1_3D_E = np.zeros((NB-1, NE, Bsize, Bsize), dtype=np.complex128)
+
+    return (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
+
 
 def negative_hermitian_transpose(A: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
     """Return the negative hermitian transpose of a matrix.

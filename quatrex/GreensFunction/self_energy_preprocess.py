@@ -47,3 +47,18 @@ def self_energy_preprocess(SigL: npt.ArrayLike, SigG: npt.ArrayLike, SigR: npt.A
                                                                     SigG[bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
         SigG[:, :] = homogenize_matrix_Rnosym(SigG00,
                                         SigG01, SigG10, len(bmax))
+        
+def self_energy_preprocess_2d(sl, sg, sr, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji,  NCpSC, bmin, bmax, homogenize):
+    sl_rgf = (sl - sl[:, ij2ji].conj()) / 2
+    sg_rgf = (sg - sg[:, ij2ji].conj()) / 2
+    sr_rgf = np.real(sr) + (sg - sl) / 2
+
+    sl_rgf[:, rows == columns] += sl_phn
+    sg_rgf[:, rows == columns] += sg_phn
+    sr_rgf[:, rows == columns] += sr_phn
+
+    #To_DO homogenize
+    # This can be done using change_format.sparse2vecspase_v2 and after extracting the matrices do
+    # change_format.sparse2block_no_map
+
+    return sl_rgf, sg_rgf, sr_rgf

@@ -14,74 +14,164 @@ from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess
-from quatrex.block_tri_solvers.rgf_GF import rgf_GF
+from quatrex.block_tri_solvers.rgf_GF import rgf_GF, rgf_standaloneGF
+from quatrex.OBC.obc_gf_cpu import obc_GF_cpu
 
 from operator import mul
 
 import copy
 
-
-def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_threads=1, worker_num=1):
+def calc_GF_pool_mpi_split(
+    DH,
+    energy: npt.NDArray[np.float64],
+    SigR,
+    SigL,
+    SigG,
+    SigR_ephn,
+    SigL_ephn,
+    SigG_ephn,
+    Efl,
+    Efr,
+    Temp,
+    DOS,
+    nE,
+    nP,
+    idE,
+    factor: npt.NDArray[np.float64],
+    comm,
+    rank,
+    size,
+    homogenize=True,
+    NCpSC: int = 1,
+    return_sigma_boundary = False,
+    mkl_threads: int = 1,
+    worker_num: int = 1,
+    block_inv: bool = False,
+    use_dace: bool = False,
+    validate_dace: bool = False,
+        
+):
     kB = 1.38e-23
     q = 1.6022e-19
 
     UT = kB * Temp / q
 
     vfermi = np.vectorize(fermi_function)
-    fL = vfermi(E, Efl, UT)
-    fR = vfermi(E, Efr, UT)
+    fL = vfermi(energy, Efl, UT)
+    fR = vfermi(energy, Efr, UT)
 
-    NE = E.shape[0]
-    NA = DH.NA
-
-    dNP = 50  # number of points to smooth the edges of the Green's Function
-
-    factor = np.ones(NE)
-    factor[NE - dNP - 1:NE] = (np.cos(np.pi * np.linspace(0, 1, dNP + 1)) + 1) / 2
-    factor[0:dNP + 1] = (np.cos(np.pi * np.linspace(1, 0, dNP + 1)) + 1) / 2
-
-    NB = DH.Bmin.shape[0]
-    NT = DH.Bmax[-1] + 1
-    Bsize = np.max(DH.Bmax - DH.Bmin + 1)
-
-    (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(NE, NB, Bsize)
+    # initialize the Green's function in block format with zero
+    # number of energy points
+    ne = energy.shape[0]
+    # number of blocks
+    nb = DH.Bmin.shape[0]
+    # length of the largest block
+    lb = np.max(DH.Bmax - DH.Bmin + 1)
+    # init
+    (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(ne, nb, lb)
 
     mkl.set_num_threads(mkl_threads)
 
-    rgf_M = generator_rgf_Hamiltonian(E, DH, SigR)
+    index_e = np.arange(ne)
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
 
-    M_par = np.ndarray(shape=(E.shape[0], ), dtype=object)
+    LBsize = bmax[0] - bmin[0] + 1
+    RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
 
-    for IE in range(NE):
-        SigL[IE] = (SigL[IE] - SigL[IE].T.conj()) / 2
-        SigG[IE] = (SigG[IE] - SigG[IE].T.conj()) / 2
+    SigRBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
+    SigRBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
+    SigLBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
+    SigLBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
+    SigGBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
+    SigGBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
+    condl = np.zeros((ne), dtype = np.float64)
+    condr = np.zeros((ne), dtype = np.float64)
 
-    index_e = np.arange(NE)
-    Bmin = DH.Bmin.copy()
-    Bmax = DH.Bmax.copy()
 
-    tic = time.perf_counter()
-    # Create a process pool with 4 workers
+    rgf_M_0 = generator_rgf_GF(energy, DH)
+    index_e = np.arange(ne)
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        # Use partial function application to bind the constant arguments to inv_matrices
-        # Pass in an additional argument to inv_matrices that contains the index of the matrices pair
-        #results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
-        executor.map(rgf_GF, rgf_M, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, DOS, nE,
-                     nP, idE, fL, fR, repeat(Bmin), repeat(Bmax), factor, index_e)
-    toc = time.perf_counter()
+        executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
+                     repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
+        results = executor.map(obc_GF_cpu, rgf_M_0,
+           SigR,
+           fL,
+           fR,
+           SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
+           repeat(bmin),
+           repeat(bmax),
+           repeat(NCpSC))
+        for idx, res in enumerate(results):
+            condl[idx] = res[0]
+            condr[idx] = res[1]
 
-    print("Total Time for parallel section: " + "%.2f" % (toc - tic) + " [s]")
+    rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
+    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(rgf_standaloneGF, rgf_M, rgf_H, SigL, SigG,\
+                     SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,\
+                     condl, condr,
+                     GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+                     DOS, nE, nP, idE, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
+                     repeat(use_dace), repeat(validate_dace))
+
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
-    # Remove individual peaks
-    # dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[0:NE-2, :] + 1)), axis=1), [0]))
-    # dDOSp = np.concatenate(([0], np.max(np.abs(DOS[1:NE-1, :] / (DOS[2:NE, :] + 1)), axis=1), [0]))
+    buf_recv_r = np.empty((DOS.shape[1]), dtype=np.complex128)
+    buf_send_r = np.empty((DOS.shape[1]), dtype=np.complex128)
+    buf_recv_l = np.empty((DOS.shape[1]), dtype=np.complex128)
+    buf_send_l = np.empty((DOS.shape[1]), dtype=np.complex128)
+    if size > 1:
+        if rank == 0:
+            buf_send_r[:] = DOS[ne - 1, :]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
+
+        elif rank == size - 1:
+            buf_send_l[:] = DOS[0, :]
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
+        else:
+            buf_send_r[:] = DOS[ne - 1, :]
+            buf_send_l[:] = DOS[0, :]
+            comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
+            comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
+
+    # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
+    if size == 1:
+        dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne - 1, :] / (DOS[0:ne - 2, :] + 1)),
+                                            axis=1), [np.max(np.abs(DOS[ne - 1, :] / (DOS[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(
+            ([np.max(np.abs(DOS[0, :] / (DOS[1, :] + 1)))], np.max(np.abs(DOS[1:ne - 1, :] / (DOS[2:ne, :] + 1)),
+                                                                   axis=1), [0]))
+    elif rank == 0:
+        dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne - 1, :] / (DOS[0:ne - 2, :] + 1)),
+                                            axis=1), [np.max(np.abs(DOS[ne - 1, :] / (DOS[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(DOS[0, :] / (DOS[1, :] + 1)))],
+                                np.max(np.abs(DOS[1:ne - 1, :] / (DOS[2:ne, :] + 1)),
+                                       axis=1), [np.max(np.abs(DOS[ne - 1, :] / (buf_recv_r + 1)))]))
+    elif rank == size - 1:
+        dDOSm = np.concatenate(([np.max(np.abs(DOS[0, :] / (buf_recv_l + 1)))],
+                                np.max(np.abs(DOS[1:ne - 1, :] / (DOS[0:ne - 2, :] + 1)),
+                                       axis=1), [np.max(np.abs(DOS[ne - 1, :] / (DOS[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(
+            ([np.max(np.abs(DOS[0, :] / (DOS[1, :] + 1)))], np.max(np.abs(DOS[1:ne - 1, :] / (DOS[2:ne, :] + 1)),
+                                                                   axis=1), [0]))
+    else:
+        dDOSm = np.concatenate(([np.max(np.abs(DOS[0, :] / (buf_recv_l + 1)))],
+                                np.max(np.abs(DOS[1:ne - 1, :] / (DOS[0:ne - 2, :] + 1)),
+                                       axis=1), [np.max(np.abs(DOS[ne - 1, :] / (DOS[ne - 2, :] + 1)))]))
+        dDOSp = np.concatenate(([np.max(np.abs(DOS[0, :] / (DOS[1, :] + 1)))],
+                                np.max(np.abs(DOS[1:ne - 1, :] / (DOS[2:ne, :] + 1)),
+                                       axis=1), [np.max(np.abs(DOS[ne - 1, :] / (buf_recv_r + 1)))]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
 
     for index in ind_zeros:
         GR_3D_E[index, :, :, :] = 0
@@ -90,9 +180,12 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_
         GLnn1_3D_E[index, :, :, :] = 0
         GG_3D_E[index, :, :, :] = 0
         GGnn1_3D_E[index, :, :, :] = 0
-
-    return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
-
+        
+    if(return_sigma_boundary):
+        return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E, SigRBL, SigRBR
+    else:   
+        return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
+    
 
 def calc_GF_pool_mpi(
     DH,
@@ -217,7 +310,7 @@ def calc_GF_pool_mpi(
                 SigRBR[idx, :, :] = res[1]
         else:
             executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                     DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(block_inv),
+                     DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
                      repeat(use_dace), repeat(validate_dace))
         #for res in results:
         #    assert res == 0
@@ -434,6 +527,10 @@ def calc_GF_mpi(
 def generator_rgf_Hamiltonian(E, DH, SigR):
     for i in range(E.shape[0]):
         yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
+
+def generator_rgf_GF(E, DH):
+    for i in range(E.shape[0]):
+        yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4']
 
 
 def generator_rgf_currentdens_Hamiltonian(E, DH):
