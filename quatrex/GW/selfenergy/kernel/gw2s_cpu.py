@@ -527,6 +527,126 @@ def gw2s_fft_mpi_cpu_PI_sr(
     return (sg, sl, sr_principale)
 
 
+@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:], f8[:], i8, i8[:,:], i4[:,:])",
+            parallel=True,
+            cache=True,
+            nogil=True,
+            error_model="numpy")
+def gw2s_fft_mpi_cpu_PI_sr_kpoint(
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128],
+    num_kpoints : npt.NDArray, energy: npt.NDArray[np.float64], rank: np.int32, disp: npt.NDArray[np.int32], count: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with fft on the cpu(see file description todo).
+        The inputs are the pre factor, the Green's Functions
+        and the screened interactions.
+        Takes into account the energy grid cutoff
+        MPI version, needs additionally the transposed as a input.
+        Includes k-points
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end (here it is 1j * dE/(2*pi))
+        ij2ji   (npt.NDArray[np.int32]): mapping to transposed matrix, (#orbital)
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+        gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
+        wg (npt.NDArray[np.complex128]): Greater screened interaction, (#orbital, #energy)
+        wl (npt.NDArray[np.complex128]): Lesser screened interaction,  (#orbital, #energy)
+        wr (npt.NDArray[np.complex128]): Retarded screened interaction,(#orbital, #energy)
+        wg_transposed (npt.NDArray[np.complex128]): Greater screened interaction, transposed in orbitals, (#orbital, #energy)
+        wl_transposed (npt.NDArray[np.complex128]): Lesser screened interaction, transposed in orbitals,  (#orbital, #energy)
+        num_kpoints : npt.NDArray[np.int32]
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater self energy  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser self energy   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded self energy (#orbital, #energy)
+                    ]
+    """
+    # nnz
+    no = gg.shape[0]
+    # number of kpoints
+    nkpts = np.prod(num_kpoints)
+    # number of energy points and
+    ne = gg.shape[1]/nkpts
+    ne2 = 2 * ne
+
+    # Create self-energy arrays.
+    sg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    sl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    sr_principale: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+        
+    for ki in range(nkpts):
+        for kip in range(nkpts):
+            
+            # find correct energy range that correspond to the right k-point.
+            # energy kpoint indices.
+            ek = ki * ne
+            ind_mat = np.arange(nkpts).reshape(num_kpoints)
+            mip = np.array(np.where(ind_mat == kip))
+            mi = np.array(np.where(ind_mat == ki))
+            md = tuple(mi-mip)
+            ekd = ind_mat[md] * ne
+
+            # todo possibility to avoid fft in global chain
+            # fft
+            gg_t = linalg_cpu.fft_numba(gg[:, ek:ek+ne], ne2, no)
+            gl_t = linalg_cpu.fft_numba(gl[:, ek:ek+ne], ne2, no)
+            wg_t = linalg_cpu.fft_numba(wg[:, ekd:ekd+ne], ne2, no)
+            wl_t = linalg_cpu.fft_numba(wl[:, ekd:ekd+ne], ne2, no)
+            wg_transposed_t = linalg_cpu.fft_numba(wg_transposed[:, ekd:ekd+ne], ne2, no)
+            wl_transposed_t = linalg_cpu.fft_numba(wl_transposed[:, ekd:ekd+ne], ne2, no)
+
+            # fft of energy reversed
+            rgg_t = linalg_cpu.fft_numba(linalg_cpu.flip(gg[:, ek:ek+ne]), ne2, no)
+            rgl_t = linalg_cpu.fft_numba(linalg_cpu.flip(gl[:, ek:ek+ne]), ne2, no)
+            
+            # multiply elementwise for sigma_1 the normal term
+            sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
+            sl_t_1 = linalg_cpu.elementmul(gl_t, wl_t)
+
+            # multiply elementwise the energy reversed with difference of transposed and energy zero
+            # see the README for derivation
+            sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(wl_transposed_t, wl_transposed[:, 0]))
+            sl_t_2 = linalg_cpu.elementmul(rgl_t, linalg_cpu.substract_special(wg_transposed_t, wg_transposed[:, 0]))
+
+            # ifft, cutoff and multiply with pre factor
+            sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
+            sl_1 = linalg_cpu.scalarmul_ifft_cutoff(sl_t_1, pre_factor, ne, no)
+            
+            sg_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no))
+            sl_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no))
+            
+            # Calculating the truncated fock part
+            # vh1d = np.asarray(vh[rows, cols].reshape(-1))
+            gl_density = np.imag(np.sum(gl[:, ek:ek+ne], axis=1))
+            rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0], 1)) * np.abs(pre_factor)
+            # rSigmaRF = np.tile(rSigmaRF, (1,ne))
+            rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
+
+            # Using the principal value integral method for yet another sigma_r
+            NE = len(energy)
+            dE = energy[1] - energy[0]
+            Evec = np.linspace(0, (NE-1)*dE, NE)
+
+            one_div_by_E = np.concatenate((-1.0/(Evec[-1:0:-1]), np.array([0.0], dtype = np.float64), 1/(Evec[1:]), np.array([1/(Evec[-1] + dE)], dtype = np.float64)))
+            one_div_by_E_t = np.fft.fft(one_div_by_E)
+
+            sgk = sg_1 + sg_2
+            slk = sl_1 + sl_2
+
+            SGmSL_t = linalg_cpu.fft_numba(1j*np.imag(sg-sl), ne2, no)
+            rSigmaR_t = np.multiply(SGmSL_t, one_div_by_E_t)
+            rSigmaR = linalg_cpu.scalarmul_ifft_cutoff(rSigmaR_t, pre_factor*2, ne2, no)[:, ne-1:-1].astype(np.complex128)
+
+            srk_principale = rSigmaR/2 + (1j*np.imag(sg-sl)/2).astype(np.complex128) + rSigmaRF
+            
+            sg[:, ek:ek+ne] += sgk
+            sl[:, ek:ek+ne] += slk
+            sr_principale[:, ek:ek+ne] += srk_principale
+    return (sg, sl, sr_principale)
+
 
 def gw2s_fft_mpi_cpu_3part_sr_bare(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],

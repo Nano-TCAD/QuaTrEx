@@ -81,8 +81,6 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
 
 def map_4D_to_sparse(V_atomic, DH):
     """
-    
-
     Parameters
     ----------
     V_atomic : 4-D cfloat array of coulomb elements

@@ -1,7 +1,7 @@
 """
 Example a sc-GW iteration with MPI+CUDA.
 With transposition through network.
-Applied to a (8-0)-CNT and 7 AGNR 
+Applied to a MoS2 supercell
 See the different GW step folders for more explanations.
 """
 import sys
@@ -50,9 +50,9 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/MoS2/wannier/orth/wannier"  # This won't work as is!
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "inas_wire/")
+    solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -124,11 +124,15 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4])
-    Vappl = 0.0
+    lattice_vectors = np.array([[3.18, 0.00, 0.00], [0.00, 5.5079216, 0.00], [0.00, 0.00, 17.19]])  # Would be nice to just read from somewhere 
+    no_orb = np.array([1, 1])
+    Vappl = 0.2
+    num_kpoints = np.array([1, 3, 1])  # Number of kpoints in x-, y-, and z-directions
+    Idx_k = np.arange(np.prod(num_kpoints)) # k-point index vector
     energy = np.linspace(-40, 30, 15000, endpoint = True, dtype = float) # Energy Vector
-    Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='Layer_Matrix.dat')
+    #Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
+    # Have to read the correct Hamiltonian object
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, num_kpoints, Vappl = Vappl, rank = rank, lattice_vectors=lattice_vectors)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -147,15 +151,17 @@ if __name__ == "__main__":
 
     ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    npt.NDArray[np.double]  = energy[1] - energy[0]
+    nkpts:      np.int32                = np.int32(np.prod(num_kpoints))
     ne:         np.int32                = np.int32(energy.shape[0])
     no:         np.int32                = np.int32(columns.shape[0])
     pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
     nao:        np.int64                = np.max(bmax) + 1
 
-    data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
+    # Combine k and E
+    data_shape = np.array([rows.shape[0], ne*nkpts], dtype=np.int32)
 
-    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns,
-                                                                    bmax, bmin)
+    # What are the maps?
+    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns, bmax, bmin)
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
@@ -164,11 +170,12 @@ if __name__ == "__main__":
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
+    # when do I use this? And why?
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
 
     if rank == 0:
         # print size of data
-        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
+        print(f"#Energy x #k-points: {data_shape[1]} #nnz: {data_shape[0]}")
 
 
     # computation parameters----------------------------------------------------
@@ -182,13 +189,13 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.85
+    energy_fl = -3.5
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
-    # relative permittivity
-    epsR = 1.0
+    # relative permittivity. Have to change this
+    epsR = 1.2
     # DFT Conduction Band Minimum
     ECmin = -3.524
 
@@ -202,7 +209,7 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    # create the corresponding factor to mask 
+    # create the corresponding factor to mask. What is this?
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
@@ -214,14 +221,20 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
-    vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
-    if args.bsr:
-        w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
-        vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
+    vh_single_R = hamiltonian_obj.construct_coulomb_matrix(epsR, eps0, e, diag=False, orb_uniform=True, lattice_vectors=lattice_vectors)
+    coulomb_obj = hamiltonian_obj.create_k_matrix(vh_single_R)
+    #Coulomb matrix have same format as Hamiltonian
+#    coulomb_obj = OMENHamClass.Hamiltonian(args.file_vh, no_orb, num_kpoints, rank=rank)
+#    serial_coul = pickle.dumps(coulomb_obj)
+#    broadcasted_coul = comm.bcast(serial_coul, root=0)
+#    coulomb_obj = pickle.loads(broadcasted_coul)
+    # vh = load_V_mpi(args.file_vh, rows, columns, comm, rank)/epsR
+    # vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
+    # if args.bsr:
+    #     w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
+    #     vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
 
-    # calculation of data distribution per rank---------------------------------
+     # calculation of data distribution per rank---------------------------------
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
@@ -233,11 +246,16 @@ if __name__ == "__main__":
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
 
-    # slice energy vector
-    energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
+    # slice k/energy vector. (I use same name even though a different one might be better)
+    energy_tiled = np.tile(energy, nkpts)
+    energy_loc = energy_tiled[disp[1, rank]:disp[1, rank] + count[1, rank]]
+    Idx_e = np.arange(ne*nkpts)
     Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
+    # Also need an k-index
+    Idx_k_repeated = np.repeat(Idx_k, ne)
+    Idx_k_loc = Idx_k_repeated[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
-    # split up the factor between the ranks
+    # split up the factor between the ranks. What is this factor
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
     factor_g_loc = factor_g[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
@@ -377,12 +395,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.9
+    mem_s = 0.8
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 250
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -435,7 +453,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/quatrex/results/CNT_flatband_sc_selfv_offdiag_epsR1_n64/'
+    folder = '/quatrex/results/CNT_biased_selfv_offdiag/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -447,19 +465,19 @@ if __name__ == "__main__":
 
         # initialize observables----------------------------------------------------
         # density of states
-        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
-        dosw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        dos = np.zeros(shape=(nkpts*ne, nb), dtype = np.complex128)
+        dosw = np.zeros(shape=(nkpts*ne, nb//nbc), dtype = np.complex128)
 
         # occupied states/unoccupied states
-        nE = np.zeros(shape=(ne,nb), dtype = np.complex128)
-        nP = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        nE = np.zeros(shape=(nkpts*ne, nb), dtype = np.complex128)
+        nP = np.zeros(shape=(nkpts*ne, nb), dtype = np.complex128)
 
         # occupied screening/unoccupied screening
-        nEw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
-        nPw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        nEw = np.zeros(shape=(nkpts*ne, nb//nbc), dtype = np.complex128)
+        nPw = np.zeros(shape=(nkpts*ne, nb//nbc), dtype = np.complex128)
 
         # current per energy
-        ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        ide = np.zeros(shape=(nkpts*ne, nb), dtype = np.complex128)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -469,10 +487,11 @@ if __name__ == "__main__":
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
+        # Only do this for the band gap point. But where is that?
+        ECmin_vec[i, iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[i, iter_num]-0.02,
                                                             energy,
                                                             hamiltonian_obj.Overlap['H_4'], 
-                                                            hamiltonian_obj.Hamiltonian['H_4'], 
+                                                            hamiltonian_obj.k_Hamiltonian[(0,0,0)], 
                                                             sr_h2g_vec,
                                                             sl_h2g_vec,
                                                             sg_h2g_vec,
@@ -487,22 +506,6 @@ if __name__ == "__main__":
                                                             count, 
                                                             disp, 
                                                             side = 'left')
-        # ECmin_vec[iter_num+1] = get_band_edge_mpi(ECmin_vec[iter_num],
-        #                                                     energy,
-        #                                                     hamiltonian_obj.Overlap['H_4'], 
-        #                                                     hamiltonian_obj.Hamiltonian['H_4'], 
-        #                                                     sr_h2g_vec,
-        #                                                     sr_ephn_h2g_vec, 
-        #                                                     rows, 
-        #                                                     columns, 
-        #                                                     bmin, 
-        #                                                     bmax, 
-        #                                                     comm, 
-        #                                                     rank, 
-        #                                                     size, 
-        #                                                     count, 
-        #                                                     disp, 
-        #                                                     side = 'left')
         if iter_num == 0:
             dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
             dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
@@ -515,17 +518,20 @@ if __name__ == "__main__":
 
         comm.Barrier()
 
+        if iter_num == 62:
+            mem_s = 0.4
+
         if rank == 0:
             pre_gf_time += time.perf_counter()
             print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
             gf_time = -time.perf_counter()
 
-        if iter_num == 50:
-            mem_s = 0.3
         # calculate the green's function at every rank------------------------------
+        # only include k-points for this pool version (because it seems like the default)
         if args.pool:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
                                                                 hamiltonian_obj,
+                                                                Idx_k_loc,
                                                                 energy_loc,
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
@@ -541,7 +547,7 @@ if __name__ == "__main__":
                                                                 comm,
                                                                 rank,
                                                                 size,
-                                                                homogenize = True,
+                                                                homogenize = False,
                                                                 mkl_threads = gf_mkl_threads,
                                                                 worker_num = gf_worker_threads,
                                                                 block_inv = args.block_inv,
@@ -653,12 +659,14 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+            # Use convolution here. Might extend to fft also
+            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_conv_cpu_kpoints(
                                                 pre_factor,
+                                                ij2ji,
                                                 gg_g2p,
                                                 gl_g2p,
                                                 gr_g2p,
-                                                gl_transposed_g2p)
+                                                num_kpoints)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -712,7 +720,7 @@ if __name__ == "__main__":
                                                                                                     pg_p2w_vec, pl_p2w_vec,
                                                                                                     pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    Idx_e_loc,   
+                                                                                                    Idx_e_loc,
                                                                                                     factor_w_loc,
                                                                                                     comm,
                                                                                                     rank,
@@ -745,26 +753,26 @@ if __name__ == "__main__":
             pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
             pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
 
-
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_kpoint(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
                                                                                                     pg_p2w_vec, 
                                                                                                     pl_p2w_vec,
                                                                                                     pr_p2w_vec, 
-                                                                                                    vh, 
+                                                                                                    coulomb_obj, 
                                                                                                     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], 
                                                                                                     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    Idx_e_loc,   
+                                                                                                    Idx_k_loc,
+                                                                                                    Idx_e_loc,
                                                                                                     factor_w_loc,
                                                                                                     comm,
                                                                                                     rank,
                                                                                                     size,
                                                                                                     nbc,
-                                                                                                    homogenize = True,
+                                                                                                    homogenize = False,
                                                                                                     mkl_threads = w_mkl_threads,
                                                                                                     worker_num = w_worker_threads,
                                                                                                     block_inv=args.block_inv,
@@ -882,7 +890,7 @@ if __name__ == "__main__":
             print(f"    Comm-2 time: {comm2_time:.3f} s", flush=True)
             gw2s_time = -time.perf_counter()
 
-    # tod optimize and not load two time green's function to gpu and do twice the fft
+        # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("gpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
                                                                 -pre_factor/2,
@@ -895,10 +903,11 @@ if __name__ == "__main__":
                                                                 wg_transposed_gw2s,
                                                                 wl_transposed_gw2s
                                                                 )
+        # I'm here with the k-points!
         elif args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
                                                                            wg_gw2s, wl_gw2s, wr_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+                                                                            wg_transposed_gw2s, wl_transposed_gw2s, num_kpoints, energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,

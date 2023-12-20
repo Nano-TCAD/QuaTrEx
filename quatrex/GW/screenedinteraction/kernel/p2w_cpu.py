@@ -17,16 +17,17 @@ from quatrex.OBC import obc_w_cpu
 import time
 
 
-def p2w_pool_mpi_cpu(
+def p2w_pool_mpi_cpu_kpoint(
     hamiltionian_obj: object,
     energy: npt.NDArray[np.float64],
     pg: npt.NDArray[np.complex128],
     pl: npt.NDArray[np.complex128],
     pr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
+    coulomb_obj: object,
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
+    idx_k: npt.NDArray[np.int32],
     idx_e: npt.NDArray[np.int32],
     factor: npt.NDArray[np.float64],
     comm,
@@ -50,7 +51,7 @@ def p2w_pool_mpi_cpu(
         pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
         pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
         pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
-        vh (npt.NDArray[np.complex128]): Vh sparse matrix
+        coulomb_obj (npt.NDArray[np.complex128]): Class containing the Coulomb integral information
         dosw (npt.NDArray[np.complex128]): density of state
         new (npt.NDArray[np.complex128]): density of state
         npw (npt.NDArray[np.complex128]): density of state
@@ -72,6 +73,7 @@ def p2w_pool_mpi_cpu(
     # number of energy points
     ne = energy.shape[0]
 
+    # Don't have to use the hamiltonian_obj if I use the coulomb_obj
     # number of blocks
     nb = hamiltionian_obj.Bmin.shape[0]
     # start and end index of each block in python indexing
@@ -116,15 +118,16 @@ def p2w_pool_mpi_cpu(
             pg[ie] = homogenize_matrix(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                        pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1], len(bmax), 'G')
 
+    # Here I need a generator as for the calculation of the retarded Green's function
+    rgf_Coul = generator_rgf_Coulomb(idx_k, coulomb_obj)
     # Create a process pool with num_worker workers
-
     ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
         #executor.map(
         results = executor.map(
                     rgf_W.rgf_w_opt,
-                    repeat(vh),
+                    rgf_Coul,
                     pg, pl, pr,
                     repeat(bmax), repeat(bmin),
                     wg_diag, wg_upper,
@@ -199,6 +202,12 @@ def p2w_pool_mpi_cpu(
         wg_upper[index, :, :, :] = 0
 
     return wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros
+
+
+def generator_rgf_Coulomb(idx_k, DH):
+    for ik in idx_k:
+        kp = tuple(DH.kp[ik])
+        yield DH.k_Hamiltonian[kp]
 
 
 def p2w_mpi_cpu(

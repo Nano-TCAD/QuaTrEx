@@ -50,6 +50,7 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_
 
     M_par = np.ndarray(shape=(E.shape[0], ), dtype=object)
 
+    # Why this?
     for IE in range(NE):
         SigL[IE] = (SigL[IE] - SigL[IE].T.conj()) / 2
         SigG[IE] = (SigG[IE] - SigG[IE].T.conj()) / 2
@@ -94,6 +95,7 @@ def calc_GF_pool(DH, E, SigR, SigL, SigG, Efl, Efr, Temp, DOS, nE, nP, idE, mkl_
 
 def calc_GF_pool_mpi(
     DH,
+    idx_k,
     energy: npt.NDArray[np.float64],
     SigR,
     SigL,
@@ -117,7 +119,7 @@ def calc_GF_pool_mpi(
     use_dace: bool = False,
     validate_dace: bool = False,
 ):
-
+    """Added k-point support"""
     kB = 1.38e-23
     q = 1.6022e-19
 
@@ -128,8 +130,8 @@ def calc_GF_pool_mpi(
     fR = vfermi(energy, Efr, UT)
 
     # initialize the Green's function in block format with zero
-    # number of energy points
-    ne = energy.shape[0]
+    # number of energy points TIMES number kpoints
+    ne = energy.shape[0]*DH.nkpts
     # number of blocks
     nb = DH.Bmin.shape[0]
     # length of the largest block
@@ -149,6 +151,7 @@ def calc_GF_pool_mpi(
         SigRBL = np.zeros((ne, LBsize, LBsize), dtype = np.complex128)
         SigRBR = np.zeros((ne, RBsize, RBsize), dtype = np.complex128)
 
+    # Why this?
     for ie in range(ne):
         #SigL[ie] = 1j * np.imag(SigL[ie])
         #SigG[ie] = 1j * np.imag(SigG[ie])
@@ -158,6 +161,7 @@ def calc_GF_pool_mpi(
         #SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
         SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
         #SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
+        # This should not be true
         if homogenize:
             SigR[ie] = homogenize_matrix(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigR[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'R')
@@ -166,8 +170,8 @@ def calc_GF_pool_mpi(
             SigG[ie] = homogenize_matrix(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
                                          SigG[ie][bmin[0] - 1:bmax[0], bmin[1] - 1:bmax[1]], len(bmax), 'G')
 
-    rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
-    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
+    rgf_M = generator_rgf_Hamiltonian(energy, idx_k, DH, SigR)
+    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, idx_k, DH)
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
@@ -193,7 +197,7 @@ def calc_GF_pool_mpi(
         #for res in results:
         #    assert res == 0
 
-    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
+    # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL. Not sure these tests hold for kpoints
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
@@ -216,6 +220,7 @@ def calc_GF_pool_mpi(
             comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
 
     # Remove individual peaks (To-Do: improve this part by sending boundary elements to the next process)
+    # What is the individual peaks?
     if size == 1:
         dDOSm = np.concatenate(([0], np.max(np.abs(DOS[1:ne - 1, :] / (DOS[0:ne - 2, :] + 1)),
                                             axis=1), [np.max(np.abs(DOS[ne - 1, :] / (DOS[ne - 2, :] + 1)))]))
@@ -402,14 +407,16 @@ def calc_GF_mpi(
     return GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E
 
 
-def generator_rgf_Hamiltonian(E, DH, SigR):
-    for i in range(E.shape[0]):
-        yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
+def generator_rgf_Hamiltonian(E, idx_k, DH, SigR):
+    for i, ik in enumerate(idx_k):
+        kp = tuple(DH.kp[ik])
+        yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.k_Hamiltonian[kp] - SigR[i]
 
 
-def generator_rgf_currentdens_Hamiltonian(E, DH):
-    for i in range(E.shape[0]):
-        yield DH.Hamiltonian['H_4'] - (E[i]) * DH.Overlap['H_4']
+def generator_rgf_currentdens_Hamiltonian(E, idx_k, DH):
+    for i, ik in enumerate(idx_k):
+        kp = tuple(DH.kp[ik])
+        yield DH.k_Hamiltonian[kp] - (E[i]) * DH.Overlap['H_4']
 
 
 def assemble_full_G_smoothing(G, factor, G_block, Gnn1_block, Bmin, Bmax, format='sparse', type='R'):

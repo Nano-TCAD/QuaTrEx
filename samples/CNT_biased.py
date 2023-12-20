@@ -126,8 +126,10 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
     Vappl = 0.2
+    num_kpoints = np.array([1, 3, 1]) # Number of kpoints in x-, y-, and z-directions
     energy = np.linspace(-40, 30, 15000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
+    # Have to read the correct Hamiltonian object
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -147,15 +149,17 @@ if __name__ == "__main__":
 
     ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    npt.NDArray[np.double]  = energy[1] - energy[0]
+    nkpts:      np.int32                = np.int32(np.prod(num_kpoints))
     ne:         np.int32                = np.int32(energy.shape[0])
     no:         np.int32                = np.int32(columns.shape[0])
     pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
     nao:        np.int64                = np.max(bmax) + 1
 
-    data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
+    # Combine k and E
+    data_shape = np.array([rows.shape[0], ne*nkpts], dtype=np.int32)
 
-    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns,
-                                                                    bmax, bmin)
+    # What are the maps?
+    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns, bmax, bmin)
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
@@ -164,11 +168,12 @@ if __name__ == "__main__":
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
+    # when do I use this? And why?
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
 
     if rank == 0:
         # print size of data
-        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
+        print(f"#k-points: {data_shape[2]}#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
 
 
     # computation parameters----------------------------------------------------
@@ -187,7 +192,7 @@ if __name__ == "__main__":
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
-    # relative permittivity
+    # relative permittivity. Have to change this
     epsR = 1.2
     # DFT Conduction Band Minimum
     ECmin = -3.524
@@ -202,7 +207,7 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    # create the corresponding factor to mask 
+    # create the corresponding factor to mask. What is this?
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
@@ -237,7 +242,7 @@ if __name__ == "__main__":
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
     Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
-    # split up the factor between the ranks
+    # split up the factor between the ranks. What is this factor
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
     factor_g_loc = factor_g[disp[1, rank]:disp[1, rank] + count[1, rank]]
 

@@ -25,7 +25,7 @@ def matlab_fread(fid, nelements, dtype):
     return data_array
 
 
-#Hamiltonians from binary files, contains all the OMEN block properties.
+# Hamiltonians from binary files, contains all the OMEN block properties.
 class Hamiltonian:
     # Class variables
     LM = None
@@ -45,11 +45,13 @@ class Hamiltonian:
     NA = None
     NB = None
     TB = None
+
+    kp = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', rank = 0):
+    def __init__(self,sim_folder, no_orb, Nk, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', rank = 0):
         if(not rank):
-            self.no_orb = no_orb
+            self.no_orb = no_orb # Number orbitals per atom type
             self.sim_folder = sim_folder
             self.blocks = glob.glob(self.sim_folder + '/H*.bin')
             self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
@@ -89,11 +91,17 @@ class Hamiltonian:
             self.hermitean = self.check_hermitivity(tol=1e-6)
             #self.hermitean = True
 
+            # Set kpoints
+            self.kp = self.k_points(Nk)
+            self.nkpts = np.prod(Nk)
+            # create k-dependent Hamiltonian
+            self.k_Hamiltonian = self.create_k_matrix()
+
             #Read Block Properties
             self.LM = read_file_to_float_ndarray(sim_folder + layer_matrix)
-            self.NA = self.LM.shape[0]
-            self.NB = self.LM.shape[1] - 4
-            self.TB = np.max(self.no_orb)
+            self.NA = self.LM.shape[0]  # Number of atoms
+            self.NB = self.LM.shape[1] - 4 # Number of Neighboors
+            self.TB = np.max(self.no_orb)  # Max number of orbitals per atom
             self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
             self.Smin = self.Smin.reshape((self.Smin.shape[0], )).astype(int)
             self.prepare_block_properties()
@@ -114,9 +122,9 @@ class Hamiltonian:
 
         fid = open(fname, 'rb')
 
-        #Read the Header head[0]: Contains the format 0 if indexing starts at 0, 1 if indexing starts at 1
+        #Read the Header head[2]: Contains the format 0 if indexing starts at 0, 1 if indexing starts at 1
         #                head[1]: number of non-zero elements
-        #                head[2]: matrix size
+        #                head[0]: matrix size
         head = matlab_fread(fid, 3, 'double')
 
         #Read the data and reshape it
@@ -259,6 +267,7 @@ class Hamiltonian:
 
         self.NBlock = self.Smin[0]
         self.Bmin = self.orb_per_at[self.Smin[1:-1] - 1]
+        # Shouldn't Bmin and Bmax match? 
         self.Bmax = np.append(self.Bmin[1:] - 1, np.max(self.orb_per_at) - 1).astype(int)
 
     def map_neighbor_indices(self, ):
@@ -446,3 +455,272 @@ class Hamiltonian:
             self.Hamiltonian['H_4'][indi[IP],
                                     indj[IP]] += (Vpot[indi[IP]] + Vpot[indj[IP]]) * self.Overlap['H_4'][indi[IP],
                                                                                                          indj[IP]] / 2.0
+ 
+    def k_points(self, Nk=None, mode='grid'):
+        """
+        Creates the k-point vector.
+
+        The grid always includes the origin (gamma-point).
+
+        Parameters
+        ----------
+        Nk : ndarray
+            number of k-points. Nk[0]-transport, Nk[1]-confined, Nk[2]-periodic
+        mode : str, optional
+            k-point mode (either 'line' or 'grid'). Line could be used for a bandstructure calculation
+
+        Returns
+        -------
+        k : ndarray
+            k-points
+        """
+
+        if Nk is None:
+            Nk = self.Nk
+
+        if mode == 'grid':
+            kx = (np.arange(Nk[0]) - int(Nk[0]/2)) / Nk[0]
+            ky = (np.arange(Nk[1]) - int(Nk[1]/2)) / Nk[1]
+            kz = (np.arange(Nk[2]) - int(Nk[2]/2)) / Nk[2]
+            k_mesh = np.meshgrid(kx, ky, kz, indexing='ij')
+            k = np.zeros((np.prod(Nk), 3))
+            k[:, 0] = k_mesh[0].ravel()
+            k[:, 1] = k_mesh[1].ravel()
+            k[:, 2] = k_mesh[2].ravel()
+        else:
+            raise ValueError(
+                'Only "grid" is yet a valid mode. "line" is comming...')
+        return k
+
+    def create_k_matrix(self, int_mat=None, kp=None):
+        """
+        Constructs the full matrix from an interaction matrix. Here, it only works for
+        H_3, H_4, and H_5.
+
+        ## Parameters
+        int_mat: dict
+            interactions (Hamiltonian or Coulomb)
+        kp: ndarray
+            k-points
+
+        ## Returns
+        Mk: dict
+            k-dependent Hamiltonian/Coulomb integral
+        """
+
+        if int_mat is None:
+            int_mat = self.Hamiltonian
+        if kp is None:
+            kp = self.kp
+
+        Nk = kp.shape[0]
+        Mk = {}
+
+        # Tile the matrix with the appropriate blocks of Hblocks
+        for ik in range(Nk):
+            k_key = tuple(kp[ik])
+            for key in int_mat.keys():
+                if key == 'H_3':
+                    rp = np.array([0, -1, 0])
+                elif key == 'H_4':
+                    rp = np.array([0, 0, 0])
+                elif key == 'H_5':
+                    rp = np.array([0, 1, 0])
+                else:
+                    raise KeyError(f'{key} is not yet a valid key')
+                if k_key not in Mk.keys():
+                    Mk[k_key] = np.exp(2 * np.pi * 1j * rp @ kp[ik]) * int_mat[key]
+                else:
+                    Mk[k_key] += np.exp(2 * np.pi * 1j * np.array(rp) @ kp[ik]) * int_mat[key]
+        return Mk
+
+    def construct_coulomb_matrix(self, eps_r, eps0, e, diag=False, orb_uniform=False, lattice_vectors=None, int_mat=None):
+        """
+        Assembles the Coulomb matrix. 
+
+        Parameters
+        ----------
+        eps_r : float
+            Relative Dielectric permittivity
+        eps0 : float
+            Dielectric permittivity of vacuum
+        e   : float
+            Elementary charge
+        lattice_vectors : ndarray, optional
+            Lattice vectors. The default is None.
+        int_mat : dict, optional
+            Coulomb matrix elements. The default is None.
+        """
+        if lattice_vectors is not None:
+            self.lattice_vectors = lattice_vectors
+        else:
+            lattice_vectors = np.eye(3)
+            print('No lattice vectors defined.')
+
+        # This is for knowing how to shift. Not very nice
+        if int_mat is None:
+            int_mat = self.Hamiltonian
+
+        MR = {}
+
+        # Tile the matrix with the appropriate blocks 
+        for key in int_mat.keys():
+            if key == 'H_3':
+                shift = np.array([0, -1, 0]) @ lattice_vectors
+            elif key == 'H_4':
+                shift = np.array([0, 0, 0]) @ lattice_vectors
+            elif key == 'H_5':
+                shift = np.array([0, 1, 0]) @ lattice_vectors
+            else:
+                raise KeyError(f'{key} is not yet a valid key')
+            MR[key] = self.calculate_coulomb_matrix_elements(eps_r, eps0, e, shift, diag, orb_uniform)
+        return MR
+
+    def calculate_coulomb_matrix_elements(self, eps_r, eps0, e, shift=None, diag=False, orb_uniform=False):
+        """
+        This function computes a placeholder for the 2-index Coulomb matrix. It
+        assumes that the atomic orbitals are point charges and computes their
+        coulomb repulsion based on their mutual distance. The coulomb matrix
+        should be computed using the localized basis on a spacial grid. The interaction
+        length is the same as for the Hamiltonian.
+
+        Note:
+        Need to read the lattice vectors from somewhere! Now it is passed as an argument.
+
+        The way the shifts are made is not great. It reads it from the Hamiltonian dictionary.
+
+        Parameters
+        ----------
+        epsR : float
+            Relative Dielectric permittivity
+        eps0 : float
+            Dielectric permittivity of vacuum
+        e   : float
+            Elementary charge
+            
+        Returns
+        -------
+        V_Col : scipy.sparse.csc matix of type cfloat, same dimension as
+        Hamiltonian Matrix in Hamiltonian class. (n_orbs x n_orbs)
+            The coulomb Matrix
+
+        """
+        if shift is None:
+            shift = np.array([0, 0, 0])
+
+        factor = e / (4 * np.pi * eps0 * eps_r) * 1e9
+        NA = self.NA  # Number of atoms
+        NB = self.NB  # Number of neighbouring atoms
+        TB = self.TB  # Number of orbitals per atom (only max valueG)
+        V_atomic = np.zeros((NA, NB + 1, TB, TB), dtype=np.cfloat)
+        SF = np.outer(np.arange(1, -0.1, -0.1), np.arange(1, -0.1, -0.1))
+        Vmax = float(0.0)
+        LM = self.LM  # Layer matrix
+ 
+        for ia in range(NA):
+            orbA = self.orb_per_at[ia + 1] - self.orb_per_at[ia]
+            for ib in range(NB):
+                if LM[ia, 4 + ib] > 0:  # or not equal to 0
+                    neigh = int(LM[ia, 4 + ib] - 1)
+                    orbB = self.orb_per_at[neigh + 1] - self.orb_per_at[neigh]
+
+                    dist = np.linalg.norm(LM[neigh, 0:3] - LM[ia, 0:3] + shift)
+
+                    if abs(dist) < 1e-24:
+                        print(ia)
+                        print(LM[ia, 4 + ib])
+                        print(dist)
+
+                    Vact = factor / dist
+
+                    if Vact > Vmax:
+                        Vmax = Vact
+                    
+                    if (orb_uniform):
+                        V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.cfloat)
+                    else:
+                        V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * SF[0:orbA, 0:orbB]
+        
+        # This second loop is for orbitals belonging to the same atom.
+        for ia in range(NA):
+            orbA = self.orb_per_at[ia+1] - self.orb_per_at[ia]
+            if diag:
+                if orb_uniform:
+                    #V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat) - np.eye(int(orbA), dtype = np.cfloat))
+                    V_atomic[ia, 0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat))
+                else:
+                    V_atomic[ia, 0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
+            elif orbA > 1:
+                if orb_uniform:
+                    V_atomic[ia, 0, 0:orbA, 0:orbA] = Vmax * (np.ones((orbA, orbA), dtype = np.cfloat) - np.eye(int(orbA), dtype = np.cfloat))
+                else:
+                    pass #not changing this as it will break the test unfortunately.   
+            #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
+
+        return map_4D_to_sparse(V_atomic, DH)
+
+def map_4D_to_sparse(V_atomic, DH):
+    """
+    Parameters
+    ----------
+    V_atomic : 4-D cfloat array of coulomb elements
+        First dimension specifies atom index, second dimension specifies the
+        selected neighbor. The remaining two dimensions are of size of the TB order 
+        (maximum number of orbitals over atoms in the structure), this means
+        one can select all possible orbital combinations (for each atom and its
+                                                          selected neighbor)
+    DH : Device_Hamiltonian
+        OMEN Hamiltonian Class with Block Properties
+
+    Returns
+    -------
+    V_Col : scipy.sparse.csc matix of type complex128, same dimension as
+    Hamiltonian Matrix in Hamiltonian class. (n_orbs x n_orbs)
+        The coulomb Matrix
+
+    """
+    indI = np.zeros((DH.NA * (DH.NB + 1) * DH.TB * DH.TB, ), dtype=int)
+    indJ = np.zeros((DH.NA * (DH.NB + 1) * DH.TB * DH.TB, ), dtype=int)
+    NNZ = np.zeros((DH.NA * (DH.NB + 1) * DH.TB * DH.TB, ), dtype=complex)
+
+    ind = 0
+
+    for IA in range(DH.NA):
+
+        indR = DH.orb_per_at[IA]
+        orbA = DH.orb_per_at[IA + 1] - DH.orb_per_at[IA]
+
+        for IB in range(DH.NB + 1):
+
+            add_element = 1
+
+            if IB == 0:
+                indC = indR
+                orbB = orbA
+
+            else:
+                if DH.LM[IA, 4 + IB - 1] > 0:
+
+                    neigh = int(DH.LM[IA, 4 + IB - 1] - 1)
+
+                    indC = DH.orb_per_at[neigh]
+                    orbB = DH.orb_per_at[neigh + 1] - DH.orb_per_at[neigh]
+
+                else:
+                    add_element = 0
+
+            if add_element:
+                indI[ind:ind + orbA * orbB] = np.reshape(np.outer(np.ones((1, orbB)), np.arange(indR, indR + orbA)),
+                                                         (1, orbA * orbB))
+                indJ[ind:ind + orbA * orbB] = np.reshape(np.outer(np.arange(indC, indC + orbB), np.ones((orbA, 1))),
+                                                         (1, orbA * orbB))
+                NNZ[ind:ind + orbA * orbB] = np.reshape(np.squeeze(V_atomic[IA, IB, 0:orbA, 0:orbB]), (1, orbA * orbB))
+
+                ind = ind + orbA * orbB
+
+    sparse_shape = np.max(DH.orb_per_at) - DH.orb_per_at[0]
+    indI_sparse = indI[:ind] - 1
+    indJ_sparse = indJ[:ind] - 1
+    NNZ_sparse = NNZ[:ind]
+
+    return sparse.csr_matrix((NNZ_sparse, (indI_sparse, indJ_sparse)), shape=(sparse_shape, sparse_shape))
