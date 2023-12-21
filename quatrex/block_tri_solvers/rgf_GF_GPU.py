@@ -97,12 +97,12 @@ def rgf_standaloneGF_GPU(
         SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
 
-        gR[IB, 0:NI, 0:NI] = np.linalg.inv(M_c \
-                            - M_r \
-                            @ gR[IB+1, 0:NP, 0:NP] \
-                            @ M_d)#######
+        gR[IB, :, 0:NI, 0:NI] = np.linalg.inv(ham_diag[IB, :, 0:NN, 0:NN] \
+                            - ham_upper[IB, :, 0:NI, 0:NP] \
+                            @ gR[IB+1, :, 0:NP, 0:NP] \
+                            @ ham_lower[IB, :, :NP, 0:NI])#######
         # AL, What is this? Handling off-diagonal sigma elements?
-        AL = M_r \
+        AL = ham_upper[IB, :, 0:NI, 0:NP] \
             @ gR[IB+1, 0:NP, 0:NP] \
             @ SigL_l
         
