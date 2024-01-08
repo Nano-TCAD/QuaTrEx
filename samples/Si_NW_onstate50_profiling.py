@@ -37,8 +37,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
-        from quatrex.GW.polarization.kernel import g2p_gpu
-        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+        from quatrex.GreensFunction import calc_GF_pool_GPU
     except ImportError:
         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -128,7 +127,7 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-4.695, 1.391, 1000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -178,10 +177,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 6
+    w_worker_threads = 3
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 6
+    gf_mkl_threads_gpu = 1
+    gf_worker_threads = 3
 
     # physical parameter -----------
 
@@ -375,6 +375,16 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    # Transform the hamiltonian to a block tri-diagonal format
+    if args.type in ("gpu"):
+        nb = hamiltonian_obj.Bmin.shape[0]
+        lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+        ne_loc = energy_loc.shape[0]
+        blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
@@ -391,7 +401,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 60
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -454,7 +464,7 @@ if __name__ == "__main__":
             iter_time = -time.perf_counter()
             pre_gf_time = -time.perf_counter()
             print(f"Iteration {iter_num+1} of {max_iter}:", flush=True)
-            print(f" norm of sg_h2g: {np.linalg.norm(sg_h2g):.3e}", flush=True)
+            #print(f" norm of sg_h2g: {np.linalg.norm(sg_h2g):.3e}", flush=True)
 
         # initialize observables----------------------------------------------------
         # density of states
@@ -522,59 +532,73 @@ if __name__ == "__main__":
             gf_time = -time.perf_counter()
 
         # calculate the green's function at every rank------------------------------
-        if args.pool:
-            _, _, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
-                                                                hamiltonian_obj,
-                                                                energy_loc,
-                                                                sr_h2g_vec,
-                                                                sl_h2g_vec,
-                                                                sg_h2g_vec,
-                                                                sr_ephn_h2g_vec,
-                                                                sl_ephn_h2g_vec,
-                                                                sg_ephn_h2g_vec,
-                                                                energy_fl,
-                                                                energy_fr,
-                                                                temp,
-                                                                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                factor_g_loc,
-                                                                comm,
-                                                                rank,
-                                                                size,
-                                                                homogenize = False,
-                                                                mkl_threads = gf_mkl_threads,
-                                                                worker_num = gf_worker_threads,
-                                                                NCpSC = NCpSC,
-                                                                block_inv = args.block_inv,
-                                                                use_dace=args.dace,
-                                                                validate_dace=args.validate_dace,
-                                                            )
-        else:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_mpi(
-                                                                hamiltonian_obj,   
-                                                                energy_loc,
-                                                                sr_h2g_vec,
-                                                                sl_h2g_vec,
-                                                                sg_h2g_vec,
-                                                                energy_fl,
-                                                                energy_fr,
-                                                                temp,
-                                                                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                factor_g_loc,
-                                                                comm,
-                                                                rank,
-                                                                size,
-                                                                gf_mkl_threads,
-                                                                1,
-                                                                block_inv = args.block_inv,
-                                                                use_dace=args.dace,
-                                                                validate_dace=args.validate_dace
-                                                            )
+        if args.type in ("cpu"):
+            _, _, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi_split(
+                hamiltonian_obj,
+                energy_loc,
+                sr_h2g_vec,
+                sl_h2g_vec,
+                sg_h2g_vec,
+                sr_ephn_h2g_vec,
+                sl_ephn_h2g_vec,
+                sg_ephn_h2g_vec,
+                energy_fl,
+                energy_fr,
+                temp,
+                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                factor_g_loc,
+                comm,
+                rank,
+                size,
+                homogenize=False,
+                return_sigma_boundary=False,
+                NCpSC=NCpSC,
+                mkl_threads=gf_mkl_threads,
+                worker_num=gf_worker_threads)
+        elif args.type in ("gpu"):
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool_GPU.calc_GF_pool_mpi_split(
+                hamiltonian_obj,
+                blocked_hamiltonian_diag,
+                blocked_hamiltonian_upper,
+                blocked_hamiltonian_lower,
+                energy_loc,
+                sr_h2g_vec,
+                sl_h2g_vec,
+                sg_h2g_vec,
+                sr_ephn_h2g_vec,
+                sl_ephn_h2g_vec,
+                sg_ephn_h2g_vec,
+                sr_h2g,
+                sl_h2g,
+                sg_h2g,
+                sr_phn,
+                sl_phn,
+                sg_phn,
+                map_diag,
+                map_upper,
+                map_lower,
+                rows,
+                columns,
+                ij2ji,
+                energy_fl,
+                energy_fr,
+                temp,
+                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                factor_g_loc,
+                comm,
+                rank,
+                size,
+                homogenize=False,
+                return_sigma_boundary=False,
+                NCpSC=NCpSC,
+                mkl_threads=gf_mkl_threads_gpu,
+                worker_num=gf_worker_threads)
         
         comm.Barrier()
 
@@ -650,14 +674,7 @@ if __name__ == "__main__":
             g2p_time = -time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
-        if args.type in ("gpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(
-                                                pre_factor,
-                                                gg_g2p,
-                                                gl_g2p,
-                                                None,
-                                                gl_transposed_g2p)
-        elif args.type in ("cpu"):
+        if args.type in ("gpu") or args.type in ("cpu"):
             pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
                                                 gg_g2p,
@@ -808,7 +825,7 @@ if __name__ == "__main__":
         if rank == 0:
             p2w_time += time.perf_counter()
             print(f"    P2W time: {p2w_time:.3f} s", flush=True)
-            print(f" ind_zeros: {ind_zeros}", flush=True)
+            print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
             pre_comm2_time = -time.perf_counter()
 
         memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
@@ -873,7 +890,7 @@ if __name__ == "__main__":
         if rank == 0:
             pre_comm2_time += time.perf_counter()
             print(f"    Pre-Comm-2 time: {pre_comm2_time:.3f} s", flush=True)
-            print(f" Norm of wg_p2w: {np.linalg.norm(wg_p2w):.3e}", flush=True)
+            #print(f" Norm of wg_p2w: {np.linalg.norm(wg_p2w):.3e}", flush=True)
             comm2_time = -time.perf_counter()
         
 
@@ -892,19 +909,7 @@ if __name__ == "__main__":
             gw2s_time = -time.perf_counter()
 
     # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("gpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(
-                                                                -pre_factor/2,
-                                                                gg_g2p,
-                                                                gl_g2p,
-                                                                None,
-                                                                wg_gw2s,
-                                                                wl_gw2s,
-                                                                None,
-                                                                wg_transposed_gw2s,
-                                                                wl_transposed_gw2s
-                                                                )
-        elif args.type in ("cpu"):
+        if args.type in ("gpu") or args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, 
                                                                            wg_gw2s, wl_gw2s, 
                                                                             wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)

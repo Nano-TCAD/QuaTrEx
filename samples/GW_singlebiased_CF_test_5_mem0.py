@@ -35,8 +35,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
-        from quatrex.GW.polarization.kernel import g2p_gpu
-        from quatrex.GW.selfenergy.kernel import gw2s_gpu
+        from quatrex.GreensFunction import calc_GF_pool_GPU
     except ImportError:
         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -60,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu", choices=["cpu", "gpu"], required=False)
+    parser.add_argument("-t", "--type", default="gpu", choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False, type=bool, required=False)
     parser.add_argument("-p", "--pool", default=True, type=bool, required=False)
     args = parser.parse_args()
@@ -79,6 +78,7 @@ if __name__ == "__main__":
     Vappl = 0.4
     energy = np.linspace(-10.0, 5.0, 376, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
+    NCpSC = 1 
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat')
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     w_worker_threads = 8
     # set number of threads for the h2g step
     gf_mkl_threads = 1
+    gf_mkl_threads_gpu = 1
     gf_worker_threads = 8
 
     # physical parameter -----------
@@ -193,6 +194,7 @@ if __name__ == "__main__":
     assert np.allclose(V_sparse.toarray(), vh.toarray())
 
     # calculation of data distribution per rank---------------------------------
+    # Big To-Do: Make the distrubution fair: at the moment it could be that the last process has up to 2x more data than the rest.
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
@@ -332,6 +334,16 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    # Transform the hamiltonian to a block tri-diagonal format
+    if args.type in ("gpu"):
+        nb = hamiltonian_obj.Bmin.shape[0]
+        lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+        ne_loc = energy_loc.shape[0]
+        blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
@@ -424,8 +436,8 @@ if __name__ == "__main__":
         EFR_vec[iter_num + 1] = energy_fr
         
         # calculate the green's function at every rank------------------------------
-        if args.pool:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi(
+        if args.type in ("cpu"):
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi_split(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -447,33 +459,50 @@ if __name__ == "__main__":
                 size,
                 homogenize=False,
                 return_sigma_boundary=True,
+                NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
-        else:
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_mpi(
-                hamiltonian_obj, energy_loc, sr_h2g_vec, sl_h2g_vec, sg_h2g_vec, energy_fl, energy_fr, temp,
-                dos[disp[1, rank]:disp[1, rank] + count[1, rank]], nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nP[disp[1, rank]:disp[1, rank] + count[1, rank]], ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                factor_g_loc, comm, rank, size, gf_mkl_threads, 1)
-
-        # ECmin_old = get_band_edge_mpi(ECmin_vec[iter_num],
-        #                                             energy,
-        #                                             hamiltonian_obj.Overlap['H_4'],
-        #                                             hamiltonian_obj.Hamiltonian['H_4'],
-        #                                             sr_h2g_vec,
-        #                                             sr_ephn_h2g_vec,
-        #                                             rows,
-        #                                             columns,
-        #                                             bmin,
-        #                                             bmax,
-        #                                             comm,
-        #                                             rank,
-        #                                             size,
-        #                                             count,
-        #                                             disp,
-        #                                             side='left')
-                
-
+        elif args.type in ("gpu"):
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool_GPU.calc_GF_pool_mpi_split(
+                hamiltonian_obj,
+                blocked_hamiltonian_diag,
+                blocked_hamiltonian_upper,
+                blocked_hamiltonian_lower,
+                energy_loc,
+                sr_h2g_vec,
+                sl_h2g_vec,
+                sg_h2g_vec,
+                sr_ephn_h2g_vec,
+                sl_ephn_h2g_vec,
+                sg_ephn_h2g_vec,
+                sr_h2g,
+                sl_h2g,
+                sg_h2g,
+                sr_phn,
+                sl_phn,
+                sg_phn,
+                map_diag,
+                map_upper,
+                map_lower,
+                rows,
+                columns,
+                ij2ji,
+                energy_fl,
+                energy_fr,
+                temp,
+                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                factor_g_loc,
+                comm,
+                rank,
+                size,
+                homogenize=False,
+                return_sigma_boundary=True,
+                NCpSC=NCpSC,
+                mkl_threads=gf_mkl_threads_gpu,
+                worker_num=gf_worker_threads)
 
         # lower diagonal blocks from physics identity
         gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
@@ -553,13 +582,9 @@ if __name__ == "__main__":
             print("Green's function calculated", flush = True)
 
         # calculate the polarization at every rank----------------------------------
-        if args.type in ("gpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(pre_factor, gg_g2p, gl_g2p, gr_g2p, gl_transposed_g2p)
-        elif args.type in ("cpu"):
+        if args.type in ("gpu") or args.type in ("cpu"):
             pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, gg_g2p, gl_g2p, gr_g2p,
                                                                      gl_transposed_g2p)
-            # pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_bare(pre_factor, gg_g2p, gl_g2p, gr_g2p,
-            #                                                          gl_transposed_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -675,24 +700,10 @@ if __name__ == "__main__":
             print("Finish p2w", flush=True)
 
         # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("gpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_3part_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
-                                                                           wg_gw2s, wl_gw2s, wr_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s)
-        elif args.type in ("cpu"):
-            vh1d = np.asarray(vh[rows, columns].reshape(-1))
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr_bare(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
-            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
-            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, V_sparse, energy, rows, columns, rank, disp, count)
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr_bare(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
-            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
-            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, V_sparse, energy, rows, columns, rank, disp, count)
+        if args.type in ("gpu") or args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
-            #                                                                wg_gw2s, wl_gw2s, wr_gw2s,
-            #                                                                wg_transposed_gw2s, wl_transposed_gw2s)
         else:
             raise ValueError("Argument error, input type not possible")
 

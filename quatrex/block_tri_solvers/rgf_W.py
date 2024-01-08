@@ -1187,8 +1187,6 @@ def rgf_w_opt(
         _d:  down
         _u:  up
         """
-        if(ie == 5):
-            print("test")
 
 
         for idx_ib in range(1, nb_mm):

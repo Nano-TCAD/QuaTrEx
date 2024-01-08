@@ -744,8 +744,9 @@ def sparse2block_energy_alt(map_diag: np.ndarray, map_upper: np.ndarray, map_low
     return blocks_diag, blocks_upper, blocks_lower
 
 def sparse2block_energy_forbatchedblockwise(map_diag: np.ndarray, map_upper: np.ndarray, map_lower: np.ndarray,
-                            x_s: npt.NDArray[np.complex128], bmax,
-                            bmin) -> typing.Tuple[np.ndarray, np.ndarray, np.ndarray]:
+                            x_s: npt.NDArray[np.complex128], blocks_diag: npt.NDArray[np.complex128], blocks_upper: npt.NDArray[np.complex128],  \
+                                 blocks_lower: npt.NDArray[np.complex128],  bmax,
+                            bmin):
     """Applies the map to get from sparse to block form
        Alternative map created by map_block2sparse_alt
        The other form does not exist, because 
@@ -756,6 +757,7 @@ def sparse2block_energy_forbatchedblockwise(map_diag: np.ndarray, map_upper: np.
         map_upper (np.ndarray): Upper Diagonal map, 4 x number of non zeros contained in upper (3*x_upper indexes and last for output)
         map_lower (np.ndarray): Lower Diagonal map, 4 x number of non zeros contained in lower (3*x_lower indexes and last for output)
         x_s (npt.NDArray[np.complex128]): 2D array (nnz,#energy)
+        blocks_diag (npt.NDArray[np.complex128]): 3D array (nb,ne,bsize,bsize)
         bmax (np.ndarray): vector of end indexes of blocks
         bmin (np.ndarray): vector of start indexes of blocks
 
@@ -770,16 +772,16 @@ def sparse2block_energy_forbatchedblockwise(map_diag: np.ndarray, map_upper: np.
     assert nb == bmax.size
     assert nb == bmin.size
     # create buffer to write
-    blocks_diag = [np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
-    blocks_upper = [
-        np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
-    ]
-    blocks_lower = [
-        np.empty((ne, bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
-    ]
-    blocks_diag = np.array(blocks_diag, dtype=np.complex128)
-    blocks_upper = np.array(blocks_upper, dtype=np.complex128)
-    blocks_lower = np.array(blocks_lower, dtype=np.complex128)
+    # blocks_diag = [np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb)]
+    # blocks_upper = [
+    #     np.empty((ne, bmax[i] - bmin[i] + 1, bmax[i + 1] - bmin[i + 1] + 1), dtype=np.complex128) for i in range(nb - 1)
+    # ]
+    # blocks_lower = [
+    #     np.empty((ne, bmax[i + 1] - bmin[i + 1] + 1, bmax[i] - bmin[i] + 1), dtype=np.complex128) for i in range(nb - 1)
+    # ]
+    # blocks_diag = np.array(blocks_diag, dtype=np.complex128)
+    # blocks_upper = np.array(blocks_upper, dtype=np.complex128)
+    # blocks_lower = np.array(blocks_lower, dtype=np.complex128)
 
     assert map_diag.shape[0] == map_upper.shape[0]
     assert map_diag.shape[0] == map_lower.shape[0]
@@ -790,7 +792,7 @@ def sparse2block_energy_forbatchedblockwise(map_diag: np.ndarray, map_upper: np.
     # off diagonal elements
     blocks_upper[map_upper[0, :], :, map_upper[1, :], map_upper[2, :]] = x_s[:, map_upper[3, :]].transpose()
     blocks_lower[map_lower[0, :], :, map_lower[1, :], map_lower[2, :]] = x_s[:, map_lower[3, :]].transpose()
-    return blocks_diag, blocks_upper, blocks_lower
+    # return blocks_diag, blocks_upper, blocks_lower
 
 
 def sparse_to_dense(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
