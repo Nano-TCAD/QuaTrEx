@@ -8,6 +8,76 @@ from scipy.linalg import svd
 from numpy.linalg import eig
 from scipy.sparse import csr_matrix
 
+from quatrex.OBC.contour_integral import contour_integral as ci_internal, contour_integral_batched as ci_batched_internal
+from quatrex.OBC.contour_integral import contour_integral_gpu as ci_gpu_internal, contour_integral_batched_gpu as ci_batched_gpu_internal
+
+
+compute_theta_kernel = cp.RawKernel(r'''
+#include <cupy/complex.cuh>
+extern "C" __global__
+void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* z, double theta_min, double theta_max, long long NT, long long factor, double R) {
+                                                
+    int idx = blockDim.x*blockIdx.x + threadIdx.x;
+                                                
+    if (idx <  2 * NT) {
+
+        double step = (theta_max - theta_min) / (NT - 1);
+        double theta = theta_min + (idx % NT) * step;
+        double dth = step;
+        if (idx == 0 || idx == NT - 1 || idx == NT || idx == 2 * NT - 1) {
+            dth = dth / 2;
+        }
+
+        complex<double> exp_theta = exp(complex<double>(0.0, theta));
+        complex<double> zC;
+        complex<double> dzC_dth;
+        double r;
+        complex<double> i(0.0, 1.0);
+        if (idx < NT) {
+            r = pow(3.0, 1.0 / factor);
+            zC = r * exp_theta;
+            dzC_dth = i * r * exp_theta;
+        } else {
+            r = pow(1.0 / R, 1.0 / factor);
+            zC = r * exp_theta;
+            dzC_dth = - i * r * exp_theta;
+        }
+                     
+        dtheta[idx] = dth;
+        dz_dtheta[idx] = dzC_dth;
+        z[idx] = zC;                     
+    }
+}''', "compute_theta")
+
+
+# @cpx.jit.rawkernel()
+# def compute_theta(dtheta, dz_dtheta, z, theta_min, theta_max, NT, factor, R):
+
+#     idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+#     if idx < NT * 2:
+
+#         step = (theta_max - theta_min) / (NT - 1)
+#         theta = theta_min + (idx % NT) * step
+#         dth = step
+#         if idx == 0 or idx == NT - 1 or idx == NT or idx == 2 * NT - 1:
+#             dth = dth / 2
+        
+#         c = 0
+#         if idx < NT:
+#             r = cp.power(3.0, 1.0 / factor)
+#         else:
+#             r = cp.power(1.0 / R, 1.0 / factor)
+        
+#         zC = c + r * cp.exp(1j * theta)
+#         dzC_dth = 1j * r * cp.exp(1j * theta)
+
+#         dtheta[idx] = dth
+#         if idx < NT:
+#             dz_dtheta[idx] = dzC_dth
+#         else:
+#             dz_dtheta[idx] = -dzC_dth
+#         z[idx] = zC
+
 
 @cpx.jit.rawkernel()
 def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
@@ -277,36 +347,242 @@ def extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, sparsify: bool 
     return m00, m01, m10, matrix_blocks
 
 
-def contour_integral_gpu(factor: int,
-                         matrix_blocks: np.ndarray,
-                         big_N: int,
-                         R: float,
-                         type: str,
-                         YL=None,
-                         YR=None):
+# NOTE: Original version of contour integral for double number of theta points
+# def contour_integral_gpu(factor: int,
+#                          matrix_blocks: np.ndarray,
+#                          big_N: int,
+#                          R: float,
+#                          type: str,
+#                          YL=None,
+#                          YR=None):
 
-    theta_min = 0
-    theta_max = 2 * np.pi
-    NT = 51
+#     theta_min = 0
+#     theta_max = 2 * np.pi
+#     NT = 51
+
+#     N = big_N // factor
+
+#     theta = cp.linspace(theta_min, theta_max, NT)
+#     dtheta = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
+
+#     c = 0
+#     r1 = np.power(3.0, 1.0 / factor)
+#     r2 = np.power(1.0 / R, 1.0 / factor)
+
+#     zC1 = c + r1 * cp.exp(1j * theta)
+#     zC2 = c + r2 * cp.exp(1j * theta)
+#     z = cp.hstack((zC1, zC2))
+
+#     dzC1_dtheta = 1j * r1 * cp.exp(1j * theta)
+#     dzC2_dtheta = 1j * r2 * cp.exp(1j * theta)
+#     dz_dtheta = cp.hstack((dzC1_dtheta, -dzC2_dtheta))
+
+#     dtheta =  cp.hstack((dtheta, dtheta))
+
+#     if factor * N < 100:
+#         NM = round(3 * N / 4)
+#     else:
+#         NM = round(N / 2)
+#     NM = factor * NM
+
+#     if YL is None:
+#         YL = cp.random.rand(N, NM)
+#     if YR is None:
+#         YR = cp.random.rand(NM, N)
+#     P0 = cp.zeros((N, N), dtype=np.complex128)
+#     P1 = cp.zeros((N, N), dtype=np.complex128)
+
+#     for I in range(len(z)):
+
+#         T = cp.zeros((N, N), dtype=np.complex128)
+#         for J in range(2 * factor + 1):
+#             if type == 'L':
+#                 T = T + matrix_blocks[J] * z[I] ** (factor - J)
+#             else:
+#                 T = T + matrix_blocks[J] * z[I] ** (J - factor)
+
+#         iT = cp.linalg.inv(T)
+
+#         P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+#         P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+
+#     LP0 = P0@YL
+#     LP1 = P1@YL
+
+#     RP0 = YR@P0
+#     RP1 = YR@P1
+
+#     return LP0, LP1, RP0, RP1
+
+
+# NOTE: Original version of contour integral for double number of theta points
+# def contour_integral_batched_gpu(factor: int,
+#                                  matrix_blocks: np.ndarray,
+#                                  big_N: int,
+#                                  R: float,
+#                                  type: str,
+#                                  YL=None,
+#                                  YR=None):
+
+#     theta_min = 0.0
+#     theta_max = 2 * np.pi
+#     NT = 51
+
+#     N = big_N // factor
+
+#     # theta = cp.linspace(theta_min, theta_max, NT, dtype=np.float64)
+#     # dtheta = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
+
+#     # c = 0
+#     # r1 = np.power(3.0, 1.0 / factor)
+#     # r2 = np.power(1.0 / R, 1.0 / factor)
+
+#     # zC1 = c + r1 * cp.exp(1j * theta)
+#     # zC2 = c + r2 * cp.exp(1j * theta)
+#     # z = cp.hstack((zC1, zC2))
+
+#     # dzC1_dtheta = 1j * r1 * cp.exp(1j * theta)
+#     # dzC2_dtheta = 1j * r2 * cp.exp(1j * theta)
+#     # dz_dtheta = cp.hstack((dzC1_dtheta, -dzC2_dtheta))
+
+#     # dtheta = cp.hstack((dtheta, dtheta))
+
+#     # dtheta_dev = cp.ndarray((NT * 2,), dtype=np.float64)
+#     # dz_dtheta_dev = cp.ndarray((NT * 2,), dtype=np.complex128)
+#     # z_dev = cp.ndarray((NT * 2,), dtype=np.complex128)
+#     # # compute_theta[1, NT*2](dtheta_dev, dz_dtheta_dev, z_dev, theta_min, theta_max, NT, factor, R)
+#     # compute_theta_kernel((1,), (NT*2,), (dtheta_dev, dz_dtheta_dev, z_dev, theta_min, theta_max, NT, factor, R))
+#     # cp.cuda.stream.get_current_stream().synchronize()
+#     # print(dtheta - dtheta_dev)
+#     # assert cp.allclose(dtheta, dtheta_dev)
+#     # assert cp.allclose(dz_dtheta, dz_dtheta_dev)
+#     # assert cp.allclose(z, z_dev)
+
+
+#     dtheta = cp.ndarray((NT * 2,), dtype=np.float64)
+#     dz_dtheta = cp.ndarray((NT * 2,), dtype=np.complex128)
+#     z = cp.ndarray((NT * 2,), dtype=np.complex128)
+#     # compute_theta[1, NT*2](dtheta, dz_dtheta, z, theta_min, theta_max, NT, factor, R)
+#     compute_theta_kernel((1,), (NT*2,), (dtheta, dz_dtheta, z, theta_min, theta_max, NT, factor, R))
+#     # cp.cuda.stream.get_current_stream().synchronize()
+
+#     if factor * N < 100:
+#         NM = round(3 * N / 4)
+#     else:
+#         NM = round(N / 2)
+#     NM = factor * NM
+
+#     if YL is None:
+#         YL = cp.random.rand(N, NM)
+#     if YR is None:
+#         YR = cp.random.rand(NM, N)
+#     P0 = cp.zeros((N, N), dtype=np.complex128)
+#     P1 = cp.zeros((N, N), dtype=np.complex128)
+
+#     T = cp.zeros((len(z), N, N), dtype=np.complex128)
+
+#     # for I in range(len(z)):
+#     #     for J in range(2 * factor + 1):
+#     #         if type == 'L':
+#     #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
+#     #         else:
+#     #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
+#     num_threads = 1024
+#     num_blocks = (len(z) * N * N + num_threads - 1) // num_threads
+#     contour[num_blocks, num_threads](T.reshape(-1), matrix_blocks.reshape(-1), z, factor, len(z), N, np.bool_(type=='L'))
+#     # cp.cuda.stream.get_current_stream().synchronize()
+
+#     iT = cp.linalg.inv(T)
+
+#     P0 = cp.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+#     P1 = cp.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+
+#     LP0 = P0@YL
+#     LP1 = P1@YL
+
+#     RP0 = YR@P0
+#     RP1 = YR@P1
+
+#     return LP0, LP1, RP0, RP1
+
+
+# NOTE: Original version of contour integral for double number of theta points
+# def contour_integral(factor: int,
+#                      matrix_blocks: np.ndarray,
+#                      big_N: int,
+#                      R: float,
+#                      type: str,
+#                      YL=None,
+#                      YR=None):
+
+#     theta_min = 0
+#     theta_max = 2 * np.pi
+#     NT = 51
+
+#     N = big_N // factor
+
+#     theta = np.linspace(theta_min, theta_max, NT)
+#     dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
+
+#     c = 0
+#     r1 = np.power(3.0, 1.0 / factor)
+#     r2 = np.power(1.0 / R, 1.0 / factor)
+
+#     zC1 = c + r1 * np.exp(1j * theta)
+#     zC2 = c + r2 * np.exp(1j * theta)
+#     z = np.hstack((zC1, zC2))
+
+#     dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+#     dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
+#     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
+
+#     dtheta = np.hstack((dtheta, dtheta))
+
+#     if factor * N < 100:
+#         NM = round(3 * N / 4)
+#     else:
+#         NM = round(N / 2)
+#     NM = factor * NM
+
+#     if YL is None:
+#         YL = np.random.rand(N, NM)
+#     if YR is None:
+#         YR = np.random.rand(NM, N)
+#     P0 = np.zeros((N, N), dtype=np.complex128)
+#     P1 = np.zeros((N, N), dtype=np.complex128)
+
+#     for I in range(len(z)):
+
+#         T = np.zeros((N, N), dtype=np.complex128)
+#         for J in range(2 * factor + 1):
+#             if type == 'L':
+#                 T = T + matrix_blocks[J] * z[I] ** (factor - J)
+#             else:
+#                 T = T + matrix_blocks[J] * z[I] ** (J - factor)
+
+#         iT = np.linalg.inv(T)
+
+#         P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+#         P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+
+#     LP0 = P0@YL
+#     LP1 = P1@YL
+
+#     RP0 = YR@P0
+#     RP1 = YR@P1
+
+#     return LP0, LP1, RP0, RP1
+
+
+def contour_integral(factor: int,
+                     matrix_blocks: np.ndarray,
+                     big_N: int,
+                     R: float,
+                     side: str,
+                     YL=None,
+                     YR=None):
 
     N = big_N // factor
-
-    theta = cp.linspace(theta_min, theta_max, NT)
-    dtheta = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
-
-    c = 0
-    r1 = np.power(3.0, 1.0 / factor)
-    r2 = np.power(1.0 / R, 1.0 / factor)
-
-    zC1 = c + r1 * cp.exp(1j * theta)
-    zC2 = c + r2 * cp.exp(1j * theta)
-    z = cp.hstack((zC1, zC2))
-
-    dzC1_dtheta = 1j * r1 * cp.exp(1j * theta)
-    dzC2_dtheta = 1j * r2 * cp.exp(1j * theta)
-    dz_dtheta = cp.hstack((dzC1_dtheta, -dzC2_dtheta))
-
-    dtheta =  cp.hstack((dtheta, dtheta))
 
     if factor * N < 100:
         NM = round(3 * N / 4)
@@ -315,25 +591,155 @@ def contour_integral_gpu(factor: int,
     NM = factor * NM
 
     if YL is None:
-        YL = cp.random.rand(N, NM)
+        YL = np.random.rand(N, NM)
     if YR is None:
-        YR = cp.random.rand(NM, N)
-    P0 = cp.zeros((N, N), dtype=np.complex128)
-    P1 = cp.zeros((N, N), dtype=np.complex128)
+        YR = np.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
 
-    for I in range(len(z)):
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
 
-        T = cp.zeros((N, N), dtype=np.complex128)
-        for J in range(2 * factor + 1):
-            if type == 'L':
-                T = T + matrix_blocks[J] * z[I] ** (factor - J)
-            else:
-                T = T + matrix_blocks[J] * z[I] ** (J - factor)
+    LP0 = P0@YL
+    LP1 = P1@YL
 
-        iT = cp.linalg.inv(T)
+    RP0 = YR@P0
+    RP1 = YR@P1
 
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
+    return LP0, LP1, RP0, RP1
+
+
+def contour_integral_gpu(factor: int,
+                         matrix_blocks: np.ndarray,
+                         big_N: int,
+                         R: float,
+                         side: str,
+                         YL=None,
+                         YR=None):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = np.random.rand(N, NM)
+    if YR is None:
+        YR = np.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    return LP0, LP1, RP0, RP1
+
+
+# NOTE: Original version of contour integral for double number of theta points
+# def contour_integral_batched(factor: int,
+#                              matrix_blocks: np.ndarray,
+#                              big_N: int,
+#                              R: float,
+#                              type: str,
+#                              YL=None,
+#                              YR=None):
+
+#     theta_min = 0
+#     theta_max = 2 * np.pi
+#     NT = 51
+
+#     N = big_N // factor
+
+#     theta = np.linspace(theta_min, theta_max, NT)
+#     dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
+
+#     c = 0
+#     r1 = np.power(3.0, 1.0 / factor)
+#     r2 = np.power(1.0 / R, 1.0 / factor)
+
+#     zC1 = c + r1 * np.exp(1j * theta)
+#     zC2 = c + r2 * np.exp(1j * theta)
+#     z = np.hstack((zC1, zC2))
+
+#     dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
+#     dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
+#     dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
+
+#     dtheta = np.hstack((dtheta, dtheta))
+
+#     if factor * N < 100:
+#         NM = round(3 * N / 4)
+#     else:
+#         NM = round(N / 2)
+#     NM = factor * NM
+
+#     if YL is None:
+#         YL = np.random.rand(N, NM)
+#     if YR is None:
+#         YR = np.random.rand(NM, N)
+#     P0 = np.zeros((N, N), dtype=np.complex128)
+#     P1 = np.zeros((N, N), dtype=np.complex128)
+
+#     T = np.zeros((len(z), N, N), dtype=np.complex128)
+
+#     for I in range(len(z)):
+#         for J in range(2 * factor + 1):
+#             if type == 'L':
+#                 T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
+#             else:
+#                 T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
+
+#     iT = np.linalg.inv(T)
+
+#     P0 = np.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+#     P1 = np.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+
+#     LP0 = P0@YL
+#     LP1 = P1@YL
+
+#     RP0 = YR@P0
+#     RP1 = YR@P1
+
+#     return LP0, LP1, RP0, RP1
+
+
+def contour_integral_batched(factor: int,
+                             matrix_blocks: np.ndarray,
+                             big_N: int,
+                             R: float,
+                             side: str,
+                             YL=None,
+                             YR=None):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = np.random.rand(N, NM)
+    if YR is None:
+        YR = np.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
 
     LP0 = P0@YL
     LP1 = P1@YL
@@ -348,103 +754,11 @@ def contour_integral_batched_gpu(factor: int,
                                  matrix_blocks: np.ndarray,
                                  big_N: int,
                                  R: float,
-                                 type: str,
+                                 side: str,
                                  YL=None,
                                  YR=None):
 
-    theta_min = 0
-    theta_max = 2 * np.pi
-    NT = 51
-
     N = big_N // factor
-
-    theta = cp.linspace(theta_min, theta_max, NT)
-    dtheta = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
-
-    c = 0
-    r1 = np.power(3.0, 1.0 / factor)
-    r2 = np.power(1.0 / R, 1.0 / factor)
-
-    zC1 = c + r1 * cp.exp(1j * theta)
-    zC2 = c + r2 * cp.exp(1j * theta)
-    z = cp.hstack((zC1, zC2))
-
-    dzC1_dtheta = 1j * r1 * cp.exp(1j * theta)
-    dzC2_dtheta = 1j * r2 * cp.exp(1j * theta)
-    dz_dtheta = cp.hstack((dzC1_dtheta, -dzC2_dtheta))
-
-    dtheta = cp.hstack((dtheta, dtheta))
-
-    if factor * N < 100:
-        NM = round(3 * N / 4)
-    else:
-        NM = round(N / 2)
-    NM = factor * NM
-
-    if YL is None:
-        YL = cp.random.rand(N, NM)
-    if YR is None:
-        YR = cp.random.rand(NM, N)
-    P0 = cp.zeros((N, N), dtype=np.complex128)
-    P1 = cp.zeros((N, N), dtype=np.complex128)
-
-    T = cp.zeros((len(z), N, N), dtype=np.complex128)
-
-    # for I in range(len(z)):
-    #     for J in range(2 * factor + 1):
-    #         if type == 'L':
-    #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
-    #         else:
-    #             T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
-    num_threads = 1024
-    num_blocks = (len(z) * N * N + num_threads - 1) // num_threads
-    contour[num_blocks, num_threads](T.reshape(-1), matrix_blocks.reshape(-1), z, factor, len(z), N, np.bool_(type=='L'))
-    cp.cuda.stream.get_current_stream().synchronize()
-
-    iT = cp.linalg.inv(T)
-
-    P0 = cp.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
-    P1 = cp.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
-
-    LP0 = P0@YL
-    LP1 = P1@YL
-
-    RP0 = YR@P0
-    RP1 = YR@P1
-
-    return LP0, LP1, RP0, RP1
-
-
-def contour_integral(factor: int,
-                     matrix_blocks: np.ndarray,
-                     big_N: int,
-                     R: float,
-                     type: str,
-                     YL=None,
-                     YR=None):
-
-    theta_min = 0
-    theta_max = 2 * np.pi
-    NT = 51
-
-    N = big_N // factor
-
-    theta = np.linspace(theta_min, theta_max, NT)
-    dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
-
-    c = 0
-    r1 = np.power(3.0, 1.0 / factor)
-    r2 = np.power(1.0 / R, 1.0 / factor)
-
-    zC1 = c + r1 * np.exp(1j * theta)
-    zC2 = c + r2 * np.exp(1j * theta)
-    z = np.hstack((zC1, zC2))
-
-    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
-    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
-    dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
-
-    dtheta = np.hstack((dtheta, dtheta))
 
     if factor * N < 100:
         NM = round(3 * N / 4)
@@ -456,89 +770,12 @@ def contour_integral(factor: int,
         YL = np.random.rand(N, NM)
     if YR is None:
         YR = np.random.rand(NM, N)
-    P0 = np.zeros((N, N), dtype=np.complex128)
-    P1 = np.zeros((N, N), dtype=np.complex128)
+    
+    P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
 
-    for I in range(len(z)):
-
-        T = np.zeros((N, N), dtype=np.complex128)
-        for J in range(2 * factor + 1):
-            if type == 'L':
-                T = T + matrix_blocks[J] * z[I] ** (factor - J)
-            else:
-                T = T + matrix_blocks[J] * z[I] ** (J - factor)
-
-        iT = np.linalg.inv(T)
-
-        P0 += iT*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-        P1 += iT*z[I]*dz_dtheta[I]*dtheta[I]/(2*np.pi*1j)
-
-    LP0 = P0@YL
-    LP1 = P1@YL
-
-    RP0 = YR@P0
-    RP1 = YR@P1
-
-    return LP0, LP1, RP0, RP1
-
-
-def contour_integral_batched(factor: int,
-                             matrix_blocks: np.ndarray,
-                             big_N: int,
-                             R: float,
-                             type: str,
-                             YL=None,
-                             YR=None):
-
-    theta_min = 0
-    theta_max = 2 * np.pi
-    NT = 51
-
-    N = big_N // factor
-
-    theta = np.linspace(theta_min, theta_max, NT)
-    dtheta = np.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
-
-    c = 0
-    r1 = np.power(3.0, 1.0 / factor)
-    r2 = np.power(1.0 / R, 1.0 / factor)
-
-    zC1 = c + r1 * np.exp(1j * theta)
-    zC2 = c + r2 * np.exp(1j * theta)
-    z = np.hstack((zC1, zC2))
-
-    dzC1_dtheta = 1j * r1 * np.exp(1j * theta)
-    dzC2_dtheta = 1j * r2 * np.exp(1j * theta)
-    dz_dtheta = np.hstack((dzC1_dtheta, -dzC2_dtheta))
-
-    dtheta = np.hstack((dtheta, dtheta))
-
-    if factor * N < 100:
-        NM = round(3 * N / 4)
-    else:
-        NM = round(N / 2)
-    NM = factor * NM
-
-    if YL is None:
-        YL = np.random.rand(N, NM)
-    if YR is None:
-        YR = np.random.rand(NM, N)
-    P0 = np.zeros((N, N), dtype=np.complex128)
-    P1 = np.zeros((N, N), dtype=np.complex128)
-
-    T = np.zeros((len(z), N, N), dtype=np.complex128)
-
-    for I in range(len(z)):
-        for J in range(2 * factor + 1):
-            if type == 'L':
-                T[I] = T[I] + matrix_blocks[J] * z[I] ** (factor - J)
-            else:
-                T[I] = T[I] + matrix_blocks[J] * z[I] ** (J - factor)
-
-    iT = np.linalg.inv(T)
-
-    P0 = np.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
-    P1 = np.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
 
     LP0 = P0@YL
     LP1 = P1@YL
@@ -585,6 +822,156 @@ def beyn_svd_gpu(LP0, RP0, eps_lim=1e-8):
     RW = RW[Rind, :].conj().T
 
     return LV, LS, LW, RV, RS, RW
+
+
+def contour_svd(factor: int,
+                matrix_blocks: np.ndarray,
+                big_N: int,
+                R: float,
+                side: str,
+                YL=None,
+                YR=None,
+                eps_lim=1e-8):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = np.random.rand(N, NM)
+    if YR is None:
+        YR = np.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    LV, LS, LW = svd(LP0, full_matrices=False)
+    Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+    RV, RS, RW = svd(RP0, full_matrices=False)
+    Rind = np.where(np.abs(RS) > eps_lim)[0]
+
+    if len(Lind) == N or len(Rind) == N:
+
+        P0C3, P1C3 = ci_batched_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
+
+        P0 = P0C3 + P1C3
+        P1 = P1C3 + P0C3
+
+        LP0 = P0@YL
+        LP1 = P1@YL
+
+        RP0 = YR@P0
+        RP1 = YR@P1
+
+        LV, LS, LW = svd(LP0, full_matrices=False)
+        Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+        RV, RS, RW = svd(RP0, full_matrices=False)
+        Rind = np.where(np.abs(RS) > eps_lim)[0]
+    
+    if len(Lind) == 0:
+        Lind = 0
+    if len(Rind) == 0:
+        Rind = 0
+
+    LV = LV[:, Lind]
+    LS = np.diag(LS[Lind])
+    LW = LW[Lind, :].conj().T
+
+    RV = RV[:, Rind]
+    RS = np.diag(RS[Rind])
+    RW = RW[Rind, :].conj().T
+
+    return LP1, LV, LS, LW, RP1, RV, RS, RW
+
+
+def contour_svd_gpu(factor: int,
+                    matrix_blocks: np.ndarray,
+                    big_N: int,
+                    R: float,
+                    side: str,
+                    YL=None,
+                    YR=None,
+                    eps_lim=1e-8):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = cp.random.rand(N, NM)
+    if YR is None:
+        YR = cp.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    LV, LS, LW = cp.linalg.svd(LP0, full_matrices=False)
+    Lind = cp.where(cp.abs(LS) > eps_lim)[0]
+
+    RV, RS, RW = cp.linalg.svd(RP0, full_matrices=False)
+    Rind = cp.where(cp.abs(RS) > eps_lim)[0]
+
+    if len(Lind) == N or len(Rind) == N:
+
+        P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
+
+        P0 = P0C3 + P1C3
+        P1 = P1C3 + P0C3
+
+        LP0 = P0@YL
+        LP1 = P1@YL
+
+        RP0 = YR@P0
+        RP1 = YR@P1
+
+        LV, LS, LW = cp.linalg.svd(LP0, full_matrices=False)
+        Lind = cp.where(cp.abs(LS) > eps_lim)[0]
+
+        RV, RS, RW = cp.linalg.svd(RP0, full_matrices=False)
+        Rind = cp.where(cp.abs(RS) > eps_lim)[0]
+    
+    if len(Lind) == 0:
+        Lind = 0
+    if len(Rind) == 0:
+        Rind = 0
+
+    LV = LV[:, Lind]
+    LS = cp.diag(LS[Lind])
+    LW = LW[Lind, :].conj().T
+
+    RV = RV[:, Rind]
+    RS = cp.diag(RS[Rind])
+    RW = RW[Rind, :].conj().T
+
+    return LP1, LV, LS, LW, RP1, RV, RS, RW
 
 
 def beyn_eig(LV, LS, LW, LP1, RV, RS, RW, RP1):
@@ -1070,18 +1457,24 @@ def sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, kside):
 
 
     Nref = 0
+    # stream = cp.cuda.stream.get_current_stream()
     for Ik in range(Nk):
         # if (cond3[Ik] and cond4[Ik]) or (not cond3[Ik] and (cond1[Ik] or cond2[Ik])):
         if condA[Ik]:
             ksurf[Nref] = kref[Ik]
+            # cp.cuda.runtime.memcpyAsync(ksurf[Nref].data.ptr, kref[Ik].data.ptr, kref[Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             if kside == 'L':
                 Vsurf[:, Nref] = phiL[:, Ik]
+                # cp.cuda.runtime.memcpyAsync(Vsurf[:, Nref].data, phiL[:, Ik].data, phiL[:, Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             else:
                 Vsurf[Nref, :] = phiR[Ik, :]
+                # cp.cuda.runtime.memcpyAsync(Vsurf[Nref, :].data, phiR[Ik, :].data, phiR[Ik, :].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             # if not cond3[Ik] and (cond1[Ik] or cond2[Ik]):
             if condB[Ik]:
                 dEk[Nref] = dEk_dk[Ik]
+                # cp.cuda.runtime.memcpyAsync(dEk[Nref].data, dEk_dk[Ik].data, dEk_dk[Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             Nref += 1
+    # cp.cuda.stream.get_current_stream().synchronize()
 
     # ###### Validation against CPU ######
 
@@ -1214,8 +1607,9 @@ def beyn_new(factor: int,
 
     # try:
     
-    LP0, LP1, RP0, RP1 = contour_integral(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
-    LV, LS, LW, RV, RS, RW = beyn_svd(LP0, RP0, eps_lim=1e-8)
+    # LP0, LP1, RP0, RP1 = contour_integral(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
+    # LV, LS, LW, RV, RS, RW = beyn_svd(LP0, RP0, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
     if LS.size == 0 or RS.size == 0:
         raise Exception("No singular values above the threshold")
@@ -1261,8 +1655,9 @@ def beyn_new_gpu(factor: int,
 
     # try:
     
-    LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
-    LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
+    # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
+    # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
     if LS.size == 0 or RS.size == 0:
         raise Exception("No singular values above the threshold")
