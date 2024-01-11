@@ -868,8 +868,8 @@ def contour_svd(factor: int,
 
         P0C3, P1C3 = ci_batched_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
 
-        P0 = P0C3 + P1C3
-        P1 = P1C3 + P0C3
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
 
         LP0 = P0@YL
         LP1 = P1@YL
@@ -943,8 +943,8 @@ def contour_svd_gpu(factor: int,
 
         P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
 
-        P0 = P0C3 + P1C3
-        P1 = P1C3 + P0C3
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
 
         LP0 = P0@YL
         LP1 = P1@YL
