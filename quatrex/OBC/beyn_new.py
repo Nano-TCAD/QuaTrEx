@@ -865,11 +865,12 @@ def contour_svd(factor: int,
     Rind = np.where(np.abs(RS) > eps_lim)[0]
 
     if len(Lind) == N or len(Rind) == N:
+        print("CPU: Using 10/R contour")
 
         P0C3, P1C3 = ci_batched_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
 
-        P0 = P0C3 + P1C3
-        P1 = P1C3 + P0C3
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
 
         LP0 = P0@YL
         LP1 = P1@YL
@@ -884,8 +885,10 @@ def contour_svd(factor: int,
         Rind = np.where(np.abs(RS) > eps_lim)[0]
     
     if len(Lind) == 0:
+        print("CPU: No singular values found for left eigenvectors")
         Lind = 0
     if len(Rind) == 0:
+        print("CPU: No singular values found for right eigenvectors")
         Rind = 0
 
     LV = LV[:, Lind]
@@ -940,11 +943,12 @@ def contour_svd_gpu(factor: int,
     Rind = cp.where(cp.abs(RS) > eps_lim)[0]
 
     if len(Lind) == N or len(Rind) == N:
+        print("GPU: Using 10/R contour")
 
         P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
 
-        P0 = P0C3 + P1C3
-        P1 = P1C3 + P0C3
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
 
         LP0 = P0@YL
         LP1 = P1@YL
@@ -959,8 +963,10 @@ def contour_svd_gpu(factor: int,
         Rind = cp.where(cp.abs(RS) > eps_lim)[0]
     
     if len(Lind) == 0:
+        print("GPU: No singular values found for left eigenvectors")
         Lind = 0
     if len(Rind) == 0:
+        print("GPU: No singular values found for right eigenvectors")
         Rind = 0
 
     LV = LV[:, Lind]

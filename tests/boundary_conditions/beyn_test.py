@@ -208,6 +208,7 @@ def test_beyn_analytic():
             Sigma_cpu, gR_cpu, min_dEk_cpu = beyn_sigma(kL_cpu, kR_cpu, phiL_cpu, phiR_cpu, N00_cpu, N01_cpu, N10_cpu, imag_lim, 2, type)
             Sigma_gpu, gR_gpu, min_dEk_gpu = beyn_sigma_gpu(kL_gpu, kR_gpu, phiL_gpu, phiR_gpu, N00_gpu, N01_gpu, N10_gpu, imag_lim, 2, type)
 
+            print(relative_error(cp.asnumpy(Sigma_gpu), Sigma_cpu))
             assert np.allclose(Sigma_cpu, cp.asnumpy(Sigma_gpu))
             assert np.allclose(gR_cpu, cp.asnumpy(gR_gpu))
             assert np.allclose(min_dEk_cpu, cp.asnumpy(min_dEk_gpu))
