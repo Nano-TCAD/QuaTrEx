@@ -884,9 +884,9 @@ def contour_svd(factor: int,
         Rind = np.where(np.abs(RS) > eps_lim)[0]
     
     if len(Lind) == 0:
-        Lind = 0
+        Lind = [0]
     if len(Rind) == 0:
-        Rind = 0
+        Rind = [0]
 
     LV = LV[:, Lind]
     LS = np.diag(LS[Lind])
@@ -959,9 +959,9 @@ def contour_svd_gpu(factor: int,
         Rind = cp.where(cp.abs(RS) > eps_lim)[0]
     
     if len(Lind) == 0:
-        Lind = 0
+        Lind = [0]
     if len(Rind) == 0:
-        Rind = 0
+        Rind = [0]
 
     LV = LV[:, Lind]
     LS = cp.diag(LS[Lind])
@@ -1205,11 +1205,13 @@ def check_imag_cond_vec(kref, kL, kR, phiL, phiR, M10, M01, max_imag, kside):
 
     if kside == 'L':
         ind_k = np.argmin(np.abs(np.subtract.outer(kL, kR)), axis=1)
+        Ikmax = min(Ikmax, len(ind_k))
         for Ik in range(Ikmax):
             ind_kR = ind_k[Ik]
             dEk_dk[Ik] = -(phiR[ind_kR, :] @ (-1j * M10 * np.exp(-1j * kL[Ik]) + 1j * M01 * np.exp(1j * kL[Ik])) @ phiL[:, Ik]) / pRpL[ind_kR, Ik]
     else:
         ind_k = np.argmin(np.abs(np.subtract.outer(kR, kL)), axis=1)
+        Ikmax = min(Ikmax, len(ind_k))
         for Ik in range(Ikmax):
             ind_kL = ind_k[Ik]
             dEk_dk[Ik] = -(phiR[Ik, :] @ (-1j * M10 * np.exp(-1j * kR[Ik]) + 1j * M01 * np.exp(1j * kR[Ik])) @ phiL[:, ind_kL]) / pRpL[Ik, ind_kL]
@@ -1259,6 +1261,7 @@ def check_imag_cond_gpu(kref, kL, kR, phiL, phiR, M10, M01, max_imag, kside):
     else:
         ind_k = cp.argmin(cp.abs(cp.subtract.outer(kR, kL)), axis=1)
         k = kR
+    Ikmax = min(Ikmax, len(ind_k))
 
     dEk_dk_d = cp.zeros((Ikmax, *M10.shape), dtype=phiL.dtype)
 
