@@ -18,12 +18,11 @@ import time
 
 
 def p2w_pool_mpi_cpu_kpoint(
-    hamiltionian_obj: object,
+    coulomb_obj: object,
     energy: npt.NDArray[np.float64],
     pg: npt.NDArray[np.complex128],
     pl: npt.NDArray[np.complex128],
     pr: npt.NDArray[np.complex128],
-    coulomb_obj: object,
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
@@ -46,7 +45,6 @@ def p2w_pool_mpi_cpu_kpoint(
     Uses mkl threading and pool threads.
 
     Args:
-        hamiltionian_obj (object): Class containing the hamiltonian information
         energy (npt.NDArray[np.float64]): energy points
         pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
         pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
@@ -73,12 +71,11 @@ def p2w_pool_mpi_cpu_kpoint(
     # number of energy points
     ne = energy.shape[0]
 
-    # Don't have to use the hamiltonian_obj if I use the coulomb_obj
     # number of blocks
-    nb = hamiltionian_obj.Bmin.shape[0]
+    nb = coulomb_obj.NBlocks
     # start and end index of each block in python indexing
-    bmax = hamiltionian_obj.Bmax - 1
-    bmin = hamiltionian_obj.Bmin - 1
+    bmax = coulomb_obj.Bmax
+    bmin = coulomb_obj.Bmin
 
     # fix nbc to 2 for the given solution
     # todo calculate it
@@ -207,7 +204,7 @@ def p2w_pool_mpi_cpu_kpoint(
 def generator_rgf_Coulomb(idx_k, DH):
     for ik in idx_k:
         kp = tuple(DH.kp[ik])
-        yield DH.k_Hamiltonian[kp]
+        yield DH.k_Coulomb_matrix[kp]
 
 
 def p2w_mpi_cpu(
