@@ -23,7 +23,7 @@ from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol, get
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
-from quatrex.GW.screenedinteraction.kernel import p2w_cpu
+from quatrex.GW.screenedinteraction.kernel import p2w_cpu, p2w_gpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V
 from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="gpu", choices=["cpu", "gpu"], required=False)
+    parser.add_argument("-t", "--type", default="cpu", choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False, type=bool, required=False)
     parser.add_argument("-p", "--pool", default=True, type=bool, required=False)
     args = parser.parse_args()
@@ -608,8 +608,8 @@ if __name__ == "__main__":
             print("Polarization calculated", flush = True)
 
         # calculate the screened interaction on every rank--------------------------
-        if args.pool:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+        if args.type in ("cpu"):
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_split(
                 hamiltonian_obj,
                 energy_loc,
                 pg_p2w_vec,
@@ -626,13 +626,16 @@ if __name__ == "__main__":
                 size,
                 nbc,
                 homogenize=False,
+                NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads)
-        else:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_mpi_cpu(
-                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh,
+        elif args.type in ("gpu"):
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
+                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag,
+                map_upper, map_lower, rows, columns, ij2ji,
                 dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], factor_w_loc, comm, rank, size, w_mkl_threads)
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
+                mkl_threads = w_mkl_threads, worker_num = w_worker_threads)
 
         # transform from block format to 2D format-----------------------------------
         # lower diagonal blocks from physics identity
