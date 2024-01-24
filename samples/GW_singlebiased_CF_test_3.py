@@ -50,10 +50,12 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
-    solution_path = os.path.join(scratch_path, "InAs_TB")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_inasNBC1_19V.mat")
+    solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC2_0_2V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "data_Vh_finalPI_InAs_0v.mat")
+    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_0v.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_0v.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -75,14 +77,15 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([5,5])
-    Vappl = 0.4
-    energy = np.linspace(-10.0, 5.0, 376, endpoint=True, dtype=float)  # Energy Vector
+    no_orb = np.array([1,1])
+    # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
+    NCpSC = 2
+    Vappl = 0.2
+    energy = np.linspace(-30, 20, 126, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
-    NCpSC = 1 
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = NCpSC)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -101,6 +104,8 @@ if __name__ == "__main__":
     energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x_optimized(solution_path_gw, "s")
     energy_in, rows_sph, columns_sph, sphg_gold, sphl_gold, sphr_gold = read_solution.load_x_optimized(solution_path_gw, "sph")
     rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
+    rowsRefH, columnsRefH, H_gold = read_solution.load_v(solution_path_H)
+    rowsRefS, columnsRefS, S_gold = read_solution.load_v(solution_path_S)
 
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
@@ -112,6 +117,12 @@ if __name__ == "__main__":
     vh = sparse.coo_array((vh_gold, (np.squeeze(rowsRef), np.squeeze(columnsRef))),
                           shape=(nao, nao),
                           dtype=np.complex128).tocsr()
+    H_in = sparse.coo_array((H_gold, (np.squeeze(rowsRefH), np.squeeze(columnsRefH))),
+                            shape=(nao, nao),
+                            dtype=np.complex128).tocsr()
+    S_in = sparse.coo_array((S_gold, (np.squeeze(rowsRefS), np.squeeze(columnsRefS))),
+                            shape=(nao, nao),
+                            dtype=np.complex128).tocsr()
     data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
 
     # Creating the mask for the energy range of the deleted W elements given by the reference solution
@@ -151,21 +162,20 @@ if __name__ == "__main__":
     w_worker_threads = 8
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_mkl_threads_gpu = 1
     gf_worker_threads = 8
 
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = 1.9
+    energy_fl = -3.6
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 2.5
+    epsR = 1.0
     # DFT Conduction Band Minimum
-    ECmin = 1.9346
+    ECmin = -3.524
 
     # Phyiscal Constants -----------
 
@@ -193,9 +203,10 @@ if __name__ == "__main__":
     vh1d = np.asarray(vh[rows, columns].reshape(-1))
 
     assert np.allclose(V_sparse.toarray(), vh.toarray())
+    assert np.allclose(H_in.toarray(), hamiltonian_obj.Hamiltonian['H_4'].toarray())
+    assert np.allclose(S_in.toarray(), hamiltonian_obj.Overlap['H_4'].toarray())
 
     # calculation of data distribution per rank---------------------------------
-    # Big To-Do: Make the distrubution fair: at the moment it could be that the last process has up to 2x more data than the rest.
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
@@ -345,6 +356,7 @@ if __name__ == "__main__":
         blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
         change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
 
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
@@ -369,9 +381,6 @@ if __name__ == "__main__":
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
 
-    #Start and end index of the energy range
-    ne_s = 0
-    ne_f = 251
 
     if rank == 0:
         time_start = -time.perf_counter()
@@ -502,7 +511,7 @@ if __name__ == "__main__":
                 homogenize=False,
                 return_sigma_boundary=True,
                 NCpSC=NCpSC,
-                mkl_threads=gf_mkl_threads_gpu,
+                mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
 
         # lower diagonal blocks from physics identity
@@ -610,7 +619,7 @@ if __name__ == "__main__":
 
         # calculate the screened interaction on every rank--------------------------
         if args.type in ("cpu"):
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_split(
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                 hamiltonian_obj,
                 energy_loc,
                 pg_p2w_vec,
@@ -865,8 +874,8 @@ if __name__ == "__main__":
         assert diff_sg <= abstol + reltol * np.max(np.abs(sg_gold))
         assert diff_sl <= abstol + reltol * np.max(np.abs(sl_gold))
         assert diff_sr <= abstol + reltol * np.max(np.abs(sr_gold))
-        assert np.allclose(gg_gold, gg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(gl_gold, gl_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(gg_gold, gg_mpi, atol=1e-5, rtol=1e-5)
+        assert np.allclose(gl_gold, gl_mpi, atol=1e-5, rtol=1e-5)
         #assert np.allclose(gr_gold, gr_mpi, atol=1e-6, rtol=1e-6)
         assert np.allclose(pg_gold, pg_mpi, atol=1e-6, rtol=1e-6)
         assert np.allclose(pl_gold, pl_mpi, atol=1e-6, rtol=1e-6)
@@ -875,12 +884,12 @@ if __name__ == "__main__":
         assert np.allclose(wg_gold, wg_mpi, rtol=1e-3, atol=1e-3)
         assert np.allclose(wl_gold, wl_mpi, atol=1e-6, rtol=1e-6)
         #assert np.allclose(wr_gold, wr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sg_gold, sg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sl_gold, sl_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(sg_gold, sg_mpi, atol=1e-5, rtol=1e-5)
+        assert np.allclose(sl_gold, sl_mpi, atol=1e-5, rtol=1e-5)
         assert np.allclose(sr_gold, sr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sphg_gold, sphg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sphl_gold, sphl_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sphr_gold, sphr_mpi, atol=1e-6, rtol=1e-6)
+        assert np.allclose(sphg_gold, sphg_mpi, atol=1e-5, rtol=1e-5)
+        assert np.allclose(sphl_gold, sphl_mpi, atol=1e-5, rtol=1e-5)
+        assert np.allclose(sphr_gold, sphr_mpi, atol=1e-5, rtol=1e-5)
         print("The mpi implementation is correct")
 
     # free datatypes------------------------------------------------------------

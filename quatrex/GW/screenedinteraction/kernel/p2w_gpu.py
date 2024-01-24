@@ -10,9 +10,12 @@ from cupyx.scipy import sparse as cusparse
 import mkl
 import typing
 from quatrex.utils import change_format
+from quatrex.utils import change_format_gpu
 from quatrex.utils import matrix_creation
 from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
-                                            extract_small_matrix_blocks
+                                            extract_small_matrix_blocks, \
+                                            initialize_block_sigma
+#from quatrex.utils.matrix_creation_gpu import initialize_block_sigma_batched
 from block_tri_solvers import matrix_inversion_w, rgf_W, rgf_W_GPU
 from quatrex.OBC import obc_w_gpu
 from quatrex.OBC import obc_w_cpu
@@ -95,16 +98,16 @@ def p2w_pool_mpi_gpu_split(
     lb_start = lb_vec[0]
     lb_end = lb_vec[nb - 1]
 
-    dvh_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dvh_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dmr_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dmr_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dlg_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dlg_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dll_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dll_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    condl = np.zeros((ne), dtype = np.float64)
-    condr = np.zeros((ne), dtype = np.float64)
+    # dvh_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dvh_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dmr_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dmr_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dlg_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dlg_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dll_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dll_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # condl = np.zeros((ne), dtype = np.float64)
+    # condr = np.zeros((ne), dtype = np.float64)
 
 
     # block sizes after matrix multiplication
@@ -114,11 +117,28 @@ def p2w_pool_mpi_gpu_split(
     nb_mm = bmax_mm.size
     # larges block length after matrix multiplication
     lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
+    lb_vec_mm = bmax_mm - bmin_mm + 1
+    lb_start_mm = lb_vec_mm[0]
+    lb_end_mm = lb_vec_mm[nb_mm - 1]
+
+
+    dvh_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dvh_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dmr_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dmr_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dlg_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dlg_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dll_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dll_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    condl = np.zeros((ne), dtype = np.float64)
+    condr = np.zeros((ne), dtype = np.float64)
 
     # create empty buffer for screened interaction
     # in block format
     wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
+    wr_diag_btch, wr_upper_btch, wl_diag_btch, wl_upper_btch, wg_diag_btch, wg_upper_btch = matrix_creation.initialize_block_G_batched(ne, nb_mm, lb_max_mm)
     xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    xr_diag_btch = np.zeros((nb_mm, ne, lb_max_mm, lb_max_mm), dtype=np.complex128)
     # set number of mkl threads
     mkl.set_num_threads(mkl_threads)
 
@@ -192,61 +212,166 @@ def p2w_pool_mpi_gpu_split(
     if rank == 0:
         time_OBC += time.perf_counter()
         print("Time for OBC: %.3f s" % time_OBC, flush = True)
+        time_spmm = -time.perf_counter()
+
+    #vh_gpu = cp.sparse.csr_matrix(vh)
+    #vh_ct_gpu = vh_gpu.conj().transpose()
+    vh_ct = vh.conj().transpose()
+    nao = vh.shape[0]
+    #mr_cpu = np.ndarray((ne,), dtype=object)
+    #lg_cpu = np.ndarray((ne,), dtype=object)
+    #ll_cpu = np.ndarray((ne,), dtype=object)
+    mr = []
+    lg = []
+    ll = []
+    # for i in range(ne):
+    #     print("Running of energy point %d" % i, flush = True)
+    #     rgf_W_GPU.sp_mm_1_gpu(pr[i], vh_gpu, vh_ct_gpu, mr, nao)
+    #     rgf_W_GPU.sp_mm_2_gpu(pg[i], vh_gpu, vh_ct_gpu, lg, nao)
+    #     rgf_W_GPU.sp_mm_3_gpu(pl[i], vh_gpu, vh_ct_gpu, ll, nao)
+    #     # pg_gpu = cp.sparse.csr_matrix(pg[i])
+    #     # pl_gpu = cp.sparse.csr_matrix(pl[i])
+    #     # pr_gpu = cp.sparse.csr_matrix(pr[i])
+    #     # mr.append((cp.sparse.identity(nao) - vh_gpu @ pr_gpu).get())
+    #     # lg.append((vh_gpu @ pg_gpu @ vh_ct_gpu).get())
+    #     # ll.append((vh_gpu @ pl_gpu @ vh_ct_gpu).get())
+    # cp.cuda.runtime.deviceSynchronize()
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        results = executor.map(rgf_W_GPU.sp_mm_cpu, pr, pg, pl, repeat(vh), repeat(vh_ct), repeat(nao))
+        for idx, res in enumerate(results):
+            mr.append(res[0])
+            lg.append(res[1])
+            ll.append(res[2])
+
+    comm.Barrier()
+    if rank == 0:
+        time_spmm += time.perf_counter()
+        print("Time for spmm: %.3f s" % time_spmm, flush = True)
         time_GF_trafo = -time.perf_counter()
+
+    (mr_blco_diag, mr_blco_upper, mr_blco_lower,\
+     ll_blco_diag, ll_blco_upper, ll_blco_lower,\
+     lg_blco_diag, lg_blco_upper, lg_blco_lower) = initialize_block_sigma(ne, nb_mm, lb_max_mm)
+    
+    vh_upper = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    vh_diag = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    vh_lower = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(change_format.sparse2block_no_map,
+                            mr, mr_blco_diag, mr_blco_upper, mr_blco_lower,
+                            repeat(bmax_mm), repeat(bmin_mm))
+        executor.map(change_format.sparse2block_no_map,
+                            ll, ll_blco_diag, ll_blco_upper, ll_blco_lower,
+                            repeat(bmax_mm), repeat(bmin_mm))
+        executor.map(change_format.sparse2block_no_map,
+                            lg, lg_blco_diag, lg_blco_upper, lg_blco_lower,
+                            repeat(bmax_mm), repeat(bmin_mm))   
+
+    # change_format.sparse2block_no_map(mr[0], mr_blco_diag, mr_blco_upper, mr_blco_lower, bmax_mm, bmin_mm)
+    # change_format.sparse2block_no_map(ll[0], ll_blco_diag, ll_blco_upper, ll_blco_lower, bmax_mm, bmin_mm)
+    # change_format.sparse2block_no_map(lg[0], lg_blco_diag, lg_blco_upper, lg_blco_lower, bmax_mm, bmin_mm)
+    change_format.sparse2block_no_map(vh, vh_diag, vh_upper, vh_lower, bmax_mm, bmin_mm)
+    mr_blco_diag = mr_blco_diag.transpose((1,0,2,3))
+    mr_blco_upper = mr_blco_upper.transpose((1,0,2,3))
+    mr_blco_lower = mr_blco_lower.transpose((1,0,2,3))
+    ll_blco_diag = ll_blco_diag.transpose((1,0,2,3))
+    ll_blco_upper = ll_blco_upper.transpose((1,0,2,3))
+    ll_blco_lower = ll_blco_lower.transpose((1,0,2,3))
+    lg_blco_diag = lg_blco_diag.transpose((1,0,2,3))
+    lg_blco_upper = lg_blco_upper.transpose((1,0,2,3))
+    lg_blco_lower = lg_blco_lower.transpose((1,0,2,3))
+
+    # vh_diag[0,:,:] -= dvh_sd
+    # vh_diag[-1,:,:] -= dvh_ed
+    vh_diag_copy = vh_diag.copy()
+    # vh_diag_copy[0,:,:] -= dvh_sd
+    # vh_diag_copy[-1,:,:] -= dvh_ed
+    mr_blco_diag[0,:,:,:] += dmr_sd
+    mr_blco_diag[-1,:,:,:] += dmr_ed
+    ll_blco_diag[0,:,:,:] += dll_sd
+    ll_blco_diag[-1,:,:,:] += dll_ed
+    lg_blco_diag[0,:,:,:] += dlg_sd
+    lg_blco_diag[-1,:,:,:] += dlg_ed
+
+    dosw_btch = np.zeros_like(dosw)
+    new_btch = np.zeros_like(new)
+    npw_btch = np.zeros_like(npw)
 
     comm.Barrier()
     if rank == 0:
         time_GF_trafo += time.perf_counter()
         print("Time for W transformation: %.3f s" % time_GF_trafo, flush = True)
         #time_GF = -time.perf_counter()
-        time_spmm = -time.perf_counter()
-
-    vh_gpu = cp.sparse.csr_matrix(vh)
-    vh_ct_gpu = vh_gpu.conj().transpose()
-    nao = vh.shape[0]
-    #mr_gpu = cp.ndarray((ne,), dtype=object)
-    mr_gpu = []
-    lg_gpu = []
-    ll_gpu = []
-    for i in range(ne):
-        pg_gpu = cp.sparse.csr_matrix(pg[i])
-        pl_gpu = cp.sparse.csr_matrix(pl[i])
-        pr_gpu = cp.sparse.csr_matrix(pr[i])
-        mr_gpu.append(cp.sparse.identity(nao) - vh_gpu @ pr_gpu)
-        lg_gpu.append(vh_gpu @ pg_gpu @ vh_ct_gpu)
-        ll_gpu.append(vh_gpu @ pl_gpu @ vh_ct_gpu)
-    cp.cuda.runtime.deviceSynchronize()
-
-    comm.Barrier()
-    if rank == 0:
-        time_spmm += time.perf_counter()
-        print("Time for spmm: %.3f s" % time_spmm, flush = True)
         time_GF = -time.perf_counter()
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        #executor.map(
-        results = executor.map(
-                    rgf_W_GPU.rgf_w_opt_standalone,
-                    repeat(vh),
-                    lg_gpu, ll_gpu, mr_gpu,
-                    repeat(bmax), repeat(bmin),
-                    wg_diag, wg_upper,
-                    wl_diag, wl_upper,
-                    wr_diag, wr_upper,
-                    xr_diag,
-                    dvh_sd, dvh_ed,
-                    dmr_sd, dmr_ed,
-                    dlg_sd, dlg_ed,
-                    dll_sd, dll_ed,
-                    dosw, new, npw, repeat(nbc),
-                    idx_e, factor,
-                    repeat(NCpSC),
-                    repeat(block_inv),
-                    repeat(use_dace),
-                    repeat(validate_dace),repeat(ref_flag))
-        # for res in results:
-        #    assert isinstance(res, np.ndarray)
+    energy_batchsize = 1
+    energy_batch = np.arange(0, ne, energy_batchsize)
+    for ie in energy_batch:
+        vh_repetitions = np.min((energy_batchsize, ne - ie))
+        vh_diag_batched = np.repeat(vh_diag_copy[:, np.newaxis, :, :], vh_repetitions, axis = 1)
+        vh_diag_batched[0,:, :, :] -= dvh_sd[ie:ie+energy_batchsize, :, :]
+        vh_diag_batched[-1,:, :, :] -= dvh_ed[ie:ie+energy_batchsize, :, :]
+        rgf_W_GPU.rgf_w_opt_standalone_batched_gpu(vh_diag_batched,
+                            vh_upper,
+                            vh_lower,
+                            lg_blco_diag[:, ie:ie+energy_batchsize, :, :],
+                            lg_blco_upper[:, ie:ie+energy_batchsize, :, :],
+                            lg_blco_lower[:, ie:ie+energy_batchsize, :, :],
+                            ll_blco_diag[:, ie:ie+energy_batchsize, :, :],
+                            ll_blco_upper[:, ie:ie+energy_batchsize, :, :],
+                            ll_blco_lower[:, ie:ie+energy_batchsize, :, :],
+                            mr_blco_diag[:, ie:ie+energy_batchsize, :, :],
+                            mr_blco_upper[:, ie:ie+energy_batchsize, :, :],
+                            mr_blco_lower[:, ie:ie+energy_batchsize, :, :],
+                            bmax,
+                            bmin,
+                            wg_diag_btch[:, ie:ie+energy_batchsize, :, :],
+                            wg_upper_btch[:, ie:ie+energy_batchsize, :, :],
+                            wl_diag_btch[:, ie:ie+energy_batchsize, :, :],
+                            wl_upper_btch[:, ie:ie+energy_batchsize, :, :],
+                            wr_diag_btch[:, ie:ie+energy_batchsize, :, :],
+                            wr_upper_btch[:, ie:ie+energy_batchsize, :, :],
+                            xr_diag_btch[:, ie:ie+energy_batchsize, :, :],
+                            dosw[ie:ie+energy_batchsize, :], new[ie:ie+energy_batchsize, :], npw[ie:ie+energy_batchsize, :],
+                            nbc,
+                            idx_e[ie:ie+energy_batchsize],
+                            factor)
+
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
+    #     #executor.map(
+    #     results = executor.map(
+    #                 rgf_W_GPU.rgf_w_opt_standalone,
+    #                 repeat(vh),
+    #                 lg, ll, mr,
+    #                 repeat(bmax), repeat(bmin),
+    #                 wg_diag, wg_upper,
+    #                 wl_diag, wl_upper,
+    #                 wr_diag, wr_upper,
+    #                 xr_diag,
+    #                 dvh_sd, dvh_ed,
+    #                 dmr_sd, dmr_ed,
+    #                 dlg_sd, dlg_ed,
+    #                 dll_sd, dll_ed,
+    #                 dosw, new, npw, repeat(nbc),
+    #                 idx_e, factor,
+    #                 repeat(NCpSC),
+    #                 repeat(block_inv),
+    #                 repeat(use_dace),
+    #                 repeat(validate_dace),repeat(ref_flag))
+    #     # for res in results:
+    #     #    assert isinstance(res, np.ndarray)
+
+    wg_diag = wg_diag_btch.transpose((1,0,2,3))
+    wg_upper = wg_upper_btch.transpose((1,0,2,3))
+    wl_diag = wl_diag_btch.transpose((1,0,2,3))
+    wl_upper = wl_upper_btch.transpose((1,0,2,3))
+    wr_diag = wr_diag_btch.transpose((1,0,2,3))
+    wr_upper = wr_upper_btch.transpose((1,0,2,3))
+    xr_diag = xr_diag_btch.transpose((1,0,2,3))
+
     comm.Barrier()
     if rank == 0:
         time_GF += time.perf_counter()

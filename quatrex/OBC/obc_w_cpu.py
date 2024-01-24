@@ -78,7 +78,7 @@ def obc_w_cpu(vh: sparse.csr_matrix,
     # todo find out what rr/R is
     # (R only is against the style guide)
     #todo, compare with matlab
-    rr = 1e6
+    rr = 1e4
     # copy vh to overwrite it
     vh_cp = vh.copy()
 

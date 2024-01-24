@@ -1198,7 +1198,7 @@ def get_mm_obc_dense(
     ll_l2[:, :] = -ll_u2.conjugate().transpose()
     mr_d2 = mr_d2 + np.identity(lb_mm, dtype=np.complex128) * (1 + 1j * 1e-10)
     # if type == "L":
-    (mr_d2, mr_u2, mr_l2, matrix_blocks ) = extract_small_matrix_blocks(mr_d2, mr_u2, mr_l2, NCpSC, side, densify=True)
+    (mr_d2, mr_u2, mr_l2, matrix_blocks ) = extract_small_matrix_blocks(mr_d2, mr_u2, mr_l2, NCpSC*nbc, side, densify=True)
 
     return ((mr_d2, mr_u2, mr_l2), (lg_d2, lg_u2, lg_l2), (ll_d2, ll_u2, ll_l2), (dmr_lu, dmr_ul), (dlg_lu, dlg_ul),
             (dll_lu, dll_ul), (vh_u, vh_l), matrix_blocks)

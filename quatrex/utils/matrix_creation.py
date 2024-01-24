@@ -190,6 +190,19 @@ def initialize_block_G(NE, NB, Bsize):
 
     return (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
 
+def initialize_block_sigma(NE, NB, Bsize):
+    sr_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    srnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    srn1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sl_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    slnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sln1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sg_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    sgnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sgn1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+
+    return (sr_3D_E, srnn1_3D_E, srn1n_3D_E, sl_3D_E, slnn1_3D_E, sln1n_3D_E, sg_3D_E, sgnn1_3D_E, sgn1n_3D_E)
+
 def initialize_block_sigma_batched(NE, NB, Bsize):
     sr_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
     srnn1_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)

@@ -18,4 +18,5 @@ def gpu_avail() -> bool:
         # avail = False
     except FileNotFoundError:
         avail = False
+        print("nvidia-smi not found, no gpu available")
     return avail

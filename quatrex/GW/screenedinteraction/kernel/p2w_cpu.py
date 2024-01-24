@@ -90,16 +90,16 @@ def p2w_pool_mpi_cpu_split(
     lb_start = lb_vec[0]
     lb_end = lb_vec[nb - 1]
 
-    dvh_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dvh_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dmr_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dmr_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dlg_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dlg_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    dll_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    dll_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    condl = np.zeros((ne), dtype = np.float64)
-    condr = np.zeros((ne), dtype = np.float64)
+    # dvh_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dvh_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dmr_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dmr_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dlg_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dlg_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # dll_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # dll_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # condl = np.zeros((ne), dtype = np.float64)
+    # condr = np.zeros((ne), dtype = np.float64)
 
 
     # block sizes after matrix multiplication
@@ -109,6 +109,21 @@ def p2w_pool_mpi_cpu_split(
     nb_mm = bmax_mm.size
     # larges block length after matrix multiplication
     lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
+    lb_vec_mm = bmax_mm - bmin_mm + 1
+    lb_start_mm = lb_vec_mm[0]
+    lb_end_mm = lb_vec_mm[nb_mm - 1]
+
+
+    dvh_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dvh_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dmr_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dmr_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dlg_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dlg_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    dll_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dll_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    condl = np.zeros((ne), dtype = np.float64)
+    condr = np.zeros((ne), dtype = np.float64)
 
     # create empty buffer for screened interaction
     # in block format
