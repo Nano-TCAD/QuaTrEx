@@ -51,11 +51,11 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC3_0_2V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC2_0_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_3v.mat")
-    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_3v.mat")
-    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_3v.mat")
+    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_0v.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_0v_eq.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -80,12 +80,12 @@ if __name__ == "__main__":
     no_orb = np.array([1,1])
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
     NCpSC = 2
-    Vappl = 0.2
+    Vappl = 0.0
     energy = np.linspace(-30, 20, 126, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix107.dat', homogenize = True, NCpSC = NCpSC)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = NCpSC)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -167,7 +167,7 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.6
+    energy_fl = -3.8
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
@@ -467,7 +467,7 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=False,
+                homogenize=True,
                 return_sigma_boundary=True,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
@@ -508,7 +508,7 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=False,
+                homogenize=True,
                 return_sigma_boundary=True,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
@@ -635,7 +635,7 @@ if __name__ == "__main__":
                 rank,
                 size,
                 nbc,
-                homogenize=False,
+                homogenize=True,
                 NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads)
@@ -644,7 +644,7 @@ if __name__ == "__main__":
                 hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
                 map_upper_mm, map_lower_mm, rows, columns, ij2ji,
                 dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=True, NCpSC=NCpSC,
                 mkl_threads = w_mkl_threads, worker_num = w_worker_threads)
 
         # transform from block format to 2D format-----------------------------------

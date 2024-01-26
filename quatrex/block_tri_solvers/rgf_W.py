@@ -1307,7 +1307,7 @@ def rgf_w_opt(
             else:
                 vh_r = vh_cp[slb_p, slb_c].toarray()
                 vh_c = vh_cp[slb_c, slb_c].toarray() - dvh_ed
-                wr_diag[idx_ib, :lb_i, :lb_i] = xr_lower[idx_ib - 1, :lb_i, :lb_n] @ vh_r + xr_diag[idx_ib, :lb_i, :lb_i] @ vh_c
+                wr_diag[idx_ib, :lb_i, :lb_i] = xr_lower[idx_ib - 1, :lb_i, :lb_p] @ vh_r + xr_diag[idx_ib, :lb_i, :lb_i] @ vh_c
 
         for idx_ib in range(0, nb_mm):
             xr_diag[idx_ib, :, :] *= factor

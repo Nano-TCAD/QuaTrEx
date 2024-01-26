@@ -12,6 +12,7 @@ import mkl
 
 from quatrex.utils import change_format
 from quatrex.utils.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
+                                            initialize_block_sigma, \
                                             mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
@@ -99,6 +100,9 @@ def calc_GF_pool_mpi_split(
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
+
+    bmin_fi = bmin -1
+    bmax_fi = bmax -1
 
     LBsize = bmax[0] - bmin[0] + 1
     RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
@@ -193,12 +197,42 @@ def calc_GF_pool_mpi_split(
     # blocked_hamiltonian_lower = np.zeros((nb-1, ne, lb, lb), dtype=np.complex128)
     # change_format.sparse2block_energyhamgen_no_map(DH.Hamiltonian['H_4'], DH.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax-1, bmin -1, energy)
 
-    (sr_blco_diag, sr_blco_upper, sr_blco_lower,\
-     sl_blco_diag, sl_blco_upper, sl_blco_lower,\
-     sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma_batched(ne, nb, lb)
-    change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sr_rgf, sr_blco_diag, sr_blco_upper, sr_blco_lower,  bmax-1, bmin -1)
-    change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sl_rgf, sl_blco_diag, sl_blco_upper, sl_blco_lower, bmax-1, bmin -1)
-    change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sg_rgf, sg_blco_diag, sg_blco_upper, sg_blco_lower, bmax-1, bmin -1)
+    # (sr_blco_diag, sr_blco_upper, sr_blco_lower,\
+    #  sl_blco_diag, sl_blco_upper, sl_blco_lower,\
+    #  sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma_batched(ne, nb, lb)
+    if homogenize:
+        (sr_blco_diag, sr_blco_upper, sr_blco_lower,\
+        sl_blco_diag, sl_blco_upper, sl_blco_lower,\
+        sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma(ne, nb, lb)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            executor.map(change_format.sparse2block_no_map,
+                            SigR, sr_blco_diag, sr_blco_upper, sr_blco_lower,
+                            repeat(bmax_fi), repeat(bmin_fi))
+            executor.map(change_format.sparse2block_no_map,
+                            SigL, sl_blco_diag, sl_blco_upper, sl_blco_lower,
+                            repeat(bmax_fi), repeat(bmin_fi))
+            executor.map(change_format.sparse2block_no_map,
+                            SigG, sg_blco_diag, sg_blco_upper, sg_blco_lower,
+                            repeat(bmax_fi), repeat(bmin_fi))
+        sr_blco_diag = sr_blco_diag.transpose((1,0,2,3))
+        sr_blco_upper = sr_blco_upper.transpose((1,0,2,3))
+        sr_blco_lower = sr_blco_lower.transpose((1,0,2,3))
+        sl_blco_diag = sl_blco_diag.transpose((1,0,2,3))
+        sl_blco_upper = sl_blco_upper.transpose((1,0,2,3))
+        sl_blco_lower = sl_blco_lower.transpose((1,0,2,3))
+        sg_blco_diag = sg_blco_diag.transpose((1,0,2,3))
+        sg_blco_upper = sg_blco_upper.transpose((1,0,2,3))
+        sg_blco_lower = sg_blco_lower.transpose((1,0,2,3))
+
+
+    else:
+
+        (sr_blco_diag, sr_blco_upper, sr_blco_lower,\
+        sl_blco_diag, sl_blco_upper, sl_blco_lower,\
+        sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma_batched(ne, nb, lb)
+        change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sr_rgf, sr_blco_diag, sr_blco_upper, sr_blco_lower,  bmax-1, bmin -1)
+        change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sl_rgf, sl_blco_diag, sl_blco_upper, sl_blco_lower, bmax-1, bmin -1)
+        change_format.sparse2block_energy_forbatchedblockwise(map_diag, map_upper, map_lower, sg_rgf, sg_blco_diag, sg_blco_upper, sg_blco_lower, bmax-1, bmin -1)
 
     comm.Barrier()
     if rank == 0:
