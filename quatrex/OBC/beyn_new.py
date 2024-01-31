@@ -2,6 +2,7 @@
 import cupy as cp
 import cupyx as cpx
 import numpy as np
+# import skcuda.magma as magma
 import time
 
 from scipy.linalg import svd
@@ -11,6 +12,8 @@ from scipy.sparse import csr_matrix
 from quatrex.OBC.contour_integral import contour_integral as ci_internal, contour_integral_batched as ci_batched_internal
 from quatrex.OBC.contour_integral import contour_integral_gpu as ci_gpu_internal, contour_integral_batched_gpu as ci_batched_gpu_internal
 
+
+# magma.magma_init()
 
 compute_theta_kernel = cp.RawKernel(r'''
 #include <cupy/complex.cuh>
@@ -980,6 +983,98 @@ def contour_svd_gpu(factor: int,
     return LP1, LV, LS, LW, RP1, RV, RS, RW
 
 
+def contour_svd_eig_lumi(factor: int,
+                         matrix_blocks: np.ndarray,
+                         big_N: int,
+                         R: float,
+                         side: str,
+                         YL=None,
+                         YR=None,
+                         eps_lim=1e-8):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = cp.random.rand(N, NM)
+    if YR is None:
+        YR = cp.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    LV, LS, LW = svd(cp.asnumpy(LP0), full_matrices=False)
+    Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+    RV, RS, RW = svd(cp.asnumpy(RP0), full_matrices=False)
+    Rind = np.where(np.abs(RS) > eps_lim)[0]
+
+    if len(Lind) == N or len(Rind) == N:
+        print("GPU: Using 10/R contour")
+
+        P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
+
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
+
+        LP0 = P0@YL
+        LP1 = P1@YL
+
+        RP0 = YR@P0
+        RP1 = YR@P1
+
+        LV, LS, LW = svd(cp.asnumpy(LP0), full_matrices=False)
+        Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+        RV, RS, RW = svd(cp.asnumpy(RP0), full_matrices=False)
+        Rind = np.where(np.abs(RS) > eps_lim)[0]
+    
+    if len(Lind) == 0:
+        print("GPU: No singular values found for left eigenvectors")
+        Lind = 0
+    if len(Rind) == 0:
+        print("GPU: No singular values found for right eigenvectors")
+        Rind = 0
+
+    LV = LV[:, Lind]
+    # LS = np.diag(LS[Lind])
+    LS = np.diag(1 / LS[Lind])
+    LW = LW[Lind, :].conj().T
+
+    RV = RV[:, Rind]
+    # RS = np.diag(RS[Rind])
+    RS = np.diag(1 / RS[Rind])
+    RW = RW[Rind, :].conj().T
+
+    # Llambda, Lu = eig(LV.conj().T @ LP1 @ LW @ np.linalg.inv(LS))
+    # Rlambda, Ru = eig(np.linalg.inv(RS) @ RV.conj().T @ RP1 @ RW)
+    Llambda, Lu = eig(LV.conj().T @ LP1 @ LW @ LS)
+    Rlambda, Ru = eig(RS @ RV.conj().T @ RP1 @ RW)
+
+    LV = cp.asarray(LV)
+    RW = cp.asarray(RW)
+    Lu = cp.asarray(Lu)
+    Ru = cp.asarray(Ru)
+    Llambda = cp.asarray(Llambda)
+    Rlambda = cp.asarray(Rlambda)
+
+    return LV, RW, Lu, Llambda, Ru, Rlambda
+
+
 def beyn_eig(LV, LS, LW, LP1, RV, RS, RW, RP1):
 
     Llambda, Lu = eig(LV.conj().T @ LP1 @ LW @ np.linalg.inv(LS))
@@ -989,6 +1084,34 @@ def beyn_eig(LV, LS, LW, LP1, RV, RS, RW, RP1):
 
 
 def beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1):
+
+
+    # # LA = cp.asnumpy(LV.conj().T @ LP1 @ LW @ cp.linalg.inv(LS))
+    # LA = np.transpose(cp.asnumpy(LV.conj().T @ LP1 @ LW @ cp.linalg.inv(LS)))
+    # # RA = cp.asnumpy(cp.linalg.inv(RS) @ RV.conj().T @ RP1 @ RW)
+    # RA = np.transpose(cp.asnumpy(cp.linalg.inv(RS) @ RV.conj().T @ RP1 @ RW))
+
+    # Nl, Nr = LA.shape[0], RA.shape[0]
+    # N = max(Nl, Nr)
+
+    # Llambda = np.zeros((Nl,), np.complex128) # eigenvalues
+    # Rlambda = np.zeros((Nr,), np.complex128) # eigenvalues
+    # Lu = np.zeros((Nl, Nl), np.complex128)
+    # Ru = np.zeros((Nr, Nr), np.complex128)
+
+    # # Set up workspace:
+    # nb = magma.magma_get_zgeqrf_nb(N, N)
+    # lwork = N*(1 + 2*nb)
+
+    # work = np.zeros((lwork,), np.complex128)
+    # rwork= np.zeros((2*N,), np.complex64)
+
+    # # status = magma.magma_zgeev('V', 'V', N, LA.ctypes.data, N, Llambda.ctypes.data, vl.ctypes.data, N, Lu.ctypes.data, N, work.ctypes.data, lwork, rwork.ctypes.data)
+    # status = magma.magma_zgeev('V', 'N', Nl, LA.ctypes.data, Nl, Llambda.ctypes.data, Lu.ctypes.data, Nl, 0, Nl, work.ctypes.data, lwork, rwork.ctypes.data)
+    # Lu[:] = Lu.conj().T
+    # # status = magma.magma_zgeev('N', 'V', N, RA.ctypes.data, N, Rlambda.ctypes.data, vl.ctypes.data, N, Ru.ctypes.data, N, work.ctypes.data, lwork, rwork.ctypes.data)
+    # status = magma.magma_zgeev('V', 'N', Nr, RA.ctypes.data, Nr, Rlambda.ctypes.data, Ru.ctypes.data, Nr, 0, N, work.ctypes.data, lwork, rwork.ctypes.data)
+    # Ru[:] = Ru.conj().T
 
     Llambda, Lu = eig(cp.asnumpy(LV.conj().T @ LP1 @ LW @ cp.linalg.inv(LS)))
     Rlambda, Ru = eig(cp.asnumpy(cp.linalg.inv(RS) @ RV.conj().T @ RP1 @ RW))
@@ -1143,7 +1266,7 @@ def beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, t
         min_dEk = np.min(abs(dEk_dk[ind]))
     else:
         min_dEk = 1e8
-    finish = time.time()
+    # finish = time.time()
     # print('time to calculate min_dEk: ', finish - start)
     
     return Sigma, gR, min_dEk
@@ -1646,40 +1769,19 @@ def beyn_new_gpu(factor: int,
                  type,
                  YL=None,
                  YR=None):
-    
-
-    # theta_min = 0
-    # theta_max = 2 * np.pi
-    # NT = 51
-    # eps_lim = 1e-8
-    # ref_iteration = 2
-    # cond = 0
-    # min_dEk = 1e8
 
     cond = 0
     min_dEk = 1e8
 
-    # try:
-    
-    # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
-    # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
-    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    # LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
-    if LS.size == 0 or RS.size == 0:
-        raise Exception("No singular values above the threshold")
+    # if LS.size == 0 or RS.size == 0:
+    #     raise Exception("No singular values above the threshold")
 
-    Lu, Llambda, Ru, Rlambda = beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    # Lu, Llambda, Ru, Rlambda = beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    LV, RW, Lu, Llambda, Ru, Rlambda = contour_svd_eig_lumi(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
     kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
     Sigma, gR, min_dEk = beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
-    
-    # except Exception as e:
-
-    #     print("Error in Beyn:")
-    #     print(e)
-
-    #     cond = np.nan
-    #     Sigma = None
-    #     gR = None
 
     return Sigma, gR, cond, min_dEk
 
