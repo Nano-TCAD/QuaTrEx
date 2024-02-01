@@ -166,7 +166,8 @@ def calc_GF_pool_mpi_split(
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
         #              repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
-        results = executor.map(obc_GF_cpu, rgf_M_0,
+        #results = 
+        executor.map(obc_GF_cpu, rgf_M_0,
            SigR,
            fL,
            fR,
@@ -174,9 +175,9 @@ def calc_GF_pool_mpi_split(
            repeat(bmin),
            repeat(bmax),
            repeat(NCpSC))
-        for idx, res in enumerate(results):
-            condl[idx] = res[0]
-            condr[idx] = res[1]
+        #for idx, res in enumerate(results):
+        #    condl[idx] = res[0]
+        #    condr[idx] = res[1]
     
     comm.Barrier()
     if rank == 0:

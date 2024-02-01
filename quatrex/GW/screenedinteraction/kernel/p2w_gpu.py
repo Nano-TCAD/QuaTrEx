@@ -184,7 +184,8 @@ def p2w_pool_mpi_gpu_split(
 
     ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+        #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+        executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
                                pg, pl, pr,
                                repeat(bmax), repeat(bmin),
                                dvh_sd, dvh_ed,
@@ -197,9 +198,9 @@ def p2w_pool_mpi_gpu_split(
                                repeat(use_dace),
                                repeat(validate_dace),repeat(ref_flag)
                                 )
-        for idx, res in enumerate(results):
-            condl[idx] = res[0]
-            condr[idx] = res[1]
+        # for idx, res in enumerate(results):
+        #     condl[idx] = res[0]
+        #     condr[idx] = res[1]
     
 
     l_defect = np.count_nonzero(np.isnan(condl))
