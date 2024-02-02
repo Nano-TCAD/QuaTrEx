@@ -4,6 +4,9 @@ With transposition through network.
 Applied to a MoS2 supercell
 See the different GW step folders for more explanations.
 """
+# The two lines below are just a quick fix!
+import sys
+sys.path.append("../")
 from quatrex.utils.matrix_creation import get_number_connected_blocks
 from quatrex.utils.bsr import bsr_matrix
 from quatrex.utils import utils_gpu
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     # Number of kpoints in x-, y-, and z-directions
     num_kpoints = np.array([1, 3, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-10, 20, 100, endpoint=True,
+    energy = np.linspace(-10, 20, 128, endpoint=True,
                          dtype=float)  # Energy Vector
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
     # Have to read the correct Hamiltonian object
@@ -495,26 +498,25 @@ if __name__ == "__main__":
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(
             np.zeros((count[1, rank], no), dtype=np.complex128), rows, columns, nao)
         # Only do this for the band gap point. But where is that?
-        ECmin_vec[i, iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[i, iter_num]-0.02,
-                                                              energy,
-                                                              matrix_obj.Overlap[(
-                                                                  0, 0, 0)],
-                                                              matrix_obj.k_Hamiltonian[(
-                                                                  0, 0, 0)],
-                                                              sr_h2g_vec,
-                                                              sl_h2g_vec,
-                                                              sg_h2g_vec,
-                                                              sr_ephn_h2g_vec,
-                                                              rows,
-                                                              columns,
-                                                              bmin,
-                                                              bmax,
-                                                              comm,
-                                                              rank,
-                                                              size,
-                                                              count,
-                                                              disp,
-                                                              side='left')
+        # Issue with current code: (0,0,0) might not be the band gap point. Need to fix this!!!
+        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+                                                           energy,
+                                                           matrix_obj.Overlap[(0, 0, 0)],
+                                                           matrix_obj.k_Hamiltonian[(0, 0, 0)],
+                                                           sr_h2g_vec,
+                                                           sl_h2g_vec,
+                                                           sg_h2g_vec,
+                                                           sr_ephn_h2g_vec,
+                                                           rows,
+                                                           columns,
+                                                           bmin,
+                                                           bmax,
+                                                           comm,
+                                                           rank,
+                                                           size,
+                                                           count,
+                                                           disp,
+                                                           side='left')
         if iter_num == 0:
             dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
             dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
@@ -600,6 +602,12 @@ if __name__ == "__main__":
         gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
         gl_lower = -gl_upper.conjugate().transpose((0, 1, 3, 2))
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
+        
+        # Assert diagonal blocks satisfy the same physics identity
+        assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
+        assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
+        assert np.allclose(gr_diag, gr_diag.transpose((0, 1, 3, 2)))
+
         if iter_num == 0:
             gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
                                                            map_lower, gg_diag, gg_upper,
@@ -669,14 +677,16 @@ if __name__ == "__main__":
                 gr_g2p,
                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            # Use convolution here. Might extend to fft also. k_points are supported here
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_conv_cpu_kpoints(
+            # Use convolution here. Might extend to fft also (not implemented yet). k_points are supported here
+            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_kpoints(  # g2p_cpu.g2p_conv_cpu_kpoints(
                 pre_factor,
                 ij2ji,
                 gg_g2p,
                 gl_g2p,
                 gr_g2p,
-                num_kpoints)
+                gl_transposed_g2p,
+                num_kpoints
+                )
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -923,21 +933,24 @@ if __name__ == "__main__":
                 wl_transposed_gw2s
             )
         elif args.type in ("cpu"):
-            # k-points are supported here 
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2,
-                                                                        gg_g2p,
-                                                                        gl_g2p,
-                                                                        gr_g2p,
-                                                                        wg_gw2s,
-                                                                        wl_gw2s,
-                                                                        wr_gw2s,
-                                                                        wg_transposed_gw2s,
-                                                                        wl_transposed_gw2s,
-                                                                        num_kpoints,
-                                                                        energy,
-                                                                        rank,
-                                                                        disp,
-                                                                        count)
+            # k-points are supported here
+            vh_k = np.asarray(matrix_obj.k_Coulomb_matrix.values())  # Assuming ordering is correct (can make this more fault proof later)
+            vh1D_k = vh_k.reshape((vh_k.shape[0], -1))
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr_kpoint(-pre_factor / 2,
+                                                                               gg_g2p,
+                                                                               gl_g2p,
+                                                                               gr_g2p,
+                                                                               wg_gw2s,
+                                                                               wl_gw2s,
+                                                                               wr_gw2s,
+                                                                               wg_transposed_gw2s,
+                                                                               wl_transposed_gw2s,
+                                                                               tuple(num_kpoints),
+                                                                               vh1D_k,
+                                                                               energy,
+                                                                               rank,
+                                                                               disp,
+                                                                               count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,
