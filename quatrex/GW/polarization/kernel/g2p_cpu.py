@@ -286,18 +286,25 @@ def g2p_fft_mpi_cpu_inlined(
     return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
 
 
-@numba.njit("(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+#@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], i8[:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_mpi_cpu_inlined_kpoints(
-    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128], num_kpoints : npt.NDArray
+    pre_factor: np.complex128,
+    ij2ji: npt.NDArray[np.int32], 
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128],
+    gl_transposed: npt.NDArray[np.complex128],
+    num_kpoints: npt.NDArray[np.int32]
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and the lesser transposed are needed. This one includes the
-        convolution of the k-points. So far the implementation is very naive. Not finished
-
+        convolution of the k-points. So far the implementation is very naive. 
+        
+        Not finished!!
 
     Args:
         pre_factor      (np.complex128): pre_factor, multiplied at the end
+        ij2ji   (npt.NDArray[np.int32]): mapping to transposed matrix, (#orbital)
         gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
         gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
         gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
@@ -310,71 +317,81 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
                     ] 
     """
     # number of energy points and nnz (or orbital?)
-    nkpts = np.prod(num_kpoints)
-    ne = gg.shape[1]/nkpts
+    nkpts = np.prod(num_kpoints, dtype=np.int32)
+    ne = int(gg.shape[1]/nkpts)
     no = gg.shape[0]
     ne2 = 2 * ne
+    # Index matrix for k-points
+    ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
 
-    # Need to seperate out k-points from the Green's functions.
+    # compute fourier transforms.
+    # Now everything is kept in memory, which might be a problem
+    # fft. _t subscript are used for the time domain.
+    gg_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+    gl_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+    gr_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+    gl_transposed_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+    
+    for i in range(nkpts):
+        gg_ts = fft.fft(gg[:, i*ne:(i+1)*ne], n=ne2, axis=1)
+        gl_ts = fft.fft(gl[:, i*ne:(i+1)*ne], n=ne2, axis=1)
+        gr_ts = fft.fft(gr[:, i*ne:(i+1)*ne], n=ne2, axis=1)
+        gl_transposed_ts = fft.fft(gl_transposed[:, i*ne:(i+1)*ne], n=ne2, axis=1)  # Have to fix this
+        # Assert identities
+        assert np.allclose(gl_transposed_ts, gl_ts[ij2ji])  
+        assert np.allclose(gg_ts, -np.conjugate(gg_ts[ij2ji, ::-1]))
+        assert np.allclose(gl_ts, -np.conjugate(gl_ts[ij2ji, ::-1])) 
+        assert np.allclose(gr_ts - np.conjugate(gr_ts[ij2ji]), gg_ts - gl_ts)
+        gg_t[:, i*ne2:(i+1)*ne2] = gg_ts
+        gl_t[:, i*ne2:(i+1)*ne2] = gl_ts
+        gr_t[:, i*ne2:(i+1)*ne2] = gr_ts
+        gl_transposed_t[:, i*ne2:(i+1)*ne2] = gl_transposed_ts
+
+    pg_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    pr_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+
+    # Convolution over k-points
     for ki in range(nkpts):
         for kj in range(nkpts):
-            # fft. _t subscript are used for the time domain.
-            gg_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
-            gl_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
-            gr_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
-            gl_transposed_t: npt.NDArray[np.complex128] = np.empty((no, ne2), dtype=np.complex128)
             # Need to extract the correct energies that correspond to the right k-point.
             # energy kpoint indices.
-            eki = ki*ne
-            ekj = kj*ne
-            eki_j = 
-            for i in numba.prange(no):
-                gg_t[i, :] = fft.fft(gg[i, ei:ei+ne], n=ne2)
-                gl_t[i, :] = fft.fft(gl[i, ei:ei+ne], n=ne2)
-                gr_t[i, :] = fft.fft(gr[i, ei:ei+ne], n=ne2)
-                gl_transposed_t[i, :] = fft.fft(gl_transposed[i, ei:ei+ne], n=ne2)
+            eki = ki * ne2
+            # Find other k-index
+            mi = np.array(np.where(ind_mat == ki))
+            mj = np.array(np.where(ind_mat == kj))
+            md = tuple(mi-mj)
+            eki_j = int(ind_mat[md]) * ne2 - gl_transposed_t.shape[1] - 1
+            pg_t[:, eki:eki+ne2] += gg_t[:, eki:eki+ne2] * gl_transposed_t[:, eki_j+ne2:eki_j:-1]
+            pr_t[:, eki:eki+ne2] += gr_t[:, eki:eki+ne2] * gl_transposed_t[:, eki_j+ne2:eki_j:-1] + gl_t[:, eki:eki+ne2] * np.conjugate(gr_t[:, eki:eki+ne2])
 
-            # reverse and transpose
-            gl_t_mod: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
-            for i in numba.prange(no):
-                for j in range(ne2):
-                    gl_t_mod[i, j] = gl_transposed_t[i, -j]
+    # ifft, cutoff and multiply with pre factor
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
 
-            # multiply elementwise
-            pg_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
-            pr_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    for i in range(nkpts):
+        pg_temp = fft.ifft(pg_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor
+        pr_temp = fft.ifft(pr_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor  # These cutoffs could cause problems
+        pl_temp = -np.conjugate((pg_temp[:, ::-1]))
 
-            for i in numba.prange(no):
-                for j in numba.prange(ne2):
-                    pg_t[i, j] = gg_t[i, j] * gl_t_mod[i, j]
-                    pr_t[i, j] = gr_t[i, j] * gl_t_mod[i, j] + gl_t[i, j] * np.conjugate(gr_t[i, j])
+        # assert more identities
+        assert np.allclose(pl_temp, pg_temp[ij2ji, ::-1])
 
-            # ifft, cutoff and multiply with pre factor
-            pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
-            pr: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
-            pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
-            
-            # Why 3 (4) of the same for-loop? 
-            for i in numba.prange(no):
-                pg[i, :] = fft.ifft(pg_t[i, :])
-                pr[i, :] = fft.ifft(pr_t[i, :])
-            for i in numba.prange(no):
-                for j in numba.prange(ne2):
-                    pg[i, j] = pg[i, j] * pre_factor
-                    pr[i, j] = pr[i, j] * pre_factor
+        pg[:, i*ne:(i+1)*ne] = pg_temp
+        pr[:, i*ne:(i+1)*ne] = pr_temp
+        pl[:, i*ne:(i+1)*ne] = pl_temp
 
-            # lesser polarization from identity
-            for i in numba.prange(no):
-                for j in range(ne2):
-                    pl[i, j] = -np.conjugate(pg[i, -j])
-
-    return (pg[:, :ne], pl[:, :ne], pr[:, :ne])
+    return (pg, pl, pr)
 
 
-@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+#@numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:], i4[:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_conv_cpu_kpoints(
-    pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
-    gl: npt.NDArray[np.complex128], gr: npt.NDArray[np.complex128], num_kpoints : npt.NDArray
+    pre_factor: np.complex128, 
+    ij2ji: npt.NDArray[np.int32],
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    gr: npt.NDArray[np.complex128],
+    num_kpoints: npt.NDArray[np.int32]
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with convolution on the cpu(see file description). 
         The Green's function and a mapping to the transposed indices are needed.
@@ -397,20 +414,23 @@ def g2p_conv_cpu_kpoints(
     # nnz (or orbitals?)
     no: np.int32 = gg.shape[0]
     # num kpoints and number of energy points
-    nkpts = np.prod(num_kpoints)
-    ne: np.int32 = gg.shape[1] / nkpts
-
+    nkpts = np.prod(num_kpoints, dtype=np.int32)
+    ne: np.int32 = int(gg.shape[1] / nkpts)
+    assert ne * nkpts == gg.shape[1], "Something went wrong..."
+    # Index matrix for k-points
+    ind_mat = np.arange(nkpts).reshape(num_kpoints)
 
     # create polarization arrays
     pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
     pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
     pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-        
+
     # evaluate convolution
     # testing with only one k-index
     for ij in numba.prange(no):
         for ki in range(nkpts):
             for e in numba.prange(ne):
+                # print(f'Starting energy point {e} and k point {ki} for orbital {ij}.')
                 ji = ij2ji[ij]
                 tmpg = 0
                 tmpl = 0
@@ -419,13 +439,14 @@ def g2p_conv_cpu_kpoints(
                     for ep in range(e, ne):
                         ke1 = kip * ne + ep
                         # Find other k-index
-                        ind_mat = np.arange(nkpts).reshape(num_kpoints)
-                        mip = np.array(np.where(ind_mat==kip))
-                        mi = np.array(np.where(ind_mat==ki))
-                        md = tuple(mip-mi) 
-                        ke2 = ind_mat[md] * ne + ep - e  
+                        mip = np.array(np.where(ind_mat == kip))
+                        mi = np.array(np.where(ind_mat == ki))
+                        md = tuple(mip-mi)
+                        ke2 = ind_mat[md] * ne + ep - e
+                        assert ke1 < gg.shape[1], "ke1 is out of bounds"
+                        assert ke2 < gg.shape[1], "ke2 is out of bounds"
                         tmpg += pre_factor * gg[ij, ke1] * gl[ji, ke2]
-                        tmpl += pre_factor * gl[ij,ke1] * gg[ji, ke2]
+                        tmpl += pre_factor * gl[ij, ke1] * gg[ji, ke2]
                         tmpr += pre_factor * (gr[ij, ke1] * gl[ji, ke2] + gl[ij, ke1] * np.conjugate(gr[ij, ke2]))
                 pg[ij, ki*ne+e] = tmpg
                 pl[ij, ki*ne+e] = tmpl
