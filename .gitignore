@@ -145,3 +145,6 @@ gmon.out
 
 # DaCe
 .dacecache/
+
+# Local testing
+samples/testing.ipynb
