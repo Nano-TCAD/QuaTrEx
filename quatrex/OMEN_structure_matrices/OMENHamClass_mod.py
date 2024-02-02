@@ -116,9 +116,8 @@ class Matrices:
             # Read positions of the Wannier functions
             self.position_vector = np.load(sim_folder + 'position_vector.npy')
 
-            # Prepare block properties
-            self.NBlocks, self.Bmin, self.Bmax = self.prepare_block_properties(self.Hamiltonian[(0, 0, 0)])
-            self.size = self.Bmax[-1] - self.Bmin[0]
+            # Size
+            self.size = self.Hamiltonian[(0, 0, 0)].shape[0]
             # S matrix. Currently only a identity matrix because the Wannier functions are orthonormal.
             self.Overlap = {}
             self.Overlap[(0, 0, 0)] = sparse.identity(self.size, format='csr')
@@ -146,8 +145,12 @@ class Matrices:
             # create k-dependent Coulomb matrix
             self.k_Coulomb_matrix = self.create_k_matrix(self.Coulomb_matrix)
 
+            # Prepare block properties. Should be done from the k_Hamiltonian
+            self.NBlocks, self.Bmin, self.Bmax = self.prepare_block_properties(self.k_Hamiltonian[(0, 0, 0)])
+            assert self.size == self.Bmax[-1] - self.Bmin[0] + 1, f"Size of the Ham.: ({self.size}) does not match Bmax[-1] - Bmin[0] +1: ({self.Bmax[-1] - self.Bmin[0]+1})"
+
             # returns the sparse indices of the k_Hamiltonian
-            self.columns, self.rows = self.map_sparse_indices(self.k_Hamiltonian)
+            self.columns, self.rows = self.map_sparse_indices(self.k_Hamiltonian[(0, 0, 0)])
 
     def spy_hamiltonian(self):
         """
