@@ -130,8 +130,8 @@ def calc_GF_pool_mpi(
     fR = vfermi(energy, Efr, UT)
 
     # initialize the Green's function in block format with zero
-    # number of energy points TIMES number kpoints
-    ne = energy.shape[0]*DH.nkpts
+    # number of energy points x kpoints
+    ne = energy.shape[0]
     # number of blocks
     nb = DH.Bmin.shape[0]
     # length of the largest block
@@ -410,13 +410,13 @@ def calc_GF_mpi(
 def generator_rgf_Hamiltonian(E, idx_k, DH, SigR):
     for i, ik in enumerate(idx_k):
         kp = tuple(DH.kp[ik])
-        yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.k_Hamiltonian[kp] - SigR[i]
+        yield (E[i] + 1j * 1e-12) * DH.Overlap[(0, 0, 0)] - DH.k_Hamiltonian[kp] - SigR[i]
 
 
 def generator_rgf_currentdens_Hamiltonian(E, idx_k, DH):
     for i, ik in enumerate(idx_k):
         kp = tuple(DH.kp[ik])
-        yield DH.k_Hamiltonian[kp] - (E[i]) * DH.Overlap['H_4']
+        yield DH.k_Hamiltonian[kp] - (E[i]) * DH.Overlap[(0, 0, 0)]
 
 
 def assemble_full_G_smoothing(G, factor, G_block, Gnn1_block, Bmin, Bmax, format='sparse', type='R'):
