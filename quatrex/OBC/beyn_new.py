@@ -1011,36 +1011,36 @@ def contour_svd_eig_lumi(factor: int,
     P0 = P0C1 + P0C2
     P1 = P1C1 + P1C2
 
-    LP0 = P0@YL
-    LP1 = P1@YL
+    LP0 = cp.asnumpy(P0@YL)
+    LP1 = cp.asnumpy(P1@YL)
 
-    RP0 = YR@P0
-    RP1 = YR@P1
+    RP0 = cp.asnumpy(YR@P0)
+    RP1 = cp.asnumpy(YR@P1)
 
-    LV, LS, LW = svd(cp.asnumpy(LP0), full_matrices=False)
+    LV, LS, LW = svd(LP0, full_matrices=False)
     Lind = np.where(np.abs(LS) > eps_lim)[0]
 
-    RV, RS, RW = svd(cp.asnumpy(RP0), full_matrices=False)
+    RV, RS, RW = svd(RP0, full_matrices=False)
     Rind = np.where(np.abs(RS) > eps_lim)[0]
 
     if len(Lind) == N or len(Rind) == N:
-        print("GPU: Using 10/R contour")
+        # print("GPU: Using 10/R contour")
 
         P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
 
         P0 = P0C1 + P0C3
         P1 = P1C1 + P1C3
 
-        LP0 = P0@YL
-        LP1 = P1@YL
+        LP0 = cp.asnumpy(P0@YL)
+        LP1 = cp.asnumpy(P1@YL)
 
-        RP0 = YR@P0
-        RP1 = YR@P1
+        RP0 = cp.asnumpy(YR@P0)
+        RP1 = cp.asnumpy(YR@P1)
 
-        LV, LS, LW = svd(cp.asnumpy(LP0), full_matrices=False)
+        LV, LS, LW = svd(LP0, full_matrices=False)
         Lind = np.where(np.abs(LS) > eps_lim)[0]
 
-        RV, RS, RW = svd(cp.asnumpy(RP0), full_matrices=False)
+        RV, RS, RW = svd(RP0, full_matrices=False)
         Rind = np.where(np.abs(RS) > eps_lim)[0]
     
     if len(Lind) == 0:

@@ -34,7 +34,7 @@ def test_cpu():
         for factor in (1, 2, 4):
             for type in ('L', 'R'):
 
-                print(f'N = {N}, factor = {factor}, type = {type}')
+                print(f'N = {N}, factor = {factor}, type = {type}', flush=True)
 
                 # beyn(factor, M00, M01, M10, imag_lim, R, type)
                 # runtimes = timeit.repeat("beyn(factor, M00, M01, M10, imag_lim, R, type)",
@@ -44,7 +44,7 @@ def test_cpu():
                 beyn_gpu(factor, M00_d, M01_d, M10_d, imag_lim, R, type)
                 runtimes = timeit.repeat("beyn_gpu(factor, M00_d, M01_d, M10_d, imag_lim, R, type); cp.cuda.stream.get_current_stream().synchronize()",
                                          setup="cp.cuda.stream.get_current_stream().synchronize()",
-                                         globals={**globals(), **locals()}, number=1, repeat=10)
+                                         globals={**globals(), **locals()}, number=1, repeat=2)
                 print(f'Beyn GPU: Avg {np.mean(runtimes)}s, Median {np.median(runtimes)}s')
                 continue
 
