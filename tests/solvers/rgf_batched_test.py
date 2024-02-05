@@ -74,7 +74,7 @@ def test_rgf_gpu(num_blocks, num_energies, block_size, repeat=10):
         
         runtimes[r] = time.time() - start
     
-    print(f"Median non-batched runtime: {np.median(runtimes):.3f} s")
+    print(f"Median non-batched runtime: {np.median(runtimes):.3f} s", flush=True)
 
     return
 
@@ -146,13 +146,13 @@ def test_rgf_batched_gpu(num_blocks, num_energies, block_size, batch_size, repea
 
         runtimes[r] = time.time() - start
     
-    print(f"Median batched runtime (batch size {batch_size}): {np.median(runtimes):.3f} s")
+    print(f"Median batched runtime (batch size {batch_size}): {np.median(runtimes):.3f} s", flush=True)
 
     return
 
 
 if __name__ == "__main__":
 
-    test_rgf_gpu(5, 20, 416)
-    test_rgf_batched_gpu(5, 20, 416, 1)
-    test_rgf_batched_gpu(5, 20, 416, 10)
+    test_rgf_gpu(10, 100, 416)
+    test_rgf_batched_gpu(10, 100, 416, 1)
+    test_rgf_batched_gpu(10, 100, 416, 10)
