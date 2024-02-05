@@ -8,6 +8,7 @@ import numpy.typing as npt
 from scipy import sparse
 import typing
 import numba
+from quatrex.OBC.beyn_new import extract_small_matrix_blocks
 
 
 def stack_three(a: sparse.csr_matrix, b: sparse.csr_matrix, c: sparse.csr_matrix) -> sparse.csr_matrix:
@@ -547,6 +548,7 @@ def get_mm_obc(
         vhpg_l1d1 = vh_l1 @ pg_d1
         vhpg_l1u1 = vh_l1 @ pg_u1
         vhpg_l1l1 = vh_l1 @ pg_l1
+
         vhpgvh_d1d1d1 = (vhpl_d1d1 @ vh_d1).toarray()
         vhpgvh_d1d1u1 = (vhpl_d1d1 @ vh_u1).toarray()
         vhpgvh_d1d1l1 = (vhpl_d1d1 @ vh_l1).toarray()
@@ -633,7 +635,7 @@ def get_mm_obc(
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
         lg_d2[:lb,
               lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_d2[lb:2 *
               lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
         lg_d2[
@@ -653,7 +655,7 @@ def get_mm_obc(
         lg_u2[lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
         lg_u2[2 *
               lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
         lg_u2[2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
 
         ll_d2[:lb, :
@@ -723,7 +725,8 @@ def get_mm_obc(
 def get_mm_obc_dense(
     vh_1: npt.NDArray[np.complex128], vh_2: npt.NDArray[np.complex128], pg_1: npt.NDArray[np.complex128],
     pg_2: npt.NDArray[np.complex128], pl_1: npt.NDArray[np.complex128], pl_2: npt.NDArray[np.complex128],
-    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], pr_3: npt.NDArray[np.complex128], nbc: int
+    pr_1: npt.NDArray[np.complex128], pr_2: npt.NDArray[np.complex128], pr_3: npt.NDArray[np.complex128], nbc: int,
+    NCpSC: int, side: str = "L"
 ) -> typing.Tuple[typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
                   typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]],
@@ -763,19 +766,43 @@ def get_mm_obc_dense(
     # block size after mm
     lb_mm = nbc * lb
     # define the right blocks
-    vh_d1 = vh_1
-    vh_u1 = vh_2
-    vh_l1 = vh_u1.conjugate().transpose()
-    pg_d1 = pg_1
-    pg_u1 = pg_2
-    pg_l1 = -pg_u1.conjugate().transpose()
-    pl_d1 = pl_1
-    pl_u1 = pl_2
-    pl_l1 = -pl_u1.conjugate().transpose()
-    pr_d1 = pr_1
-    pr_u1 = pr_2
-    #pr_l1 = pr_u1.transpose()
-    pr_l1 = pr_3
+    # vh_d1 = vh_1
+    # vh_u1 = vh_2
+    # vh_l1 = vh_u1.conjugate().transpose()
+    # if type == "L":
+    (vh_d1, vh_u1, vh_l1, _) = extract_small_matrix_blocks(vh_1, vh_2,
+                                                            vh_2.conjugate().transpose(),
+                                                            NCpSC, side, densify = True)  
+    # else:
+    #     vh_d1 = vh_1
+    #     vh_u1 = vh_2
+    #     vh_l1 = vh_u1.conjugate().transpose()
+    # pg_d1 = pg_1
+    # pg_u1 = pg_2
+    # pg_l1 = -pg_u1.conjugate().transpose()
+    (pg_d1, pg_u1, pg_l1, _) = extract_small_matrix_blocks(pg_1, pg_2,
+                                                            -pg_2.conjugate().transpose(),
+                                                            NCpSC, side, densify = True)
+
+
+    # if side == "L":
+    (pl_d1, pl_u1, pl_l1, _) = extract_small_matrix_blocks(pl_1, pl_2,
+                                                            -pl_2.conjugate().transpose(),
+                                                            NCpSC, side, densify = True)
+    # else: 
+    #     pl_d1 = pl_1
+    #     pl_u1 = pl_2
+    #     pl_l1 = -pl_u1.conjugate().transpose()
+
+    # if side == "L":
+    (pr_d1, pr_u1, pr_l1, _) = extract_small_matrix_blocks(pr_1, pr_2,
+                                                            pr_3,
+                                                            NCpSC, side, densify = True)
+    # else:
+    #     pr_d1 = pr_1
+    #     pr_u1 = pr_2
+    #     #pr_l1 = pr_u1.transpose()
+    #     pr_l1 = pr_3
 
     # output matrices
     mr_d2 = np.empty((lb_mm, lb_mm), dtype=np.complex128)
@@ -980,32 +1007,59 @@ def get_mm_obc_dense(
         vhpg_l1d1 = vh_l1 @ pg_d1
         vhpg_l1u1 = vh_l1 @ pg_u1
         vhpg_l1l1 = vh_l1 @ pg_l1
-        vhpgvh_d1d1d1 = vhpl_d1d1 @ vh_d1
-        vhpgvh_d1d1u1 = vhpl_d1d1 @ vh_u1
-        vhpgvh_d1d1l1 = vhpl_d1d1 @ vh_l1
-        vhpgvh_d1u1d1 = vhpl_d1u1 @ vh_d1
-        vhpgvh_d1u1u1 = vhpl_d1u1 @ vh_u1
-        vhpgvh_d1u1l1 = vhpl_d1u1 @ vh_l1
-        vhpgvh_d1l1d1 = vhpl_d1l1 @ vh_d1
-        vhpgvh_d1l1u1 = vhpl_d1l1 @ vh_u1
-        vhpgvh_d1l1l1 = vhpl_d1l1 @ vh_l1
-        vhpgvh_u1d1d1 = vhpl_u1d1 @ vh_d1
-        vhpgvh_u1d1u1 = vhpl_u1d1 @ vh_u1
-        vhpgvh_u1d1l1 = vhpl_u1d1 @ vh_l1
-        vhpgvh_u1u1d1 = vhpl_u1u1 @ vh_d1
-        vhpgvh_u1u1u1 = vhpl_u1u1 @ vh_u1
-        vhpgvh_u1u1l1 = vhpl_u1u1 @ vh_l1
-        vhpgvh_u1l1d1 = vhpl_u1l1 @ vh_d1
-        vhpgvh_u1l1u1 = vhpl_u1l1 @ vh_u1
-        vhpgvh_u1l1l1 = vhpl_u1l1 @ vh_l1
-        vhpgvh_l1d1d1 = vhpl_l1d1 @ vh_d1
-        vhpgvh_l1d1u1 = vhpl_l1d1 @ vh_u1
-        vhpgvh_l1d1l1 = vhpl_l1d1 @ vh_l1
-        vhpgvh_l1u1d1 = vhpl_l1u1 @ vh_d1
-        vhpgvh_l1u1u1 = vhpl_l1u1 @ vh_u1
-        vhpgvh_l1u1l1 = vhpl_l1u1 @ vh_l1
-        vhpgvh_l1l1d1 = vhpl_l1l1 @ vh_d1
-        vhpgvh_l1l1u1 = vhpl_l1l1 @ vh_u1
+        # vhpgvh_d1d1d1 = vhpl_d1d1 @ vh_d1
+        # vhpgvh_d1d1u1 = vhpl_d1d1 @ vh_u1
+        # vhpgvh_d1d1l1 = vhpl_d1d1 @ vh_l1
+        # vhpgvh_d1u1d1 = vhpl_d1u1 @ vh_d1
+        # vhpgvh_d1u1u1 = vhpl_d1u1 @ vh_u1
+        # vhpgvh_d1u1l1 = vhpl_d1u1 @ vh_l1
+        # vhpgvh_d1l1d1 = vhpl_d1l1 @ vh_d1
+        # vhpgvh_d1l1u1 = vhpl_d1l1 @ vh_u1
+        # vhpgvh_d1l1l1 = vhpl_d1l1 @ vh_l1
+        # vhpgvh_u1d1d1 = vhpl_u1d1 @ vh_d1
+        # vhpgvh_u1d1u1 = vhpl_u1d1 @ vh_u1
+        # vhpgvh_u1d1l1 = vhpl_u1d1 @ vh_l1
+        # vhpgvh_u1u1d1 = vhpl_u1u1 @ vh_d1
+        # vhpgvh_u1u1u1 = vhpl_u1u1 @ vh_u1
+        # vhpgvh_u1u1l1 = vhpl_u1u1 @ vh_l1
+        # vhpgvh_u1l1d1 = vhpl_u1l1 @ vh_d1
+        # vhpgvh_u1l1u1 = vhpl_u1l1 @ vh_u1
+        # vhpgvh_u1l1l1 = vhpl_u1l1 @ vh_l1
+        # vhpgvh_l1d1d1 = vhpl_l1d1 @ vh_d1
+        # vhpgvh_l1d1u1 = vhpl_l1d1 @ vh_u1
+        # vhpgvh_l1d1l1 = vhpl_l1d1 @ vh_l1
+        # vhpgvh_l1u1d1 = vhpl_l1u1 @ vh_d1
+        # vhpgvh_l1u1u1 = vhpl_l1u1 @ vh_u1
+        # vhpgvh_l1u1l1 = vhpl_l1u1 @ vh_l1
+        # vhpgvh_l1l1d1 = vhpl_l1l1 @ vh_d1
+        # vhpgvh_l1l1u1 = vhpl_l1l1 @ vh_u1
+        # Replacing above block with below block
+        vhpgvh_d1d1d1 = vhpg_d1d1 @ vh_d1
+        vhpgvh_d1d1u1 = vhpg_d1d1 @ vh_u1
+        vhpgvh_d1d1l1 = vhpg_d1d1 @ vh_l1
+        vhpgvh_d1u1d1 = vhpg_d1u1 @ vh_d1
+        vhpgvh_d1u1u1 = vhpg_d1u1 @ vh_u1
+        vhpgvh_d1u1l1 = vhpg_d1u1 @ vh_l1
+        vhpgvh_d1l1d1 = vhpg_d1l1 @ vh_d1
+        vhpgvh_d1l1u1 = vhpg_d1l1 @ vh_u1
+        vhpgvh_u1d1d1 = vhpg_u1d1 @ vh_d1
+        vhpgvh_u1d1u1 = vhpg_u1d1 @ vh_u1
+        vhpgvh_u1d1l1 = vhpg_u1d1 @ vh_l1
+        vhpgvh_u1u1d1 = vhpg_u1u1 @ vh_d1
+        vhpgvh_u1u1u1 = vhpg_u1u1 @ vh_u1
+        vhpgvh_u1u1l1 = vhpg_u1u1 @ vh_l1
+        vhpgvh_u1l1d1 = vhpg_u1l1 @ vh_d1
+        vhpgvh_u1l1u1 = vhpg_u1l1 @ vh_u1
+        vhpgvh_u1l1l1 = vhpg_u1l1 @ vh_l1
+        vhpgvh_l1d1d1 = vhpg_l1d1 @ vh_d1
+        vhpgvh_l1d1u1 = vhpg_l1d1 @ vh_u1
+        vhpgvh_l1u1d1 = vhpg_l1u1 @ vh_d1
+        vhpgvh_l1u1u1 = vhpg_l1u1 @ vh_u1
+        vhpgvh_l1u1l1 = vhpg_l1u1 @ vh_l1
+        vhpgvh_l1l1u1 = vhpg_l1l1 @ vh_u1
+        vhpgvh_l1l1d1 = vhpg_l1l1 @ vh_d1
+        vhpgvh_d1l1l1 = vhpg_d1l1 @ vh_l1
+        vhpgvh_l1d1l1 = vhpg_l1d1 @ vh_l1
         vhpl_d1d1 = vh_d1 @ pl_d1
         vhpl_d1u1 = vh_d1 @ pl_u1
         vhpl_d1l1 = vh_d1 @ pl_l1
@@ -1066,7 +1120,7 @@ def get_mm_obc_dense(
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
         lg_d2[:lb,
               lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_d2[:lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_d2[lb:2 *
               lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
         lg_d2[
@@ -1082,11 +1136,11 @@ def get_mm_obc_dense(
             lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
 
         lg_u2[:lb, :lb] = vhpgvh_u1u1u1
-        lg_u2[lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1d1 + vhpgvh_u1d1u1
+        lg_u2[lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
         lg_u2[lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
         lg_u2[2 *
               lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
         lg_u2[2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
 
         ll_d2[:lb, :
@@ -1136,16 +1190,18 @@ def get_mm_obc_dense(
         dll_ul[2 * lb:, lb:2 * lb] = vhplvh_u1l1l1
         dll_ul[2 * lb:, 2 * lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
 
-        vh_u[2 * lb:, :lb] = vh_u
+        vh_u[2 * lb:, :lb] = vh_u1 # change
 
-        vh_l[:lb, 2 * lb:] = vh_l
+        vh_l[:lb, 2 * lb:] = vh_l1 # change
 
     lg_l2[:, :] = -lg_u2.conjugate().transpose()
     ll_l2[:, :] = -ll_u2.conjugate().transpose()
     mr_d2 = mr_d2 + np.identity(lb_mm, dtype=np.complex128) * (1 + 1j * 1e-10)
+    # if type == "L":
+    (mr_d2, mr_u2, mr_l2, matrix_blocks ) = extract_small_matrix_blocks(mr_d2, mr_u2, mr_l2, NCpSC*nbc, side, densify=True)
 
     return ((mr_d2, mr_u2, mr_l2), (lg_d2, lg_u2, lg_l2), (ll_d2, ll_u2, ll_l2), (dmr_lu, dmr_ul), (dlg_lu, dlg_ul),
-            (dll_lu, dll_ul), (vh_u, vh_l))
+            (dll_lu, dll_ul), (vh_u, vh_l), matrix_blocks)
 
 
 def get_dl_obc_start(mr_x: np.ndarray, xr_d: np.ndarray, xr_d_ct: np.ndarray, lx_d: np.ndarray,

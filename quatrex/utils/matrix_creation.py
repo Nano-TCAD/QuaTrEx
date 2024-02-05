@@ -7,7 +7,7 @@ import json
 import numpy.typing as npt
 import typing
 
-from quatrex.OMEN_structure_matrices import OMENHamClass
+#from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.utils import change_format
 
 
@@ -190,6 +190,42 @@ def initialize_block_G(NE, NB, Bsize):
 
     return (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
 
+def initialize_block_sigma(NE, NB, Bsize):
+    sr_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    srnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    srn1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sl_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    slnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sln1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sg_3D_E = np.zeros((NE, NB, Bsize, Bsize), dtype=np.complex128)
+    sgnn1_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+    sgn1n_3D_E = np.zeros((NE, NB - 1, Bsize, Bsize), dtype=np.complex128)
+
+    return (sr_3D_E, srnn1_3D_E, srn1n_3D_E, sl_3D_E, slnn1_3D_E, sln1n_3D_E, sg_3D_E, sgnn1_3D_E, sgn1n_3D_E)
+
+def initialize_block_sigma_batched(NE, NB, Bsize):
+    sr_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    srnn1_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)
+    srn1n_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)
+    sl_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    slnn1_3D_E = np.zeros((NB - 1 , NE, Bsize, Bsize), dtype=np.complex128)
+    sln1n_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)
+    sg_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    sgnn1_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)
+    sgn1n_3D_E = np.zeros((NB - 1, NE, Bsize, Bsize), dtype=np.complex128)
+
+    return (sr_3D_E, srnn1_3D_E, srn1n_3D_E, sl_3D_E, slnn1_3D_E, sln1n_3D_E, sg_3D_E, sgnn1_3D_E, sgn1n_3D_E)
+
+def initialize_block_G_batched(NE, NB, Bsize):
+    GR_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GRnn1_3D_E = np.zeros((NB -1 , NE, Bsize, Bsize), dtype=np.complex128)
+    GL_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GLnn1_3D_E = np.zeros((NB-1, NE, Bsize, Bsize), dtype=np.complex128)
+    GG_3D_E = np.zeros((NB, NE, Bsize, Bsize), dtype=np.complex128)
+    GGnn1_3D_E = np.zeros((NB-1, NE, Bsize, Bsize), dtype=np.complex128)
+
+    return (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E)
+
 
 def negative_hermitian_transpose(A: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
     """Return the negative hermitian transpose of a matrix.
@@ -227,6 +263,32 @@ def homogenize_matrix(M00, M01, NB, type):
     M = M00.tocsr()[:N0 * NB, :N0 * NB]
     return M
 
+def homogenize_matrix_Rnosym(M00, M01, M10, NB):
+    N0 = M00.shape[0]
+
+    M00 = M00.tocoo()
+    M01 = M01.tocoo()
+    M10 = M10.tocoo()
+
+    max_iteration = np.ceil(np.log2(NB)).astype(int)
+
+    N = N0
+    for I in range(max_iteration):
+        
+        M00 = sparse.vstack([sparse.hstack([M00, M01]), sparse.hstack([M10, M00])])
+        
+        M01 = sparse.vstack([sparse.coo_matrix(
+            (N, 2 * N)), sparse.hstack([M01, sparse.coo_matrix((N, N))])],
+                            dtype=M00.dtype)
+
+        M10 = sparse.vstack([sparse.hstack([sparse.coo_matrix((N, N)), M10]), sparse.coo_matrix(
+            (N, 2 * N))], dtype=M00.dtype)
+
+        N = 2 * N
+
+    M = M00.tocsr()[:N0 * NB, :N0 * NB]
+    return M
+
 
 def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
     N = Bmax[0] - Bmin[0] + 1
@@ -250,6 +312,85 @@ def get_number_connected_blocks(nao, Bmin, Bmax, rows, columns):
     else:
         nbc = 1
     return nbc
+
+def extract_small_matrix_blocks(M00, M01, M10, factor, type, format='sparse'):
+    N = M00.shape[0] // factor
+    num_blocks = 2 * factor + 1
+
+    # matrix_blocks = {}
+    matrix_blocks = np.ndarray((num_blocks, ), dtype=object)
+
+    if type == 'L':
+        # index = 1
+        # for I in range(factor, 1, -1):
+        #     matrix_blocks[I] = M00[index * N:(index + 1) * N, :N]
+        #     matrix_blocks[2 * factor + 1 + 1 - I] = M00[:N, index * N:(index + 1) * N]
+        #     index += 1
+
+        # matrix_blocks[factor + 1] = M00[:N, :N]
+        # matrix_blocks[1] = M10[:N, :N]
+        # matrix_blocks[2 * factor + 1] = M01[:N, :N]
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[index * N:(index + 1) * N, :N]
+            matrix_blocks[2 * factor + 1 - I] = M00[:N, index * N:(index + 1) * N]
+
+        matrix_blocks[factor] = M00[:N, :N]
+        matrix_blocks[0] = M10[:N, :N]
+        matrix_blocks[2 * factor] = M01[:N, :N]
+    else:
+
+        NM = N * factor
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[NM - N:NM, NM - (index + 1) * N:NM - index * N]
+            matrix_blocks[2 * factor + 1 - I] = M00[NM - (index + 1) * N:NM - index * N, NM - N:NM]
+        
+        matrix_blocks[factor] = M00[NM - N:NM, NM - N:NM]
+        matrix_blocks[0] = M10[NM - N:NM, NM - N:NM]
+        matrix_blocks[2 * factor] = M01[NM - N:NM, NM - N:NM]
+
+    m00 = np.zeros((N * factor, N * factor), dtype=M00.dtype)
+    m01 = np.zeros((N * factor, N * factor), dtype=M01.dtype)
+    m10 = np.zeros((N * factor, N * factor), dtype=M10.dtype)
+
+    # for I in range(1, factor + 1):
+    #     for J in range(1, factor + 1):
+    #         m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor + 1 - I + J]
+    #         if I >= J:
+    #             m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor + 1 - I + J]
+    #         if I <= J:
+    #             m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[1 - I + J]
+    if(format == 'sparse'):
+        for I in range(1, factor + 1):
+            for J in range(1, factor + 1):
+                m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor - I + J].toarray()
+                if I >= J:
+                    m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor  - I + J].toarray()
+                if I <= J:
+                    m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[- I + J].toarray()
+    else:
+        for I in range(1, factor + 1):
+            for J in range(1, factor + 1):
+                m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor - I + J]
+                if I >= J:
+                    m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor - I + J]
+                if I <= J:
+                    m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[- I + J]
+
+    if(format == 'sparse'):
+        m00 = csr_matrix(m00)
+        m01 = csr_matrix(m01)
+        m10 = csr_matrix(m10)
+    # m00 = csr_matrix(m00)
+    # m01 = csr_matrix(m01)
+    # m10 = csr_matrix(m10)
+
+    return m00, m01, m10, matrix_blocks
 
 
 if __name__ == '__main__':
@@ -281,8 +422,8 @@ if __name__ == '__main__':
     # transform from 2D format to list/vector of sparse arrays format-----------
     sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
-    sr_h2g_homogenized = homogenize_matrix(sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[0]:bmax[0] + 1],
-                                           sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[1]:bmax[1] + 1], len(bmax), 'R')
+    sr_h2g_homogenized = homogenize_matrix_Rnosym(sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[0]:bmax[0] + 1],
+                                           sr_h2g_vec[0][bmin[0]:bmax[0] + 1, bmin[1]:bmax[1] + 1], sr_h2g_vec[0][bmin[1]:bmax[1] + 1, bmin[0]:bmax[0] + 1] , len(bmax))
 
     assert (np.allclose(sr_h2g_homogenized.toarray(), sr_h2g_vec[0].toarray(), rtol=1e-4, atol=1e-4))
 

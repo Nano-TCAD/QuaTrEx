@@ -5,7 +5,7 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 import typing
-from scipy.sparse import csc_array
+from scipy.sparse import csc_array, find
 import mpi4py
 
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
@@ -72,25 +72,49 @@ def load_V_mpi(path: str,
         # Making the coulomb matrix hermitian
         V_sparse = (V_sparse + V_sparse.conj().T) / 2
         nao = V_sparse.shape[0]
+        comm.Bcast([np.array(nao), MPI.INT], root=0)
 
         # Reducing the coulomb matrix to the neighbor indices
         if reduce_to_neighbor_indices:
             V_sparse.eliminate_zeros()
             V_sparse = V_sparse.toarray()[rows_ni, columns_ni]
             V_sparse = csc_array((V_sparse, (rows_ni, columns_ni)), shape=(nao, nao))
+            comm.Bcast([V_sparse.data, MPI.DOUBLE_COMPLEX], root=0)
+
+        else:
+            (I, J, V) = find(V_sparse)
+            data_size = I.shape[0]
+            comm.Bcast([np.array(data_size), MPI.INT], root=0)
+            comm.Bcast([I, MPI.INT], root=0)
+            comm.Bcast([J, MPI.INT], root=0)
+            comm.Bcast([V, MPI.DOUBLE_COMPLEX], root=0)
 
         # Adding a small real part to the diagonal to make the matrix positive definite
         #V_sparse = V_sparse + 0.5 * csc_array((np.ones(nao), (np.arange(nao), np.arange(nao))))
-        comm.Bcast([np.array(nao), MPI.INT], root=0)
-        comm.Bcast([V_sparse.data, MPI.DOUBLE_COMPLEX], root=0)
+
+
         return V_sparse
     else:
         nao = np.zeros((1, ), dtype=int)
         comm.Bcast([nao, MPI.INT], root=0)
         nao = nao[0]
-        V_sparse_data = np.empty(rows_ni.shape[0], dtype=np.complex128)
-        comm.Bcast([V_sparse_data, MPI.DOUBLE_COMPLEX], root=0)
-        V_sparse = csc_array((np.array(V_sparse_data), (rows_ni, columns_ni)), shape=(nao, nao))
+
+        if reduce_to_neighbor_indices:
+            V_sparse_data = np.empty(rows_ni.shape[0], dtype=np.complex128)
+            comm.Bcast([V_sparse_data, MPI.DOUBLE_COMPLEX], root=0)
+            V_sparse = csc_array((np.array(V_sparse_data), (rows_ni, columns_ni)), shape=(nao, nao))
+
+        else:
+            data_size = np.zeros((1, ), dtype=int)
+            comm.Bcast([data_size, MPI.INT], root=0)
+            data_size = data_size[0]
+            I = np.empty(data_size, dtype=np.int32)
+            J = np.empty(data_size, dtype=np.int32)
+            V = np.empty(data_size, dtype=np.complex128)
+            comm.Bcast([I, MPI.INT], root=0)
+            comm.Bcast([J, MPI.INT], root=0)
+            comm.Bcast([V, MPI.DOUBLE_COMPLEX], root=0)
+            V_sparse = csc_array((V, (I, J)), shape=(nao, nao))
         return V_sparse
 
 
@@ -104,4 +128,7 @@ if __name__ == "__main__":
     rows_ni = np.concatenate((1 + np.arange(767), [0]))
     columns_ni = np.arange(768)
     V_sparse = load_V_mpi("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32/V.dat", rows_ni, columns_ni, comm, rank)
+    print(np.sum(V_sparse.data))
+
+    V_sparse = load_V_mpi("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32/V.dat", rows_ni, columns_ni, comm, rank, reduce_to_neighbor_indices=False)
     print(np.sum(V_sparse.data))

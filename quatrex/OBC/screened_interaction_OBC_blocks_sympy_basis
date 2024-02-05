@@ -1,0 +1,88 @@
+# Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
+""" Using sympy as computer algebra system to compute the corrections to the results of matrix Multiplications:
+M = I-V*Pr and L<> = V*P<>*V^H  based on a periodicity assumptions, also extracts extendended contact quantities of M and L<> for boundary
+self-energy calculations.  """
+
+import numpy as np
+import numpy.typing as npt
+from scipy import sparse
+import typing
+import numba
+
+from sympy import (MatrixSymbol, BlockMatrix, symbols, Identity, ZeroMatrix, block_collapse)
+
+N, NMM = symbols('N, NMM')
+
+nbc = 3
+
+# We define the small block matrices of blocksize NXN
+#Coulomb Matrix Blocks
+v_d = MatrixSymbol('v_d', N, N)
+v_u = MatrixSymbol('v_u', N, N)
+v_l = MatrixSymbol('v_l', N, N)
+#Polarization retarded Blocks
+pr_d = MatrixSymbol('pr_d', N, N)
+pr_u = MatrixSymbol('pr_u', N, N)
+pr_l = MatrixSymbol('pr_l', N, N)
+#Polarization lesser Blocks
+pl_d = MatrixSymbol('pl_d', N, N)
+pl_u = MatrixSymbol('pl_u', N, N)
+pl_l = MatrixSymbol('pl_l', N, N)
+#Polarization greater Blocks
+pg_d = MatrixSymbol('pg_d', N, N)
+pg_u = MatrixSymbol('pg_u', N, N)
+pg_l = MatrixSymbol('pg_l', N, N)
+
+#Block Matrices are being stacked with periodic repetitions
+if nbc == 3:
+    #Coulomb Matrix 3N x 3N periodic stacking
+    V00 = BlockMatrix([[v_d, v_u, ZeroMatrix(N,N)],[v_l, v_d, v_u], [ZeroMatrix(N,N), v_l, v_d]])
+    V01 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [v_u, ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    V10 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), v_l],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    #Polarization retarded 3N x 3N periodic stacking
+    Pr00 = BlockMatrix([[pr_d, pr_u, ZeroMatrix(N,N)],[pr_l, pr_d, pr_u], [ZeroMatrix(N,N), pr_l, pr_d]])
+    Pr01 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [pr_u, ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    Pr10 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), pr_l],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    #Polarization lesser 3N x 3N periodic stacking
+    Pl00 = BlockMatrix([[pl_d, pl_u, ZeroMatrix(N,N)],[pl_l, pl_d, pl_u], [ZeroMatrix(N,N), pl_l, pl_d]])
+    Pl01 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [pl_u, ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    Pl10 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), pl_l],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    #Polarization greater 3N x 3N periodic stacking
+    Pg00 = BlockMatrix([[pg_d, pg_u, ZeroMatrix(N,N)],[pg_l, pg_d, pg_u], [ZeroMatrix(N,N), pg_l, pg_d]])
+    Pg01 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [pg_u, ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+    Pg10 = BlockMatrix([[ZeroMatrix(N,N), ZeroMatrix(N,N), pg_l],[ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)], [ZeroMatrix(N,N), ZeroMatrix(N,N), ZeroMatrix(N,N)]])
+
+
+M00 = block_collapse(Identity(3*N) - V00 * Pr00 - V01 * Pr10 - V10 * Pr01)
+M01 = block_collapse(-V00 * Pr01 - V01 * Pr00)
+M10 = block_collapse(-V00 * Pr10 - V10 * Pr00)
+
+# print('M00 = ' + repr(M00))
+# print('M01 = ' + repr(M01))
+# print('M10 = ' + repr(M10))
+
+dM00 = block_collapse(-V10 * Pr01)
+dMNN = block_collapse(-V01 * Pr10)
+
+# print('dM00 = ' + repr(dM00))
+# print('dMNN = ' + repr(dMNN))
+
+LL00 = block_collapse(V10 * Pl00 * V01 + V10 * Pl01 * V00 \
+                                      + V00 * Pl10 * V01\
+                                          + V00 * Pl00 * V00 \
+                                              + V00 * Pl01 * V10 \
+                                        + V01 * Pl10 * V00 \
+                                              + V01 * Pl00 * V10)
+# print('LL00 = ' + repr(LL00))
+LL01 = block_collapse(V10 * Pl01 * V01 + V00 * Pl00 * V01 \
+                                        + V00 * Pl01 * V00 \
+                                            + V01 * Pl10 * V01 \
+                                                + V01 * Pl00 * V00)
+
+
+dLL00 = block_collapse(V10 * Pl00 * V01 + V10 * Pl01 * V00 \
+                                        + V00 * Pl10 * V01)
+dLLNN = block_collapse(V00 * Pl01 * V10 + V01 * Pl10 * V00 \
+                                        + V01 * Pl00 * V10)
+
+print(repr(dLLNN))

@@ -11,7 +11,7 @@ function changeFormatV(pathV)
     
     % V has the full sparsity pattern as all the 
     % other used tensors
-    [rows, columns, data] = find(sr.V); 
+    [rows, columns, data] = find(sr.V_saved.sparse_matrix); 
 
     % save directly data
     formatted.rows = rows;
@@ -20,5 +20,5 @@ function changeFormatV(pathV)
     formatted.imgvh = imag(data);
     
     % save to file
-    save("data_Vh_finalPI_InAs_0v.mat", "formatted", "-v7.3", "-nocompression");
+    save("data_Vh_PI_CNT_0v.mat", "formatted", "-v7.3", "-nocompression");
 end

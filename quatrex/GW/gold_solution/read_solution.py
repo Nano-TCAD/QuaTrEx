@@ -5,6 +5,7 @@ import h5py
 import numpy as np
 import numpy.typing as npt
 import typing
+import re
 
 
 def load_x(
@@ -56,6 +57,66 @@ def load_x(
     xr = realr + 1j * imgr
 
     return (energy, rows, columns, xg, xl, xr)
+
+def load_x_optimized(
+    path: str, tensor_name: str
+) -> typing.Tuple[npt.NDArray[np.double], npt.NDArray[np.int32], npt.NDArray[np.int32], npt.NDArray[np.complex128],
+                  npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Loads Green's Functions from .mat file created by changeFormatGPWS.m or changeFormatGP.m 
+        All sparse matrices are in the COO format and 
+        share the same idx of non-zero elements.
+        Such the rows, columns are only saved once.
+        In this optimized version, the retarded parts of G and W are not saved, since they are not needed.
+
+    Args:
+        path (str): filepath to .mat file
+        tensor_name (str): can be either "g"/"p"/"w"/"s"/"sph" to read 
+        Green's Function, Polarization, W, Sigma
+
+    Returns:
+        typing.Tuple[ 
+        npt.NDArray[np.double]:     Energy 
+        npt.NDArray[np.int32]:      Rows 
+        npt.NDArray[np.int32]:      Columns 
+        npt.NDArray[np.complex128]: Greater Function
+        npt.NDArray[np.complex128]: Lesser Function
+        npt.NDArray[np.complex128]: Retarded Function 
+    """
+
+    # open the file
+    if not tensor_name == "sph":
+        hdf5 = h5py.File(path, "r")["formatted"]
+    else:
+        hdf5 = h5py.File(path, "r")["formatted_diag"]
+
+
+    # read the entries
+    energy: npt.NDArray[np.double] = np.array(hdf5["E"], dtype=np.double)
+    # go from matlab to python
+    rows: npt.NDArray[np.int32] = np.array(hdf5["rows"], dtype=np.int32) - 1
+    columns: npt.NDArray[np.int32] = np.array(hdf5["columns"], dtype=np.int32) - 1
+
+    energy: npt.NDArray[np.double] = np.squeeze(energy)
+    rows: npt.NDArray[np.int32] = np.squeeze(rows)
+    columns: npt.NDArray[np.int32] = np.squeeze(columns)
+
+    realg: npt.NDArray[np.double] = np.array(hdf5["real" + tensor_name + "g"], dtype=np.double)
+    imgg: npt.NDArray[np.double] = np.array(hdf5["img" + tensor_name + "g"], dtype=np.double)
+    reall: npt.NDArray[np.double] = np.array(hdf5["real" + tensor_name + "l"], dtype=np.double)
+    imgl: npt.NDArray[np.double] = np.array(hdf5["img" + tensor_name + "l"], dtype=np.double)
+    if tensor_name == "p" or re.match(r"s", tensor_name):
+        realr: npt.NDArray[np.double] = np.array(hdf5["real" + tensor_name + "r"], dtype=np.double)
+        imgr: npt.NDArray[np.double] = np.array(hdf5["img" + tensor_name + "r"], dtype=np.double)
+
+    xg = realg + 1j * imgg
+    xl = reall + 1j * imgl
+    if tensor_name == "p" or re.match(r"s", tensor_name):
+        xr = realr + 1j * imgr
+
+    if tensor_name == "p" or re.match(r"s", tensor_name):
+        return (energy, rows, columns, xg, xl, xr)
+    else:
+        return (energy, rows, columns, xg, xl, xl)
 
 
 def load_v(path: str) -> typing.Tuple[npt.NDArray[np.int32], npt.NDArray[np.int32], npt.NDArray[np.complex128]]:

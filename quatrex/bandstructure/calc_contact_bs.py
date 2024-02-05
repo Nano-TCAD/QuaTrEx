@@ -127,20 +127,26 @@ def calc_bandstructure_mpi_interpol(E, S, H, E_target, SigmaR_GW_vec, SigmaL_GW_
     E1 = E[indE]
     E2 = E[indE + 1]
 
-    SigL1 = 1j * np.imag(SigmaL_GW_vec[0])
-    SigL2 = 1j * np.imag(SigmaL_GW_vec[1])
+    # SigL1 = 1j * np.imag(SigmaL_GW_vec[0])
+    # SigL2 = 1j * np.imag(SigmaL_GW_vec[1])
+    SigL1 = SigmaL_GW_vec[0]
+    SigL2 = SigmaL_GW_vec[1]
     SigL = SigL1 + (SigL2 - SigL1) / (E2 - E1) * (E_target - E1)
     SigL = (SigL - SigL.conj().T) / 2
 
-    SigG1 = 1j * np.imag(SigmaG_GW_vec[0])
-    SigG2 = 1j * np.imag(SigmaG_GW_vec[1])
+    # SigG1 = 1j * np.imag(SigmaG_GW_vec[0])
+    # SigG2 = 1j * np.imag(SigmaG_GW_vec[1])
+    SigG1 = SigmaG_GW_vec[0]
+    SigG2 = SigmaG_GW_vec[1]
     SigG = SigG1 + (SigG2 - SigG1) / (E2 - E1) * (E_target - E1)
     SigG = (SigG - SigG.conj().T) / 2
 
     SigR1 = SigmaR_GW_vec[0]
     SigR2 = SigmaR_GW_vec[1]
     SigR = SigR1 + (SigR2 - SigR1) / (E2 - E1) * (E_target - E1)
-    SigR = np.real(SigR) + 1j * np.imag(SigG - SigL) / 2
+    #SigR = np.real(SigR) + 1j * np.imag(SigG - SigL) / 2
+    SigR = np.real(SigR) + (SigG - SigL) / 2
+    #Symmetrize here to guarantee real eigenvalues
     SigR = (SigR + SigR.T) / 2
     
     SigR_PHN1 = diags((SigmaR_PHN_vec[0].diagonal()))

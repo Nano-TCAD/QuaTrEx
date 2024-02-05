@@ -9,6 +9,7 @@ from scipy.interpolate import griddata
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
 from quatrex.utils.read_utils import *
+from quatrex.utils.matrix_creation import extract_small_matrix_blocks, homogenize_matrix_Rnosym
 
 
 def matlab_fread(fid, nelements, dtype):
@@ -107,6 +108,8 @@ class Hamiltonian:
             self.prepare_block_properties()
             self.map_neighbor_indices()
             self.map_sparse_indices()
+            if(homogenize):
+                self.homogenize(NCpSC)
             if(potential_type == 'linear'):
                 self.Vpot = self.get_linear_potential_drop()
             elif (potential_type == 'unit_cell'):
@@ -455,7 +458,23 @@ class Hamiltonian:
             self.Hamiltonian['H_4'][indi[IP],
                                     indj[IP]] += (Vpot[indi[IP]] + Vpot[indj[IP]]) * self.Overlap['H_4'][indi[IP],
                                                                                                          indj[IP]] / 2.0
- 
+    def homogenize(self, NCpSC):
+        """
+        This function homogenizes the Hamiltonian and Overlap matrices.
+        """
+        
+        (H00, H01, H10, _) = extract_small_matrix_blocks(self.Hamiltonian['H_4'][self.Bmin[0] - 1:self.Bmax[0], self.Bmin[0] - 1:self.Bmax[0]],\
+                                                                      self.Hamiltonian['H_4'][self.Bmin[0] - 1:self.Bmax[0], self.Bmin[1] - 1:self.Bmax[1]],\
+                                                                      self.Hamiltonian['H_4'][self.Bmin[1] - 1:self.Bmax[1], self.Bmin[0] - 1:self.Bmax[0]], NCpSC, 'L')
+        
+        self.Hamiltonian['H_4'] = homogenize_matrix_Rnosym(H00, H01, H10, len(self.Bmin))
+
+
+        (S00, S01, S10, _) = extract_small_matrix_blocks(self.Overlap['H_4'][self.Bmin[0] - 1:self.Bmax[0], self.Bmin[0] - 1:self.Bmax[0]],\
+                                                                      self.Overlap['H_4'][self.Bmin[0] - 1:self.Bmax[0], self.Bmin[1] - 1:self.Bmax[1]],\
+                                                                      self.Overlap['H_4'][self.Bmin[1] - 1:self.Bmax[1], self.Bmin[0] - 1:self.Bmax[0]], NCpSC, 'L')
+        self.Overlap['H_4'] = homogenize_matrix_Rnosym(S00, S01, S10, len(self.Bmin)) 
+
     def k_points(self, Nk=None, mode='grid'):
         """
         Creates the k-point vector.
