@@ -5,35 +5,35 @@ Applied to a MoS2 supercell
 See the different GW step folders for more explanations.
 """
 # The two lines below are just a quick fix!
-import sys
-sys.path.append("../")
-from quatrex.utils.matrix_creation import get_number_connected_blocks
-from quatrex.utils.bsr import bsr_matrix
-from quatrex.utils import utils_gpu
-from quatrex.utils import change_format
-from quatrex.OMEN_structure_matrices.OMENHamClass_mod import Matrices
-from quatrex.GreensFunction import calc_GF_pool
-from quatrex.GW.screenedinteraction.kernel import p2w_cpu
-from quatrex.GW.gold_solution import read_solution
-from quatrex.GW.selfenergy.kernel import gw2s_cpu
-from quatrex.GW.polarization.kernel import g2p_cpu
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
-from mpi4py import MPI
-import sys
-import numpy as np
-import numpy.typing as npt
-import os
-import argparse
-import pickle
-import mpi4py
-from scipy import sparse
 import time
+from scipy import sparse
+import mpi4py
+import pickle
+import argparse
+import os
+import sys
+import numpy.typing as npt
+import numpy as np
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False    # do not finalize MPI automatically
+from mpi4py import MPI
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
+sys.path.append(parent_path)
 
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
+from quatrex.GW.polarization.kernel import g2p_cpu
+from quatrex.GW.selfenergy.kernel import gw2s_cpu
+from quatrex.GW.gold_solution import read_solution
+from quatrex.GW.screenedinteraction.kernel import p2w_cpu
+from quatrex.GreensFunction import calc_GF_pool
+from quatrex.OMEN_structure_matrices.OMENHamClass_mod import Matrices
+from quatrex.utils import change_format
+from quatrex.utils import utils_gpu
+from quatrex.utils.bsr import bsr_matrix
+from quatrex.utils.matrix_creation import get_number_connected_blocks
+from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
@@ -133,15 +133,17 @@ if __name__ == "__main__":
         bg.contour_integral_block = utils.distributed_compile(
             ci_block_sdfg, comm)
         bg.sort_k = utils.distributed_compile(sk_sdfg, comm)
-        comm.Barrier()
+        commgBarrier()
 
     # create hamiltonian object
-    Vappl = 0.0  # 0.2
+    Vappl = 0.0  # 0.2  # Applied voltage
     # Number of kpoints in x-, y-, and z-directions
     num_kpoints = np.array([1, 3, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
     energy = np.linspace(-10, 20, 128, endpoint=True,
                          dtype=float)  # Energy Vector
+    EPHN = np.array([0.0]) # Phonon energy
+    DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
     # Have to read the correct Hamiltonian object
     matrix_obj = Matrices(
@@ -391,6 +393,11 @@ if __name__ == "__main__":
     sl_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
     sr_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
 
+    # initialize phonon self energy---------------------------------------------
+    sg_phn = np.zeros((count[1, rank], nao), dtype=np.complex128)
+    sl_phn = np.zeros((count[1, rank], nao), dtype=np.complex128)
+    sr_phn = np.zeros((count[1, rank], nao), dtype=np.complex128)
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
@@ -411,6 +418,7 @@ if __name__ == "__main__":
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
+    ind_ek = -1
 
     # Communication buffers
     # G2P
@@ -494,29 +502,34 @@ if __name__ == "__main__":
         sr_h2g_vec = change_format.sparse2vecsparse_v2(
             sr_h2g, rows, columns, nao)
 
+        # transform from 2D format to list/vector of sparse arrays format-----------
+        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
+        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
+        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
+
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(
-            np.zeros((count[1, rank], no), dtype=np.complex128), rows, columns, nao)
         # Only do this for the band gap point. But where is that?
         # Issue with current code: (0,0,0) might not be the band gap point. Need to fix this!!!
-        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
-                                                           energy,
-                                                           matrix_obj.Overlap[(0, 0, 0)],
-                                                           matrix_obj.k_Hamiltonian[(0, 0, 0)],
-                                                           sr_h2g_vec,
-                                                           sl_h2g_vec,
-                                                           sg_h2g_vec,
-                                                           sr_ephn_h2g_vec,
-                                                           rows,
-                                                           columns,
-                                                           bmin,
-                                                           bmax,
-                                                           comm,
-                                                           rank,
-                                                           size,
-                                                           count,
-                                                           disp,
-                                                           side='left')
+        # Why only sr_ephn_h2g_vec?
+        (ECmin_vec[iter_num+1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+                                                                     energy,
+                                                                     matrix_obj.Overlap[( 0, 0, 0)],
+                                                                     matrix_obj.k_Hamiltonian[( 0, 0, 0)],
+                                                                     sr_h2g_vec,
+                                                                     sl_h2g_vec,
+                                                                     sg_h2g_vec,
+                                                                     sr_ephn_h2g_vec,
+                                                                     ind_ek,
+                                                                     rows,
+                                                                     columns,
+                                                                     bmin,
+                                                                     bmax,
+                                                                     comm,
+                                                                     rank,
+                                                                     size,
+                                                                     count,
+                                                                     disp,
+                                                                     side='left')
         if iter_num == 0:
             dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
             dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
@@ -547,6 +560,9 @@ if __name__ == "__main__":
                 sr_h2g_vec,
                 sl_h2g_vec,
                 sg_h2g_vec,
+                sr_ephn_h2g_vec,
+                sl_ephn_h2g_vec,
+                sg_ephn_h2g_vec,
                 energy_fl,
                 energy_fr,
                 temp,
@@ -602,10 +618,12 @@ if __name__ == "__main__":
         gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
         gl_lower = -gl_upper.conjugate().transpose((0, 1, 3, 2))
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
-        
+
         # Assert diagonal blocks satisfy the same physics identity
-        assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
-        assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
+        assert np.allclose(
+            gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
+        assert np.allclose(
+            gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
         assert np.allclose(gr_diag, gr_diag.transpose((0, 1, 3, 2)))
 
         if iter_num == 0:
@@ -686,7 +704,7 @@ if __name__ == "__main__":
                 gr_g2p,
                 gl_transposed_g2p,
                 num_kpoints
-                )
+            )
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -740,7 +758,8 @@ if __name__ == "__main__":
                 wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                     hamiltonian_obj, energy_loc,
                     pg_p2w_vec, pl_p2w_vec,
-                    pr_p2w_vec, vh, dosw[disp[1, rank]                                         :disp[1, rank] + count[1, rank]],
+                    pr_p2w_vec, vh, dosw[disp[1, rank]
+                        :disp[1, rank] + count[1, rank]],
                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]
                         ], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     Idx_e_loc,
@@ -758,8 +777,7 @@ if __name__ == "__main__":
                 wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
                     hamiltonian_obj, energy_loc,
                     pg_p2w_vec, pl_p2w_vec,
-                    pr_p2w_vec, vh, dosw[disp[1, rank]
-                        :disp[1, rank] + count[1, rank]],
+                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]
                         ], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     factor_w_loc,
@@ -799,6 +817,7 @@ if __name__ == "__main__":
                     size,
                     nbc,
                     homogenize=False,
+                    NCpSC=1,
                     mkl_threads=w_mkl_threads,
                     worker_num=w_worker_threads,
                     block_inv=args.block_inv,
@@ -809,8 +828,7 @@ if __name__ == "__main__":
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_mpi_cpu(
                     hamiltonian_obj, energy_loc,
                     pg_p2w_vec, pl_p2w_vec,
-                    pr_p2w_vec, vh, dosw[disp[1, rank]
-                        :disp[1, rank] + count[1, rank]],
+                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]
                         ], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     factor_w_loc,
@@ -934,8 +952,10 @@ if __name__ == "__main__":
             )
         elif args.type in ("cpu"):
             # k-points are supported here
-            vh_k = np.asarray(matrix_obj.k_Coulomb_matrix.values())  # Assuming ordering is correct (can make this more fault proof later)
-            vh1D_k = vh_k.reshape((vh_k.shape[0], -1))
+            # Assuming ordering is correct (can make this more fault proof later)
+            # vh_k = np.asarray([*matrix_obj.k_Coulomb_matrix.values()])
+            # vh1D_k = vh_k.reshape((vh_k.shape[0], -1))
+            vh1D_k = np.asarray([np.squeeze(mat[np.copy(rows), np.copy(columns)]) for mat in matrix_obj.k_Coulomb_matrix.values()])
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr_kpoint(-pre_factor / 2,
                                                                                gg_g2p,
                                                                                gl_g2p,
@@ -945,7 +965,8 @@ if __name__ == "__main__":
                                                                                wr_gw2s,
                                                                                wg_transposed_gw2s,
                                                                                wl_transposed_gw2s,
-                                                                               tuple(num_kpoints),
+                                                                               tuple(
+                                                                                   num_kpoints),
                                                                                vh1D_k,
                                                                                energy,
                                                                                rank,
@@ -1022,6 +1043,22 @@ if __name__ == "__main__":
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
+        #Extract diagonal bands
+        gg_diag_band = gg_h2g[:, rows == columns]
+        gl_diag_band = gl_h2g[:, rows == columns]
+        # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
+        # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
+        # at the beginning of this script. Only diagonal part now.
+        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+                                                                             gl_diag_band,
+                                                                             gg_diag_band,
+                                                                             sg_phn,
+                                                                             sl_phn,
+                                                                             sr_phn,
+                                                                             EPHN,
+                                                                             DPHN,
+                                                                             temp,
+                                                                             mem_s)
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
         #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
