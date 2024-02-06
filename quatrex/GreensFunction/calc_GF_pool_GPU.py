@@ -7,24 +7,21 @@ import time
 
 import numpy as np
 import numpy.typing as npt
-from scipy import sparse
 import mkl
 
 from quatrex.utils import change_format
 from quatrex.utils.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
                                             initialize_block_sigma, \
-                                            mat_assembly_fullG, homogenize_matrix, \
+                                            mat_assembly_fullG, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
-from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess, self_energy_preprocess_2d
-from quatrex.block_tri_solvers.rgf_GF import rgf_GF, rgf_standaloneGF
+from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 from quatrex.block_tri_solvers.rgf_GF_GPU import rgf_standaloneGF_batched_GPU, rgf_standaloneGF_batched_GPU_part1
 from quatrex.OBC.obc_gf_cpu import obc_GF_cpu
 
-from operator import mul
+
 import time
 
-import copy
 
 def calc_GF_pool_mpi_split(
     DH,
