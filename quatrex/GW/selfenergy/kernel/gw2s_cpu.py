@@ -538,11 +538,11 @@ def gw2s_fft_mpi_cpu_PI_sr(
     return (sg, sl, sr_principale)
 
 
-@numba.njit(#"(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], i4[:], f8[:,:], f8[:], i4, i4[:,:], i4[:,:])",
-            parallel=True,
-            cache=True,
-            nogil=True,
-            error_model="numpy")
+# @numba.njit(#"(c16, c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], i4[:], f8[:,:], f8[:], i4, i4[:,:], i4[:,:])",
+#             parallel=True,
+#             cache=True,
+#             nogil=True,
+#             error_model="numpy")
 def gw2s_fft_mpi_cpu_PI_sr_kpoint(
     pre_factor: np.complex128,
     gg: npt.NDArray[np.complex128],
@@ -579,7 +579,7 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
         wg_transposed (npt.NDArray[np.complex128]): Greater screened interaction, transposed in orbitals, (#orbital, #energy)
         wl_transposed (npt.NDArray[np.complex128]): Lesser screened interaction, transposed in orbitals,  (#orbital, #energy)
         kpoints (npt.NDArray[np.int32]): kpoints indices
-        vh1D_k (npt.NDArray[np.float64]): Flattened coulomb matrix, (#kpoints, #orbitals**2)
+        vh1D_k (npt.NDArray[np.float64]): Flattened coulomb matrix, (#kpoints, #orbitals)
         energy (npt.NDArray[np.float64]): energy grid, (#energy)
 
     Returns:
@@ -593,8 +593,10 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
     # tot number of kpoints
     nkpts = np.prod(np.asarray(num_kpoints))
     # number of energy points and
-    ne = gg.shape[1]/nkpts
+    ne = int(gg.shape[1]/nkpts)
     ne2 = 2 * ne
+    # Index matrix for kpoints
+    ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
 
     # Create self-energy arrays.
     sg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
@@ -609,11 +611,10 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
             # energy kpoint indices.
             ek = ki * ne
             # Below does not compile with numba
-            ind_mat = np.arange(nkpts).reshape(num_kpoints)
             mip = np.array(np.where(ind_mat == kip))
             mi = np.array(np.where(ind_mat == ki))
             md = tuple(mi-mip)
-            ekd = ind_mat[md] * ne
+            ekd = int(ind_mat[md] * ne)
 
             # create the flattened Coulomb matrix
             vh1D = vh1D_k[ki]
@@ -680,7 +681,7 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
             rSigmaR = linalg_cpu.scalarmul_ifft_cutoff(
                 rSigmaR_t, pre_factor, ne2, no)[:, ne-1:-1].astype(np.complex128)
 
-            srk_principale = rSigmaR/2 + (1j*np.imag(sg-sl)/2).astype(np.complex128) + rSigmaRF
+            srk_principale = rSigmaR/2 + (1j*np.imag(sgk-slk)/2).astype(np.complex128) + rSigmaRF
 
             sg[:, ek:ek+ne] += sgk
             sl[:, ek:ek+ne] += slk
