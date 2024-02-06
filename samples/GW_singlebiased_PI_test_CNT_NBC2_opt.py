@@ -50,7 +50,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_pr_memory0_CNTNBC2_0V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_pr_memory2_CNTNBC2_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_PI_CNT_0v.mat")
     hamiltonian_path = solution_path
@@ -339,7 +339,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 1
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

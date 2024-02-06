@@ -38,6 +38,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 if utils_gpu.gpu_avail():
     try:
         from quatrex.GreensFunction import calc_GF_pool_GPU
+        from quatrex.GW.screenedinteraction.kernel import p2w_gpu
     except ImportError:
         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -768,8 +769,8 @@ if __name__ == "__main__":
 
 
             # calculate the screened interaction on every rank--------------------------
-            if args.pool:
-                wg_diag, wg_upper, wl_diag, wl_upper, _, _, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+            if args.type in ("cpu"):
+                wg_diag, wg_upper, wl_diag, wl_upper, _, _, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_split(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
                                                                                                     pg_p2w_vec, 
@@ -792,20 +793,13 @@ if __name__ == "__main__":
                                                                                                     block_inv=args.block_inv,
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
-            else:
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_mpi_cpu(
-                                                                                                    hamiltonian_obj, energy_loc,
-                                                                                                    pg_p2w_vec, pl_p2w_vec,
-                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
-                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],    
-                                                                                                    factor_w_loc,
-                                                                                                    comm,
-                                                                                                    rank,
-                                                                                                    size,
-                                                                                                    w_mkl_threads,
-                                                                                                    block_inv=args.block_inv,
-                                                                                                    use_dace=args.dace,
-                                                                                                    validate_dace=args.validate_dace)
+            elif args.type in ("gpu"):
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros =  p2w_gpu.p2w_pool_mpi_gpu_split(
+                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
+                map_upper_mm, map_lower_mm, rows, columns, ij2ji,
+                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
+                mkl_threads = w_mkl_threads, worker_num = w_worker_threads)
             
             if args.bsr and args.validate_bsr:
                 assert np.allclose(wg_diag, wg_diag_bsr)

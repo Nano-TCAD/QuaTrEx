@@ -13,6 +13,10 @@ function changeFormatGPWS(path)
     formatted.E = sr.E;
     formatted.Bmax = sr.Bmax;
     formatted.Bmin = sr.Bmin;
+
+    formatted_diag.E = sr.E;
+    formatted_diag.Bmax = sr.Bmax;
+    formatted_diag.Bmin = sr.Bmin;
     
     % assume at every energy point same non-zero elements (just take first
     % then)
@@ -21,6 +25,8 @@ function changeFormatGPWS(path)
     % few points with less, so most have the same amount)
     % I (almaeder) honestly don't like to just guess a point, but it is what it is
     [rows, columns, ~] = find(sr.PRE_sparse(1).sparse_matrix); 
+
+    [rowsdiag, columnsdiag, ~] = find(sr.Sigma_EPHNR_sparse(1).sparse_matrix);
     
    
     formatted.rows = rows;
@@ -29,6 +35,14 @@ function changeFormatGPWS(path)
     ne = length(formatted.E);
     no = length(formatted.columns);
     assert(length(formatted.columns) == length(formatted.rows));
+
+    formatted_diag.rows = rowsdiag;
+    formatted_diag.columns = columnsdiag;
+    
+    ne_diag = length(formatted_diag.E);
+    no_diag = length(formatted_diag.columns);
+    assert(length(formatted_diag.columns) == length(formatted_diag.rows));
+
 
     % create array to save non-zero elements
     % don't like to create million buffers
@@ -60,6 +74,13 @@ function changeFormatGPWS(path)
     imgsl = zeros(ne,no);
     imgsr = zeros(ne,no);
 
+    realsphg = zeros(ne_diag,no_diag);
+    realsphl = zeros(ne_diag,no_diag);
+    realsphr = zeros(ne_diag,no_diag);
+    imgsphg = zeros(ne_diag,no_diag);
+    imgsphl = zeros(ne_diag,no_diag);
+    imgsphr = zeros(ne_diag,no_diag);
+
 
     % not good practice to extract data in a for-loop iteratively 
     % btw todo better alternative
@@ -72,7 +93,7 @@ function changeFormatGPWS(path)
         [realgl, imggl] = extractData(sr.GLE_sparse(i).sparse_matrix, realgl, imggl, formatted, i);
 
         % extract gr
-        [realgr, imggr] = extractData(sr.GRE_sparse(i).sparse_matrix, realgr, imggr, formatted, i);
+        %[realgr, imggr] = extractData(sr.GRE_sparse(i).sparse_matrix, realgr, imggr, formatted, i);
             
         % extract pg
         [realpg, imgpg] = extractData(sr.PGE_sparse(i).sparse_matrix, realpg, imgpg, formatted, i);
@@ -90,7 +111,7 @@ function changeFormatGPWS(path)
         [realwl, imgwl] = extractData(sr.WLE_sparse(i).sparse_matrix, realwl, imgwl, formatted, i);
 
         % extract wr
-        [realwr, imgwr] = extractData(sr.WRE_sparse(i).sparse_matrix, realwr, imgwr, formatted, i);
+        %[realwr, imgwr] = extractData(sr.WRE_sparse(i).sparse_matrix, realwr, imgwr, formatted, i);
             
         % extract sg
         [realsg, imgsg] = extractData(sr.Sigma_GWGE_sparse(i).sparse_matrix, realsg, imgsg, formatted, i);
@@ -100,6 +121,16 @@ function changeFormatGPWS(path)
 
         % extract sr
         [realsr, imgsr] = extractData(sr.Sigma_GWRE_sparse(i).sparse_matrix, realsr, imgsr, formatted, i);
+
+        % extract sphg
+        [realsphg, imgsphg] = extractData(sr.Sigma_EPHNG_sparse(i).sparse_matrix, realsphg, imgsphg, formatted_diag, i);
+
+        % extract sphl
+        [realsphl, imgsphl] = extractData(sr.Sigma_EPHNL_sparse(i).sparse_matrix, realsphl, imgsphl, formatted_diag, i);
+
+        % extract sphr
+        [realsphr, imgsphr] = extractData(sr.Sigma_EPHNR_sparse(i).sparse_matrix, realsphr, imgsphr, formatted_diag, i);
+
     end
 
 
@@ -109,6 +140,11 @@ function changeFormatGPWS(path)
     formatted.E = formatted.E.';
     formatted.rows = formatted.rows.'; 
     formatted.columns = formatted.columns.'; 
+
+    % transpose energy and cols/ros
+    formatted_diag.E = formatted_diag.E.';
+    formatted_diag.rows = formatted_diag.rows.'; 
+    formatted_diag.columns = formatted_diag.columns.'; 
 
     % todo repeated code blocks 
     assert(isequal(size(realgg),[ne,no]))
@@ -131,8 +167,8 @@ function changeFormatGPWS(path)
     formatted.realgl = realgl;
     formatted.imggl = imggl;
 
-    formatted.realgr = realgr;
-    formatted.imggr = imggr;
+    %formatted.realgr = realgr;
+    %formatted.imggr = imggr;
 
     formatted.realpg = realpg;
     formatted.imgpg = imgpg;
@@ -149,8 +185,8 @@ function changeFormatGPWS(path)
     formatted.realwl = realwl;
     formatted.imgwl = imgwl;
 
-    formatted.realwr = realwr;
-    formatted.imgwr = imgwr;
+    %formatted.realwr = realwr;
+    %formatted.imgwr = imgwr;
 
     formatted.realsg = realsg;
     formatted.imgsg = imgsg;
@@ -161,6 +197,16 @@ function changeFormatGPWS(path)
     formatted.realsr = realsr;
     formatted.imgsr = imgsr;
 
+    formatted_diag.realsphg = realsphg;
+    formatted_diag.imgsphg = imgsphg;
+
+    formatted_diag.realsphl = realsphl;
+    formatted_diag.imgsphl = imgsphl;
+
+    formatted_diag.realsphr = realsphr;
+    formatted_diag.imgsphr = imgsphr;
+
+
     % save to file
-    save("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32/data_GPWS_pr_memory2_CNTNBC3_0V.mat", "formatted","-v7.3","-nocompression");
+    save("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32_shorttesting/data_GPWS_cf_ephn_memory2_CNTNBC3_0_2V.mat", "formatted","formatted_diag", "-v7.3","-nocompression");
 end
