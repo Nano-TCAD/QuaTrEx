@@ -566,6 +566,7 @@ def p2w_pool_mpi_cpu_kpoint(
     size,
     nbc,
     homogenize: bool = False,
+    NCpSC: int = 1,
     mkl_threads: int = 1,
     worker_num: int = 1,
     block_inv: bool = False,
@@ -683,6 +684,7 @@ def p2w_pool_mpi_cpu_kpoint(
                     wr_diag, wr_upper,
                     xr_diag, dosw, new, npw, repeat(nbc),
                     idx_e, factor,
+                    repeat(NCpSC),
                     repeat(block_inv),
                     repeat(use_dace),
                     repeat(validate_dace),repeat(ref_flag))
