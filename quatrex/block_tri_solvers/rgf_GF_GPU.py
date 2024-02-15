@@ -651,23 +651,47 @@ def rgf_standaloneGF_batched_GPU(
 
     energy_batchsize = ham_diag.shape[1]
 
-    # Upload to GPU
-    ham_diag_gpu = cp.asarray(ham_diag)
-    ham_upper_gpu = cp.asarray(ham_upper)
-    ham_lower_gpu = cp.asarray(ham_lower)
+    # # Upload to GPU
+    # ham_diag_gpu = cp.asarray(ham_diag)
+    # ham_upper_gpu = cp.asarray(ham_upper)
+    # ham_lower_gpu = cp.asarray(ham_lower)
 
-    sg_diag_gpu = cp.asarray(sg_diag)
-    sg_upper_gpu = cp.asarray(sg_upper)
-    sg_lower_gpu = cp.asarray(sg_lower)
+    # sg_diag_gpu = cp.asarray(sg_diag)
+    # sg_upper_gpu = cp.asarray(sg_upper)
+    # sg_lower_gpu = cp.asarray(sg_lower)
 
-    sl_diag_gpu = cp.asarray(sl_diag)
-    sl_upper_gpu = cp.asarray(sl_upper)
-    sl_lower_gpu = cp.asarray(sl_lower)
+    # sl_diag_gpu = cp.asarray(sl_diag)
+    # sl_upper_gpu = cp.asarray(sl_upper)
+    # sl_lower_gpu = cp.asarray(sl_lower)
 
+    ham_diag_gpu = cp.empty_like(ham_diag)
+    ham_upper_gpu = cp.empty_like(ham_upper)
+    ham_lower_gpu = cp.empty_like(ham_lower)
+
+    sg_diag_gpu = cp.empty_like(sg_diag)
+    sg_upper_gpu = cp.empty_like(sg_upper)
+    sg_lower_gpu = cp.empty_like(sg_lower)
+
+    sl_diag_gpu = cp.empty_like(sl_diag)
+    sl_upper_gpu = cp.empty_like(sl_upper)
+    sl_lower_gpu = cp.empty_like(sl_lower)
+
+    for i in range(len(ham_diag)):
+
+        ham_diag_gpu[i].set(ham_diag[i])
+        ham_upper_gpu[i].set(ham_upper[i])
+        ham_lower_gpu[i].set(ham_lower[i])
+
+        sl_diag_gpu[i].set(sl_diag[i])
+        sl_upper_gpu[i].set(sl_upper[i])
+        sl_lower_gpu[i].set(sl_lower[i])
+
+        sg_diag_gpu[i].set(sg_diag[i])
+        sg_upper_gpu[i].set(sg_upper[i])
+        sg_lower_gpu[i].set(sg_lower[i])
+    
     SigGBR_gpu = cp.asarray(SigGBR)
     SigLBR_gpu = cp.asarray(SigLBR)
-    
-
 
     gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Retarded (right)
     gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser (right)
@@ -925,13 +949,21 @@ def rgf_standaloneGF_batched_GPU(
     #idE[NB - 1] = idE[NB - 2]
     idE[:, NB-1] = cp.real(cp.trace(SigGBR_gpu[:, :NI, :NI] @ GL_gpu[NB-1, :, :NI, :NI] - GG_gpu[NB-1, :, :NI, :NI] @ SigLBR_gpu[:, :NI, :NI], axis1 = 1, axis2 = 2)).get()
 
-    #Final Data Transfer
-    #GR[:, :, :, :] = GR_gpu.get()
-    GL[:, :, :, :] = GL_gpu.get()
-    GG[:, :, :, :] = GG_gpu.get()
-    #GRnn1[:, :, :, :] = GRnn1_gpu.get()
-    GLnn1[:, :, :, :] = GLnn1_gpu.get()
-    GGnn1[:, :, :, :] = GGnn1_gpu.get()
+    # #Final Data Transfer
+    # #GR[:, :, :, :] = GR_gpu.get()
+    # GL[:, :, :, :] = GL_gpu.get()
+    # GG[:, :, :, :] = GG_gpu.get()
+    # #GRnn1[:, :, :, :] = GRnn1_gpu.get()
+    # GLnn1[:, :, :, :] = GLnn1_gpu.get()
+    # GGnn1[:, :, :, :] = GGnn1_gpu.get()
+
+    for i in range(len(GL)):
+        GL_gpu[i].get(out=GL[i])
+        GG_gpu[i].get(out=GG[i])
+    for i in range(len(GLnn1)):
+        GLnn1_gpu[i].get(out=GLnn1[i])
+        GGnn1_gpu[i].get(out=GGnn1[i])
+    cp.cuda.Stream.null.synchronize()
 
 
 def rgf_standaloneGF_batched_GPU_part1(
