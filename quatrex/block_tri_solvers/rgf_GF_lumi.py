@@ -104,6 +104,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
         gpu_identity = cp.identity(NN, dtype=ham_diag.dtype)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis=0)
         gr[:, 0:NN, 0:NN] = cp.linalg.solve(hd[:, 0:NN, 0:NN], gpu_identity_batch)
+        computation_stream.synchronize()
     else:
         gr[:, 0:NN, 0:NN] = cp.linalg.inv(hd[:, 0:NN, 0:NN])
     # Here, potentially write gR back to host to save memory
@@ -184,6 +185,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
             gpu_identity = cp.identity(NI, dtype=ham_diag.dtype)
             gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis=0)
             gr[:, 0:NI, 0:NI] = cp.linalg.solve(inv_arg, gpu_identity_batch)
+            computation_stream.synchronize()
         else:
             gr[:, 0:NI, 0:NI] = cp.linalg.inv(inv_arg)
         cp.conjugate(hu[:, 0:NI, 0:NP].transpose((0,2,1)), out=huh[:, 0:NP, 0:NI])
