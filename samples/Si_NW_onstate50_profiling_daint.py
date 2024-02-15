@@ -4,15 +4,22 @@ With transposition through network.
 Applied to a (8-0)-CNT and 7 AGNR
 See the different GW step folders for more explanations.
 """
+import time
+print("Starting imports on main folder", flush = True)
+time_pre_mpi = -time.perf_counter()
 import sys
 import numpy as np
 import numpy.typing as npt
 import os
 import argparse
 import pickle
+time_pre_mpi += time.perf_counter()
+print("Time for pre-mpi import: %.3f s" % time_pre_mpi, flush = True)
+
+time_mpi = -time.perf_counter()
 import mpi4py
 from scipy import sparse
-import time
+
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False    # do not finalize MPI automatically
 from mpi4py import MPI
@@ -20,34 +27,46 @@ from mpi4py import MPI
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
-from quatrex.GW.polarization.kernel import g2p_cpu
-from quatrex.GW.selfenergy.kernel import gw2s_cpu
-from quatrex.GW.gold_solution import read_solution
-from quatrex.GW.screenedinteraction.kernel import p2w_cpu
-from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
-from quatrex.GreensFunction import calc_GF_pool
+time_mpi += time.perf_counter()
+print("Time for mpi import: %.3f s" % time_mpi, flush = True)
+
+time_quatrex = -time.perf_counter()
+
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
+#from quatrex.GW.polarization.kernel import g2p_cpu
+#from quatrex.GW.selfenergy.kernel import gw2s_cpu
+#from quatrex.GW.screenedinteraction.kernel import p2w_cpu
+from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V_mpi
+#from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.utils import change_format
-from quatrex.utils import utils_gpu
 from quatrex.utils.bsr import bsr_matrix
 from quatrex.utils.matrix_creation import get_number_connected_blocks
 from quatrex.Phonon import electron_phonon_selfenergy
 
-if utils_gpu.gpu_avail():
-    try:
-        from quatrex.GreensFunction import calc_GF_pool_GPU
-        from quatrex.GW.screenedinteraction.kernel import p2w_gpu
-    except ImportError:
-        print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
+# if utils_gpu.gpu_avail():
+#     try:
+from quatrex.GreensFunction import calc_GF_pool_GPU
+from quatrex.GW.screenedinteraction.kernel import p2w_gpu
+from quatrex.GW.polarization.kernel import g2p_gpu
+from quatrex.GW.selfenergy.kernel import gw2s_gpu
+    # except ImportError:
+    #     print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
+
+time_quatrex += time.perf_counter()
+print("Time for quatrex import: %.3f s" % time_quatrex, flush = True)
 
 if __name__ == "__main__":
+    print("Hello", flush = True)
     MPI.Init_thread(required=MPI.THREAD_FUNNELED)
     comm = MPI.COMM_WORLD
     size = comm.Get_size()
     rank = comm.Get_rank()
     name = MPI.Get_processor_name()
+
+    if rank == 0:
+        print("MPI Initialized.", flush = True)
 
     # assume every rank has enough memory to read the initial data
     # path to solution
@@ -90,10 +109,10 @@ if __name__ == "__main__":
     parser.set_defaults(validate_dace=False)
     args = parser.parse_args()
     # check if gpu is available
-    if args.type in ("gpu"):
-        if not utils_gpu.gpu_avail():
-            print("No gpu available")
-            sys.exit(1)
+    # if args.type in ("gpu"):
+    #     if not utils_gpu.gpu_avail():
+    #         print("No gpu available")
+    #         sys.exit(1)
     # print chosen implementation
     if(rank == 0):
         print(f"Using {args.type} implementation", flush = True)
@@ -129,7 +148,8 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-35, 25, 3000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-40, 35, 8320, endpoint = True, dtype = float) # Energy Vector
+    #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -149,6 +169,7 @@ if __name__ == "__main__":
         time_pickle += time.perf_counter()
         print("Time for Hamiltonian read-in: %.3f s" % time_pickle, flush = True)
     # Extract neighbor indices
+    #exit(0)
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
 
@@ -190,11 +211,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 3
+    w_worker_threads = 6
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 3
+    gf_worker_threads = 6
 
     # physical parameter -----------
 
@@ -205,7 +226,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 2.0
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
@@ -262,7 +283,7 @@ if __name__ == "__main__":
     print(
     f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", 
     name)
-
+    #exit(0)
     # adding checks
     assert energy_loc.size == count[1,rank]
 
@@ -414,7 +435,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 150
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -468,7 +489,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_27_LM/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -687,12 +708,18 @@ if __name__ == "__main__":
             g2p_time = -time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
-        if args.type in ("gpu") or args.type in ("cpu"):
+        if args.type in ("cpu"):
             pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
                                                 gl_transposed_g2p)
+        elif args.type in ("gpu"):
+             pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+                                                pre_factor,
+                                                gg_g2p,
+                                                gl_g2p,
+                                                gl_transposed_g2p, batch_size = 500)   
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -915,7 +942,7 @@ if __name__ == "__main__":
             gw2s_time = -time.perf_counter()
 
     # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("gpu") or args.type in ("cpu"):
+        if args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, 
                                                                            wg_gw2s, wl_gw2s, 
                                                                             wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
@@ -942,6 +969,10 @@ if __name__ == "__main__":
             #                                                     wg_transposed_gw2s,
             #                                                     wl_transposed_gw2s
             #                                                     )
+        elif args.type in ("gpu"):
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 500)
         else:
             raise ValueError("Argument error, input type not possible")
         

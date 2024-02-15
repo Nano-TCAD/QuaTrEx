@@ -399,6 +399,261 @@ def gw2s_fft_mpi_gpu_3part_sr(
     return (sg, sl, sr)
 
 
+def gw2s_fft_mpi_gpu_PI_sr(
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128],
+    vh1D: npt.NDArray[np.complex128], energy: npt.NDArray[np.float64], rank: np.int32, disp: npt.NDArray[np.int32], count: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with fft on the gpu(see file description todo). 
+        The inputs are the pre factor, the Green's Functions
+        and the screened interactions.
+        Takes into account the energy grid cutoff.
+        In addition, loads/unloads the data to/from the gpu.
+
+    Args:
+        pre_factor                   (np.complex128): pre_factor, multiplied at the end
+        gg              (npt.NDArray[np.complex128]): Greater Green's Function,                 (#orbital, #energy)
+        gl              (npt.NDArray[np.complex128]): Lesser Green's Function,                  (#orbital, #energy)
+        gr              (npt.NDArray[np.complex128]): Retarded Green's Function,                (#orbital, #energy)
+        wg              (npt.NDArray[np.complex128]): Greater screened interaction,             (#orbital, #energy)
+        wl              (npt.NDArray[np.complex128]): Lesser screened interaction,              (#orbital, #energy)
+        wr              (npt.NDArray[np.complex128]): Retarded screened interaction,            (#orbital, #energy)
+        wg_transposed   (npt.NDArray[np.complex128]): Greater screened interaction transposed,  (#orbital, #energy)
+        wl_transposed   (npt.NDArray[np.complex128]): Lesser screened interaction transposed,   (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater self energy  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser self energy   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded self energy (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    ne: int = gg.shape[1]
+    no: int = gg.shape[0]
+
+    # load data to gpu----------------------------------------------------------
+    gg_gpu = cp.asarray(gg)
+    gl_gpu = cp.asarray(gl)
+    wg_gpu = cp.asarray(wg)
+    wl_gpu = cp.asarray(wl)
+    wg_transposed_gpu = cp.asarray(wg_transposed)
+    wl_transposed_gpu = cp.asarray(wl_transposed)
+    # compute sg/sl/sr----------------------------------------------------------
+
+    # todo possibility to avoid fft in global chain
+    # fft
+    gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+    gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+    wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
+    wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
+    wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
+    wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
+
+    # fft of energy reversed
+    rgg_t = cp.fft.fft(cp.flip(gg_gpu, axis=1), n=2 * ne, axis=1)
+    rgl_t = cp.fft.fft(cp.flip(gl_gpu, axis=1), n=2 * ne, axis=1)
+
+    # multiply elementwise for sigma_1 the normal term
+    sg_t_1 = cp.multiply(gg_t, wg_t)
+    sl_t_1 = cp.multiply(gl_t, wl_t)
+
+
+    # multiply elementwise the energy reversed with difference of transposed and energy zero
+    # see the README for derivation
+    sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+    #sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
+    #          cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
+
+
+    # ifft, cutoff and multiply with pre factor
+    sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
+    sl_1 = cp.fft.ifft(sl_t_1, axis=1)[:, :ne]
+
+    sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
+    sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
+
+    sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
+    sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
+
+    #Calculating the truncated fock part
+    #vh1d = np.asarray(vh[rows, cols].reshape(-1))
+    gl_density = np.imag(np.sum(gl, axis = 1))
+    rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
+    #rSigmaRF = np.tile(rSigmaRF, (1,ne))
+    rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
+
+    # Using the principal value integral method for yet another sigma_r
+    NE = len(energy)
+    dE = energy[1] - energy[0]
+    Evec = np.linspace(0, (NE-1)*dE, NE)
+
+    # one_div_by_E = 1.0 / Evec
+    # one_div_by_E[NE-1] = 0
+    # one_div_by_E_t = np.fft.fft(one_div_by_E)
+    one_div_by_E = np.concatenate((-1.0/(Evec[-1:0:-1]), np.array([0.0], dtype = np.float64), 1/(Evec[1:]), np.array([1/(Evec[-1] + dE)], dtype = np.float64)))
+    one_div_by_E_t = np.fft.fft(one_div_by_E)
+    one_div_by_E_t_gpu = cp.asarray(one_div_by_E_t)
+
+    SGmSL_t_gpu = cp.fft.fft(1j*cp.imag(sg_gpu-sl_gpu),  n=2 * ne, axis=1)
+    rSigmaR_t_gpu = cp.multiply(SGmSL_t_gpu, one_div_by_E_t_gpu)
+    #rSigmaR_t = linalg_cpu.elementmul(SGmSL_t, one_div_by_E_t)
+    rSigmaR_gpu = cp.fft.ifft(rSigmaR_t_gpu, axis = 1)[:, ne-1:-1].astype(np.complex128)
+    cp.multiply(rSigmaR_gpu, 2*pre_factor, out=rSigmaR_gpu)
+    sr_principale = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2).astype(np.complex128)).get() + rSigmaRF
+
+    # load data to cpu----------------------------------------------------------
+
+    sg = cp.asnumpy(sg_gpu)
+    sl = cp.asnumpy(sl_gpu)
+
+    return (sg, sl, sr_principale)
+
+
+def gw2s_fft_mpi_gpu_PI_sr_batched(
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128],
+    vh1D: npt.NDArray[np.complex128], energy: npt.NDArray[np.float64], rank: np.int32, disp: npt.NDArray[np.int32], count: npt.NDArray[np.int32],
+    batch_size: int = 1000
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with fft on the gpu(see file description todo). 
+        The inputs are the pre factor, the Green's Functions
+        and the screened interactions.
+        Takes into account the energy grid cutoff.
+        In addition, loads/unloads the data to/from the gpu.
+
+    Args:
+        pre_factor                   (np.complex128): pre_factor, multiplied at the end
+        gg              (npt.NDArray[np.complex128]): Greater Green's Function,                 (#orbital, #energy)
+        gl              (npt.NDArray[np.complex128]): Lesser Green's Function,                  (#orbital, #energy)
+        gr              (npt.NDArray[np.complex128]): Retarded Green's Function,                (#orbital, #energy)
+        wg              (npt.NDArray[np.complex128]): Greater screened interaction,             (#orbital, #energy)
+        wl              (npt.NDArray[np.complex128]): Lesser screened interaction,              (#orbital, #energy)
+        wr              (npt.NDArray[np.complex128]): Retarded screened interaction,            (#orbital, #energy)
+        wg_transposed   (npt.NDArray[np.complex128]): Greater screened interaction transposed,  (#orbital, #energy)
+        wl_transposed   (npt.NDArray[np.complex128]): Lesser screened interaction transposed,   (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater self energy  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser self energy   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded self energy (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    ne: int = gg.shape[1]
+    no: int = gg.shape[0]
+
+
+    # determine number of batches
+    # batch over no
+    batches = no // batch_size
+    if batches == 0:
+        print("Too large batch size")
+
+    sg = np.empty((no, ne), dtype=np.complex128)
+    sl = np.empty((no, ne), dtype=np.complex128)
+    sr_principale = np.empty((no, ne), dtype=np.complex128)
+
+    
+    # load data to gpu and compute----------------------------------------------------
+    gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    wg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    wl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    wg_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    wl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # compute sg/sl/sr----------------------------------------------------------
+
+    #Calculating the truncated fock part
+    #vh1d = np.asarray(vh[rows, cols].reshape(-1))
+    gl_density = np.imag(np.sum(gl, axis = 1))
+    rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
+    #rSigmaRF = np.tile(rSigmaRF, (1,ne))
+    rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
+
+    # Using the principal value integral method for yet another sigma_r
+    NE = len(energy)
+    dE = energy[1] - energy[0]
+    Evec = np.linspace(0, (NE-1)*dE, NE)
+
+    # one_div_by_E = 1.0 / Evec
+    # one_div_by_E[NE-1] = 0
+    # one_div_by_E_t = np.fft.fft(one_div_by_E)
+    one_div_by_E = np.concatenate((-1.0/(Evec[-1:0:-1]), np.array([0.0], dtype = np.float64), 1/(Evec[1:]), np.array([1/(Evec[-1] + dE)], dtype = np.float64)))
+    one_div_by_E_t = np.fft.fft(one_div_by_E)
+    one_div_by_E_t_gpu = cp.asarray(one_div_by_E_t)
+
+    for batch in range(batches):
+        batch_start = batch * batch_size
+        # last batch different, if not dividable
+        batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
+
+        # todo possibility to avoid fft in global chain
+        # fft
+        gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+
+        gl_gpu[0:batch_end - batch_start] = cp.asarray(gl[batch_start:batch_end, :])
+        gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
+
+        wg_gpu[0:batch_end - batch_start] = cp.asarray(wg[batch_start:batch_end, :])
+        wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
+
+        wl_gpu[0:batch_end - batch_start] = cp.asarray(wl[batch_start:batch_end, :])
+        wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
+
+        wg_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wg_transposed[batch_start:batch_end, :])
+        wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
+
+        wl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wl_transposed[batch_start:batch_end, :])
+        wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
+        
+        # fft of energy reversed
+        rgg_t = cp.fft.fft(cp.flip(gg_gpu, axis=1), n=2 * ne, axis=1)
+        rgl_t = cp.fft.fft(cp.flip(gl_gpu, axis=1), n=2 * ne, axis=1)
+
+        # multiply elementwise for sigma_1 the normal term
+        sg_t_1 = cp.multiply(gg_t, wg_t)
+        sl_t_1 = cp.multiply(gl_t, wl_t)
+
+
+        # multiply elementwise the energy reversed with difference of transposed and energy zero
+        # see the README for derivation
+        sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+        sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
+        #sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
+        #          cp.multiply(rgr_t, wg_transposed_t - cp.repeat(wg_gpu[:,0].reshape(-1,1), 2*ne, axis=1)))
+
+
+        # ifft, cutoff and multiply with pre factor
+        sg_1 = cp.fft.ifft(sg_t_1, axis=1)[:, :ne]
+        sl_1 = cp.fft.ifft(sl_t_1, axis=1)[:, :ne]
+
+        sg_2 = cp.flip(cp.fft.ifft(sg_t_2, axis=1)[:, :ne], axis=1)
+        sl_2 = cp.flip(cp.fft.ifft(sl_t_2, axis=1)[:, :ne], axis=1)
+
+        sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
+        sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
+
+        SGmSL_t_gpu = cp.fft.fft(1j*cp.imag(sg_gpu-sl_gpu)[0:batch_end - batch_start,:],  n=2 * ne, axis=1)
+        rSigmaR_t_gpu = cp.multiply(SGmSL_t_gpu, one_div_by_E_t_gpu)
+        #rSigmaR_t = linalg_cpu.elementmul(SGmSL_t, one_div_by_E_t)
+        rSigmaR_gpu = cp.fft.ifft(rSigmaR_t_gpu, axis = 1)[:, ne-1:-1].astype(np.complex128)
+        cp.multiply(rSigmaR_gpu, 2*pre_factor, out=rSigmaR_gpu)
+        sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2)[0:batch_end - batch_start,:].astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :]
+
+        # load data to cpu----------------------------------------------------------
+
+        sg[batch_start:batch_end] = sg_gpu[0:batch_end - batch_start].get()
+        sl[batch_start:batch_end] = sl_gpu[0:batch_end - batch_start].get()
+        
+
+    return (sg, sl, sr_principale)
+
+
+
 def gw2s_fft_mpi_gpu_streams(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
     gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
@@ -523,7 +778,7 @@ def gw2s_fft_mpi_gpu_streams(
         stream.synchronize()
 
 
-def gw2s_fft_mpi_gpu_batched(
+def gw2s_fft_mpi_gpu_batched_streams(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
     gr: npt.NDArray[np.complex128], wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
     wr: npt.NDArray[np.complex128], wg_transposed: npt.NDArray[np.complex128],

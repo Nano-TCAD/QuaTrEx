@@ -194,6 +194,76 @@ def g2p_fft_mpi_gpu(
 
     return (pg, pl, pr)
 
+def g2p_fft_mpi_gpu_batched_nopr(
+    pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    gl_transposed: npt.NDArray[np.complex128], batch_size: int = 1000
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the polarization with fft and mpi on the gpu(see file description).
+    In addition, already loads and unloads data to and from the gpu.
+
+    Args:
+        pre_factor            (np.complex128): pre_factor, multiplied at the end
+        gg       (npt.NDArray[np.complex128]): Greater Green's Function,          (#orbital/#ranks, #energy)
+        gl       (npt.NDArray[np.complex128]): Lesser Green's Function,           (#orbital/#ranks, #energy)
+        gr       (npt.NDArray[np.complex128]): Retarded Green's Function_,        (#orbital/#ranks, #energy)
+        gl_transposed (npt.NDArray[np.complex128]): Transposed Lesser Green's Function (#orbital/#ranks, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)  
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    ne = gg.shape[1]
+    no = gg.shape[0]
+
+    batches = no // batch_size
+
+    pg = np.empty((no, ne), dtype=np.complex128)
+    pl = np.empty((no, ne), dtype=np.complex128)
+
+
+    # load data to gpu and compute----------------------------------------------
+    # allocate gpu memory
+    gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+
+
+    # compute pg/pl/pr----------------------------------------------------------
+    for batch in range(batches):
+        batch_start = batch * batch_size
+        # last batch different, if not dividable
+        batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
+        # fft
+        gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+
+        gl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(gl_transposed[batch_start:batch_end, :])
+        gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+
+        # time reversed
+        gl_t_mod_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)
+
+        # multiply elementwise
+        pg_t_gpu = cp.multiply(gg_t_gpu, gl_t_mod_gpu)
+
+        # ifft, cutoff and multiply with pre factor
+        pg_gpu = cp.multiply(cp.fft.ifft(pg_t_gpu, axis=1), pre_factor)
+        pl_gpu = -cp.conjugate(cp.roll(cp.flip(pg_gpu, axis=1), 1, axis=1))
+
+        # cutoff
+        pg_gpu = pg_gpu[:, :ne]
+        pl_gpu = pl_gpu[:, :ne]
+
+        # load data to cpu----------------------------------------------------------
+
+        pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start].get()
+        pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start].get()
+
+    return (pg, pl)
+
 
 def g2p_fft_mpi_gpu_streams(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
                             gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128],
@@ -263,7 +333,7 @@ def g2p_fft_mpi_gpu_streams(pre_factor: np.complex128, gg: npt.NDArray[np.comple
         stream.synchronize()
 
 
-def g2p_fft_mpi_gpu_batched(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+def g2p_fft_mpi_gpu_batched_streams(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
                             gr: npt.NDArray[np.complex128], gl_transposed: npt.NDArray[np.complex128],
                             pg: npt.NDArray[np.complex128], pl: npt.NDArray[np.complex128],
                             pr: npt.NDArray[np.complex128], streams: typing.List[cp.cuda.Stream], batch_size: int):

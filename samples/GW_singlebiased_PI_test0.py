@@ -336,6 +336,9 @@ if __name__ == "__main__":
     mem_s = 0.5
     mem_g = 0.0
     mem_w = 0.1
+
+    # initialize the index of the lowest conduction band of the contact band structure
+    ind_ek = -1
     # max number of iterations
 
     max_iter = 3
@@ -378,7 +381,7 @@ if __name__ == "__main__":
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1, rank], no), dtype=np.complex128), rows,
                                                             columns, nao)
 
-        ECmin_vec[iter_num + 1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
@@ -386,6 +389,7 @@ if __name__ == "__main__":
                                                     sl_h2g_vec,
                                                     sg_h2g_vec,
                                                     sr_ephn_h2g_vec,
+                                                    ind_ek,
                                                     rows,
                                                     columns,
                                                     bmin,
@@ -411,6 +415,9 @@ if __name__ == "__main__":
                 sr_h2g_vec,
                 sl_h2g_vec,
                 sg_h2g_vec,
+                sr_ephn_h2g_vec,
+                sr_ephn_h2g_vec,
+                sr_ephn_h2g_vec,
                 energy_fl,
                 energy_fr,
                 temp,

@@ -102,7 +102,7 @@ if __name__ == "__main__":
         from dace.sdfg import utils
         if rank == 0:
             print("Using dace for Beyn")
-            from quarex.OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
+            from quatrex.OBC.beyn_dace import contour_integral_dace, contour_integral_block_dace, sort_k_dace
             from dace.transformation.auto.auto_optimize import auto_optimize
             ci_sdfg = contour_integral_dace.to_sdfg(simplify=True)
             auto_optimize(ci_sdfg, dace.DeviceType.CPU, thread_safe=True)

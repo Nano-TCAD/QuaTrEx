@@ -10,13 +10,12 @@ from cupyx.scipy import sparse as cusparse
 import mkl
 import typing
 from quatrex.utils import change_format
-from quatrex.utils import change_format_gpu
 from quatrex.utils import matrix_creation
 from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
                                             extract_small_matrix_blocks, \
                                             initialize_block_sigma
 #from quatrex.utils.matrix_creation_gpu import initialize_block_sigma_batched
-from block_tri_solvers import matrix_inversion_w, rgf_W, rgf_W_GPU
+from quatrex.block_tri_solvers import matrix_inversion_w, rgf_W_GPU
 from quatrex.OBC import obc_w_gpu
 from quatrex.OBC import obc_w_cpu
 import time
