@@ -4,7 +4,7 @@ import numpy as np
 import time
 
 from quatrex.block_tri_solvers.rgf_GF_GPU import rgf_standaloneGF_GPU, rgf_standaloneGF_batched_GPU
-from quatrex.block_tri_solvers.rgf_GF_lumi import _rgf_batched
+from quatrex.block_tri_solvers.rgf_GF_lumi import rgf_standaloneGF_batched_GPU as _rgf_batched
 # from quatrex.block_tri_solvers.rgf_GF_lumi import rgf_standaloneGF_GPU, rgf_standaloneGF_batched_GPU
 
 
@@ -398,7 +398,7 @@ def validate_rgf_batched_gpu(num_blocks, batch_size, block_size):
     DOS = np.zeros((batch_size, num_blocks), dtype=np.complex128)
     nE = np.zeros((batch_size, num_blocks), dtype=np.complex128)
     nP = np.zeros((batch_size, num_blocks), dtype=np.complex128)
-    idE = np.zeros((batch_size, num_blocks), dtype=np.complex128)
+    idE = np.zeros((batch_size, num_blocks), dtype=np.float64)
 
     bmin = np.arange(1, num_blocks * block_size - 1, block_size, dtype=np.int32)
     bmax = np.arange(block_size, num_blocks * block_size + 1, block_size, dtype=np.int32)
@@ -424,6 +424,11 @@ def validate_rgf_batched_gpu(num_blocks, batch_size, block_size):
     GG2 = cpx.zeros_pinned((num_blocks, batch_size, block_size, block_size), dtype=np.complex128)
     GGnn12 = cpx.zeros_pinned((num_blocks - 1, batch_size, block_size, block_size), dtype=np.complex128)
 
+    DOS2 = np.zeros((batch_size, num_blocks), dtype=np.complex128)
+    nE2 = np.zeros((batch_size, num_blocks), dtype=np.complex128)
+    nP2 = np.zeros((batch_size, num_blocks), dtype=np.complex128)
+    idE2 = np.zeros((batch_size, num_blocks), dtype=np.float64)
+
     print("Running double-buffered batched RGF...", flush=True)
 
     _rgf_batched(HD, HU, HL,
@@ -433,18 +438,23 @@ def validate_rgf_batched_gpu(num_blocks, batch_size, block_size):
                  GR2, GRnn12,
                  GL2, GLnn12,
                  GG2, GGnn12,
-                 DOS, nE, nP, idE,
-                 bmin, bmax)
+                 DOS2, nE2, nP2, idE2,
+                 bmin, bmax,
+                 solve=True)
     
     # assert np.allclose(GR, GR2)
     # assert np.allclose(GL, GL2)
     # assert np.allclose(GG, GG2)
-    print(np.linalg.norm(GR - GR2) / np.linalg.norm(GR))
+    # print(np.linalg.norm(GR - GR2) / np.linalg.norm(GR))
     print(np.linalg.norm(GL - GL2) / np.linalg.norm(GL))
     print(np.linalg.norm(GG - GG2) / np.linalg.norm(GG))
-    print(np.linalg.norm(GRnn1 - GRnn12) / np.linalg.norm(GRnn1))
+    # print(np.linalg.norm(GRnn1 - GRnn12) / np.linalg.norm(GRnn1))
     print(np.linalg.norm(GLnn1 - GLnn12) / np.linalg.norm(GLnn1))
     print(np.linalg.norm(GGnn1 - GGnn12) / np.linalg.norm(GGnn1))
+    print(np.linalg.norm(DOS - DOS2) / np.linalg.norm(DOS))
+    print(np.linalg.norm(nE - nE2) / np.linalg.norm(nE))
+    print(np.linalg.norm(nP - nP2) / np.linalg.norm(nP))
+    print(np.linalg.norm(idE - idE2) / np.linalg.norm(idE))
 
     print("Validation successful!", flush=True)
 
