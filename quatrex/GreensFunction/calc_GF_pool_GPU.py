@@ -253,7 +253,7 @@ def calc_GF_pool_mpi_split(
 
     #print("Start solving the Green's function.")
 
-    energy_batchsize = 1
+    energy_batchsize = 4
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()

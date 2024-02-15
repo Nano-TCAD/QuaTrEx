@@ -677,18 +677,19 @@ def rgf_standaloneGF_batched_GPU(
     sl_lower_gpu = cp.empty_like(sl_lower)
 
     for i in range(len(ham_diag)):
+        if i < len(ham_diag) - 1:
+            ham_upper_gpu[i].set(ham_upper[i])
+            ham_lower_gpu[i].set(ham_lower[i])
 
+            sl_upper_gpu[i].set(sl_upper[i])
+            sl_lower_gpu[i].set(sl_lower[i])
+
+            sg_upper_gpu[i].set(sg_upper[i])
+            sg_lower_gpu[i].set(sg_lower[i])
+            
+        sl_diag_gpu[i].set(sl_diag[i])            
         ham_diag_gpu[i].set(ham_diag[i])
-        ham_upper_gpu[i].set(ham_upper[i])
-        ham_lower_gpu[i].set(ham_lower[i])
-
-        sl_diag_gpu[i].set(sl_diag[i])
-        sl_upper_gpu[i].set(sl_upper[i])
-        sl_lower_gpu[i].set(sl_lower[i])
-
         sg_diag_gpu[i].set(sg_diag[i])
-        sg_upper_gpu[i].set(sg_upper[i])
-        sg_lower_gpu[i].set(sg_lower[i])
     
     SigGBR_gpu = cp.asarray(SigGBR)
     SigLBR_gpu = cp.asarray(SigLBR)

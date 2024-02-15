@@ -953,19 +953,47 @@ def rgf_w_opt_standalone_batched_gpu(
     # max block size after matrix multiplication
     lb_max_mm = np.max(lb_vec_mm)
 
+
     # Upload to GPU
-    vh_diag_gpu = cp.asarray(vh_diag)
+    # vh_diag_gpu = cp.asarray(vh_diag)
+    # lg_diag_gpu = cp.asarray(lg_diag)
+    # lg_upper_gpu = cp.asarray(lg_upper)
+    # lg_lower_gpu = cp.asarray(lg_lower)
+    # ll_diag_gpu = cp.asarray(ll_diag)
+    # ll_upper_gpu = cp.asarray(ll_upper)
+    # ll_lower_gpu = cp.asarray(ll_lower)
+    # mr_diag_gpu = cp.asarray(mr_diag)
+    # mr_upper_gpu = cp.asarray(mr_upper)
+    # mr_lower_gpu = cp.asarray(mr_lower)
+
+    vh_diag_gpu = cp.empty_like(vh_diag)
+    lg_diag_gpu = cp.empty_like(lg_diag)
+    lg_upper_gpu = cp.empty_like(lg_upper)
+    lg_lower_gpu = cp.empty_like(lg_lower)
+    ll_diag_gpu = cp.empty_like(ll_diag)
+    ll_upper_gpu = cp.empty_like(ll_upper)
+    ll_lower_gpu = cp.empty_like(ll_lower)
+    mr_diag_gpu = cp.empty_like(mr_diag)
+    mr_upper_gpu = cp.empty_like(mr_upper)
+    mr_lower_gpu = cp.empty_like(mr_lower)
+
+    for i in range(len(vh_diag)):
+        if i < len(vh_diag) - 1:
+            lg_upper_gpu[i].set(lg_upper[i])
+            lg_lower_gpu[i].set(lg_lower[i])
+            ll_upper_gpu[i].set(ll_upper[i])
+            ll_lower_gpu[i].set(ll_lower[i])
+            mr_upper_gpu[i].set(mr_upper[i])
+            mr_lower_gpu[i].set(mr_lower[i])
+
+        vh_diag_gpu[i].set(vh_diag[i])
+        lg_diag_gpu[i].set(lg_diag[i])
+        ll_diag_gpu[i].set(ll_diag[i])
+        mr_diag_gpu[i].set(mr_diag[i])
+
+
     vh_upper_gpu = cp.asarray(vh_upper)
     vh_lower_gpu = cp.asarray(vh_lower)
-    lg_diag_gpu = cp.asarray(lg_diag)
-    lg_upper_gpu = cp.asarray(lg_upper)
-    lg_lower_gpu = cp.asarray(lg_lower)
-    ll_diag_gpu = cp.asarray(ll_diag)
-    ll_upper_gpu = cp.asarray(ll_upper)
-    ll_lower_gpu = cp.asarray(ll_lower)
-    mr_diag_gpu = cp.asarray(mr_diag)
-    mr_upper_gpu = cp.asarray(mr_upper)
-    mr_lower_gpu = cp.asarray(mr_lower)
 
 
     # not true inverse, but build up inverses from either corner
@@ -1274,13 +1302,23 @@ def rgf_w_opt_standalone_batched_gpu(
         #     wr_upper[idx_ib, :, :] *= factor
         #     wg_upper[idx_ib, :, :] *= factor
         #     wl_upper[idx_ib, :, :] *= factor
-    wr_diag[:, :, :, :] = wr_diag_gpu.get()
-    wr_upper[:, :, :, :] = wr_upper_gpu.get()
-    wg_diag[:, :, :, :] = wg_diag_gpu.get()
-    wg_upper[:, :, :, :] = wg_upper_gpu.get()
-    wl_diag[:, :, :, :] = wl_diag_gpu.get()
-    wl_upper[:, :, :, :] = wl_upper_gpu.get()
-    xr_diag[:, :, :, :] = xr_diag_gpu.get()
+    # wr_diag[:, :, :, :] = wr_diag_gpu.get()
+    # wr_upper[:, :, :, :] = wr_upper_gpu.get()
+    # wg_diag[:, :, :, :] = wg_diag_gpu.get()
+    # wg_upper[:, :, :, :] = wg_upper_gpu.get()
+    # wl_diag[:, :, :, :] = wl_diag_gpu.get()
+    # wl_upper[:, :, :, :] = wl_upper_gpu.get()
+    # xr_diag[:, :, :, :] = xr_diag_gpu.get()
+    for i in range(len(wr_diag)):
+        wr_diag_gpu[i].get(out = wr_diag[i])
+        wg_diag_gpu[i].get(out = wg_diag[i])
+        wl_diag_gpu[i].get(out = wl_diag[i])
+        xr_diag_gpu[i].get(out = xr_diag[i])
+        
+    for i in range(len(wr_upper)):
+        wr_upper_gpu[i].get(out = wr_upper[i])
+        wg_upper_gpu[i].get(out = wg_upper[i])
+        wl_upper_gpu[i].get(out = wl_upper[i])
 
 
 def sp_mm_1_gpu(pr:sparse.csr_matrix,
