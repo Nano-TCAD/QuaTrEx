@@ -84,28 +84,28 @@ def test_rgf_batched_gpu(num_blocks, num_energies, block_size, batch_size, repea
     rng = np.random.default_rng(42)
 
     HD = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    HU = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    HL = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
+    HU = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
+    HL = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
     SGD = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    SGU = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    SGL = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
+    SGU = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
+    SGL = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
     SLD = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    SLU = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
-    SLL = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
+    SLU = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
+    SLL = cpx.empty_pinned((num_blocks-1, num_energies, block_size, block_size), dtype=np.complex128)
 
     SigGBR = cpx.empty_pinned((num_energies, block_size, block_size), dtype=np.complex128)
     SigLBR = cpx.empty_pinned((num_energies, block_size, block_size), dtype=np.complex128)
 
 
     HD[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    HU[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    HL[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
+    HU[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
+    HL[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
     SGD[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    SGU[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    SGL[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
+    SGU[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
+    SGL[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
     SLD[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    SLU[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
-    SLL[:] = random_complex((num_blocks, num_energies, block_size, block_size), rng)
+    SLU[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
+    SLL[:] = random_complex((num_blocks-1, num_energies, block_size, block_size), rng)
 
     SigGBR[:] = random_complex((num_energies, block_size, block_size), rng)
     SigLBR[:] = random_complex((num_energies, block_size, block_size), rng)
@@ -159,6 +159,16 @@ def test_rgf_batched_gpu(num_blocks, num_energies, block_size, batch_size, repea
     
     print(f"Median old batched runtime (batch size {batch_size}): {np.median(runtimes):.3f} s", flush=True)
 
+    GL2 = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
+    GLnn12 = cpx.empty_pinned((num_blocks - 1, num_energies, block_size, block_size), dtype=np.complex128)
+    GG2 = cpx.empty_pinned((num_blocks, num_energies, block_size, block_size), dtype=np.complex128)
+    GGnn12 = cpx.empty_pinned((num_blocks - 1, num_energies, block_size, block_size), dtype=np.complex128)
+
+    DOS2 = np.zeros((num_energies, num_blocks), dtype=np.complex128)
+    nE2 = np.zeros((num_energies, num_blocks), dtype=np.complex128)
+    nP2 = np.zeros((num_energies, num_blocks), dtype=np.complex128)
+    idE2 = np.zeros((num_energies, num_blocks), dtype=np.complex128)
+
     runtimes = np.zeros(repeat)
     istream, ostream = cp.cuda.Stream(non_blocking=True), cp.cuda.Stream(non_blocking=True)
     for r in range(repeat):
@@ -180,21 +190,30 @@ def test_rgf_batched_gpu(num_blocks, num_energies, block_size, batch_size, repea
                          SigGBR[ie:ie_end],
                          SigLBR[ie:ie_end],
                          None, None,  # GR, GRnn1
-                         GL[:, ie:ie_end],
-                         GLnn1[:, ie:ie_end],
-                         GG[:, ie:ie_end],
-                         GGnn1[:, ie:ie_end],
-                         DOS[ie:ie_end],
-                         nE[ie:ie_end],
-                         nP[ie:ie_end],
-                         idE[ie:ie_end],
+                         GL2[:, ie:ie_end],
+                         GLnn12[:, ie:ie_end],
+                         GG2[:, ie:ie_end],
+                         GGnn12[:, ie:ie_end],
+                         DOS2[ie:ie_end],
+                         nE2[ie:ie_end],
+                         nP2[ie:ie_end],
+                         idE2[ie:ie_end],
                          bmin, bmax,
-                         solve=False,
+                         solve=True,
                          input_stream=istream, output_stream=ostream)
 
         runtimes[r] = time.time() - start
     
     print(f"Median new batched runtime (batch size {batch_size}): {np.median(runtimes):.3f} s", flush=True)
+
+    assert np.allclose(GL, GL2)
+    assert np.allclose(GG, GG2)
+    assert np.allclose(GLnn1, GLnn12)
+    assert np.allclose(GGnn1, GGnn12)
+    assert np.allclose(DOS, DOS2)
+    assert np.allclose(nE, nE2)
+    assert np.allclose(nP, nP2)
+    assert np.allclose(idE, idE2)
 
     return
 
@@ -281,7 +300,7 @@ def validate_rgf_batched_gpu(num_blocks, batch_size, block_size):
                  GG2, GGnn12,
                  DOS2, nE2, nP2, idE2,
                  bmin, bmax,
-                 solve=False)
+                 solve=True)
     
     print(np.linalg.norm(GL - GL2) / np.linalg.norm(GL))
     print(np.linalg.norm(GG - GG2) / np.linalg.norm(GG))
@@ -297,16 +316,18 @@ if __name__ == "__main__":
 
     for bsz in (416, ):
 
-        test_rgf_gpu(13, 100, bsz, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 1, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 2, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 5, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 10, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 20, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 50, repeat=5)
-        test_rgf_batched_gpu(13, 100, bsz, 100, repeat=5)
+        rpt = 1
 
-    # for bsz in (128, 256, 512):
+        test_rgf_gpu(13, 10, bsz, repeat=rpt)
+        test_rgf_batched_gpu(13, 10, bsz, 1, repeat=rpt)
+        test_rgf_batched_gpu(13, 10, bsz, 2, repeat=rpt)
+        test_rgf_batched_gpu(13, 10, bsz, 5, repeat=rpt)
+        test_rgf_batched_gpu(13, 10, bsz, 10, repeat=rpt)
+    #     # test_rgf_batched_gpu(13, 100, bsz, 20, repeat=rpt)
+    #     # test_rgf_batched_gpu(13, 100, bsz, 50, repeat=rpt)
+    #     # test_rgf_batched_gpu(13, 100, bsz, 100, repeat=rpt)
+
+    # for bsz in (128, 256, 416, 512):
     #     print(f"Testing with block size {bsz}", flush=True)
 
     #     validate_rgf_batched_gpu(10, 10, bsz)

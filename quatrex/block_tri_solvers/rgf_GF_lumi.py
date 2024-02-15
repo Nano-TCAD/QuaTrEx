@@ -142,6 +142,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
             gl = GL_gpu[0]
             gg = GG_gpu[0]
 
+        computation_stream.synchronize()
         with input_stream:
                 
             if nIB >= 0:
@@ -240,6 +241,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     pgg = gG_gpu[nIB]
     # grh = gR_H_gpu[idx]
 
+    computation_stream.synchronize()
     with input_stream:
             
         if nIB < NB:
@@ -316,6 +318,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
         gl = gL_gpu[IB]
         gg = gG_gpu[IB]
 
+        computation_stream.synchronize()
         with input_stream:
                 
             if nIB < NB:
@@ -425,12 +428,13 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     computation_stream.wait_event(event=input_events[nidx])
     idE_gpu[:, NB - 1] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ GL[:, 0:NI, 0:NI] -
                                           GG[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
-
+    
     GL.get(out=GL_host[-1])
     GG.get(out=GG_host[-1])
     DOS_gpu.get(out=DOS)
     nE_gpu.get(out=nE)
     nP_gpu.get(out=nP)
     idE_gpu.get(out=idE)
+    input_stream.synchronize()
     output_stream.synchronize()
     computation_stream.synchronize()
