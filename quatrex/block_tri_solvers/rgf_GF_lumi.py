@@ -11,7 +11,9 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
                                  GG_host, GGnn1_host,  # Output Greater Green's Functions
                                  DOS, nE, nP, idE,  # Output Observables
                                  Bmin_fi, Bmax_fi,  # Indices
-                                 solve: bool = True
+                                 solve: bool = True,
+                                 input_stream: cp.cuda.Stream = None,
+                                 output_stream: cp.cuda.Stream = None,
                                 ):
 
     # Sizes
@@ -33,8 +35,8 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     sg_lower_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)
 
     computation_stream = cp.cuda.Stream.null
-    input_stream = cp.cuda.Stream(non_blocking=True)
-    output_stream = cp.cuda.Stream(non_blocking=True)
+    input_stream = input_stream or cp.cuda.Stream(non_blocking=True)
+    output_stream = output_stream or cp.cuda.Stream(non_blocking=True)
     input_events = [cp.cuda.Event() for _ in range(2)]
     computation_event = cp.cuda.Event()
 
@@ -54,9 +56,6 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     GLnn1_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
     GG_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
     GGnn1_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
-
-    ham_upper_H_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)
-    gR_H_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)
     
     # Backward pass
 
@@ -72,7 +71,6 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     sgd = sg_diag_gpu[idx]
 
     gr = gR_gpu[IB]
-    grh = gR_H_gpu[idx]
     gl = gL_gpu[IB]
     gg = gG_gpu[IB]
 
@@ -107,8 +105,8 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
         computation_stream.synchronize()
     else:
         gr[:, 0:NN, 0:NN] = cp.linalg.inv(hd[:, 0:NN, 0:NN])
+    grh = cp.conjugate(gr[:, 0:NN, 0:NN].transpose((0,2,1)))
     # Here, potentially write gR back to host to save memory
-    cp.conjugate(gr[:, 0:NN, 0:NN].transpose((0,2,1)), out=grh[:, 0:NN, 0:NN])
     cp.matmul(gr[:, 0:NN, 0:NN] @ sld[:, 0:NN, 0:NN], grh[:, 0:NN, 0:NN], out=gl[:, 0:NN, 0:NN])
     cp.matmul(gr[:, 0:NN, 0:NN] @ sgd[:, 0:NN, 0:NN], grh[:, 0:NN, 0:NN], out=gg[:, 0:NN, 0:NN])
 
@@ -130,10 +128,8 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
         sgd = sg_diag_gpu[idx]
         sgl = sg_lower_gpu[idx]
 
-        huh = ham_upper_H_gpu[idx]
         gr = gR_gpu[IB]
         pgr = gR_gpu[IB + 1]
-        grh = gR_H_gpu[idx]
         gl = gL_gpu[IB]
         pgl = gL_gpu[IB + 1]
         gg = gG_gpu[IB]
@@ -177,6 +173,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
             input_events[idx].record(stream=input_stream)
 
         computation_stream.wait_event(event=input_events[pidx])
+        huh = cp.conjugate(hu[:, 0:NI, 0:NP].transpose((0,2,1)))
         hupgr = hu[:, 0:NI, 0:NP] @ pgr[:, 0:NP, 0:NP]
         al = hupgr @ sll[:, 0:NP, 0:NI]
         ag = hupgr @ sgl[:, 0:NP, 0:NI]
@@ -188,12 +185,11 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
             computation_stream.synchronize()
         else:
             gr[:, 0:NI, 0:NI] = cp.linalg.inv(inv_arg)
-        cp.conjugate(hu[:, 0:NI, 0:NP].transpose((0,2,1)), out=huh[:, 0:NP, 0:NI])
+        grh = cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)))
         cp.subtract(hu[:, 0:NI, 0:NP] @ pgl[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI],
                     al - cp.conjugate(al.transpose((0,2,1))), out=slb[:, 0:NI, 0:NI])
         cp.subtract(hu[:, 0:NI, 0:NP] @ pgg[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI],
                     ag - cp.conjugate(ag.transpose((0,2,1))), out=sgb[:, 0:NI, 0:NI])
-        cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)), out=grh[:, 0:NI, 0:NI])
         cp.matmul(gr[:, 0:NI, 0:NI] @ (sld[:, 0:NI, 0:NI] + slb[:, 0:NI, 0:NI]), grh[:, 0:NI, 0:NI], out=gl[:, 0:NI, 0:NI])
         cp.matmul(gr[:, 0:NI, 0:NI] @ (sgd[:, 0:NI, 0:NI] + sgb[:, 0:NI, 0:NI]), grh[:, 0:NI, 0:NI], out=gg[:, 0:NI, 0:NI])
 
@@ -242,7 +238,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
     pgr = gR_gpu[nIB]
     pgl = gL_gpu[nIB]
     pgg = gG_gpu[nIB]
-    grh = gR_H_gpu[idx]
+    # grh = gR_H_gpu[idx]
 
     with input_stream:
             
@@ -273,7 +269,7 @@ def rgf_standaloneGF_batched_GPU(ham_diag, ham_upper, ham_lower,  # Input Hamilt
             input_events[nidx].record(stream=input_stream)
 
     computation_stream.wait_event(event=input_events[idx])
-    cp.conjugate(pgr[:, 0:NP, 0:NP].transpose((0,2,1)), out=grh[:, 0:NP, 0:NP])
+    grh = cp.conjugate(pgr[:, 0:NP, 0:NP].transpose((0,2,1)))
     hlh = cp.conjugate(hl[:, 0:NP, 0:NI].transpose((0,2,1)))
     grhu = gr[:, 0:NI, 0:NI] @ hu[:, 0:NI, 0:NP]
     hlhgrh = hlh @ grh[:, 0:NP, 0:NP]
