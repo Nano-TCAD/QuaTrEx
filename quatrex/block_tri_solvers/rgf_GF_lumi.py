@@ -182,23 +182,29 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
     # default_stream = cp.cuda.Stream.null
     comp_stream = cp.cuda.Stream.null
     comm_stream = cp.cuda.Stream(non_blocking=True)
+    out_stream = cp.cuda.Stream(non_blocking=True)
     events = [cp.cuda.Event() for _ in range(2)]
-    # inv_event = cp.cuda.Event()
-    # cublas_handle = cp.cuda.device.get_cublas_handle()
-    # cusolver_handle = cp.cuda.device.get_cusolver_handle()
+    comp_event = cp.cuda.Event()
+    out_events = [cp.cuda.Event() for _ in range(2)]
+    # out_diag_event = cp.cuda.Event()
+    # out_offdiag_event = cp.cuda.Event()
 
-    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
-    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
-    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
-    SigLB_gpu = cp.empty((NB - 1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser boundary self-energy
-    SigGB_gpu = cp.empty((NB - 1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater boundary self-energy
+    gR_gpu = cp.empty((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
+    gL_gpu = cp.empty((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
+    gG_gpu = cp.empty((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
+    SigLB_gpu = cp.empty((NB-1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser boundary self-energy
+    SigGB_gpu = cp.empty((NB-1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater boundary self-energy
+    DOS_gpu = cp.empty((energy_batchsize, NB), dtype=ham_diag.dtype)
+    nE_gpu = cp.empty((energy_batchsize, NB), dtype=ham_diag.dtype)
+    nP_gpu = cp.empty((energy_batchsize, NB), dtype=ham_diag.dtype)
+    idE_gpu = cp.empty((energy_batchsize, NB), dtype=ham_diag.dtype)
 
-    GR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
-    GRnn1_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
-    GL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
-    GLnn1_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
-    GG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
-    GGnn1_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
+    GR_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
+    GRnn1_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Retarded (right)
+    GL_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
+    GLnn1_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Lesser (right)
+    GG_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
+    GGnn1_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)  # Greater (right)
 
     ham_upper_H_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)
     gR_H_gpu = cp.empty((2, energy_batchsize, Bsize, Bsize), dtype=ham_diag.dtype)
@@ -282,8 +288,14 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
         slb = SigLB_gpu[IB]
         sgb = SigGB_gpu[IB]
 
-        if nIB >= 0:
-            with comm_stream:
+        if IB == 0:
+            gr = GR_gpu[0]
+            gl = GL_gpu[0]
+            gg = GG_gpu[0]
+
+        with comm_stream:
+                
+            if nIB >= 0:
 
                 nhd = ham_diag_gpu[nidx]
                 nhu = ham_upper_gpu[nidx]
@@ -300,20 +312,45 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
                 nsll.set(sl_lower[nIB])
                 nsgd.set(sg_diag[nIB])
                 nsgl.set(sg_lower[nIB])
-                events[idx].record(stream=comm_stream)
+        
+            else:  # nIB < 0
+
+                nslu = sl_upper_gpu[idx]
+                nsgu = sg_upper_gpu[idx]
+
+                nslu.set(sl_upper[IB])
+                nsgu.set(sg_upper[IB])
+
+            events[idx].record(stream=comm_stream)
 
         comp_stream.wait_event(event=events[pidx])
         hupgr = hu[:, 0:NI, 0:NP] @ pgr[:, 0:NP, 0:NP]
-        cp.conjugate(hu[:, 0:NI, 0:NP].transpose((0,2,1)), out=huh[:, 0:NP, 0:NI])
-        gr[:, 0:NI, 0:NI] = cp.linalg.inv(hd[:, 0:NI, 0:NI] - hupgr @ hl[:, :NP, 0:NI])
-        cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)), out=grh[:, 0:NI, 0:NI])
         al = hupgr @ sll[:, 0:NP, 0:NI]
-        slb[:, 0:NI, 0:NI] = hu[:, 0:NI, 0:NP] @ pgl[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI] - (al - cp.conjugate(al.transpose((0,2,1))))
-        gl[:, 0:NI, 0:NI] = gr[:, 0:NI, 0:NI] @ (sld[:, 0:NI, 0:NI] + slb[:, 0:NI, 0:NI]) @ grh[:, 0:NI, 0:NI]
         ag = hupgr @ sgl[:, 0:NP, 0:NI]
-        sgb[:, 0:NI, 0:NI] = hu[:, 0:NI, 0:NP] @ pgg[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI] - (ag - cp.conjugate(ag.transpose((0,2,1))))
-        comp_stream.synchronize()  # Strange sync issue - keep note
-        gg[:, 0:NI, 0:NI] = gr[:, 0:NI, 0:NI] @ (sgd[:, 0:NI, 0:NI] + sgb[:, 0:NI, 0:NI]) @ grh[:, 0:NI, 0:NI]
+        gr[:, 0:NI, 0:NI] = cp.linalg.inv(hd[:, 0:NI, 0:NI] - hupgr @ hl[:, :NP, 0:NI])
+        cp.conjugate(hu[:, 0:NI, 0:NP].transpose((0,2,1)), out=huh[:, 0:NP, 0:NI])
+        cp.subtract(hu[:, 0:NI, 0:NP] @ pgl[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI],
+                    al - cp.conjugate(al.transpose((0,2,1))), out=slb[:, 0:NI, 0:NI])
+        cp.subtract(hu[:, 0:NI, 0:NP] @ pgg[:, 0:NP, 0:NP] @ huh[:, 0:NP, 0:NI],
+                    ag - cp.conjugate(ag.transpose((0,2,1))), out=sgb[:, 0:NI, 0:NI])
+        # gr[:, 0:NI, 0:NI] = cp.linalg.inv(hd[:, 0:NI, 0:NI] - hupgr @ hl[:, :NP, 0:NI])
+        cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)), out=grh[:, 0:NI, 0:NI])
+        cp.matmul(gr[:, 0:NI, 0:NI] @ (sld[:, 0:NI, 0:NI] + slb[:, 0:NI, 0:NI]), grh[:, 0:NI, 0:NI], out=gl[:, 0:NI, 0:NI])
+        cp.matmul(gr[:, 0:NI, 0:NI] @ (sgd[:, 0:NI, 0:NI] + sgb[:, 0:NI, 0:NI]), grh[:, 0:NI, 0:NI], out=gg[:, 0:NI, 0:NI])
+
+        if IB == 0:
+            comp_stream.synchronize()
+            comp_event.record(stream=comp_stream)
+            with out_stream:
+                out_stream.wait_event(event=comp_event)
+                # GR_gpu[0].get(out=GR_host[0])
+                GL_gpu[0].get(out=GL_host[0])
+                GG_gpu[0].get(out=GG_host[0])
+            DOS_gpu[:, 0] = 1j * cp.trace(gr[:, 0:NI, 0:NI] - grh[:, 0:NI, 0:NI], axis1=1, axis2=2)
+            nE_gpu[:, 0] = -1j * cp.trace(gl[:, 0:NI, 0:NI], axis1=1, axis2=2)
+            nP_gpu[:, 0] = 1j * cp.trace(gg[:, 0:NI, 0:NI], axis1=1, axis2=2)
+            idE_gpu[:, 0] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ gl[:, 0:NI, 0:NI] -
+                                             gg[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
 
 
     # gR_gpu.get(out=GR_host)
@@ -336,24 +373,25 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
     sgu = sg_upper_gpu[idx]
 
     GR = GR_gpu[IB]
-    GRnn1 = GRnn1_gpu[IB]
+    GRnn1 = GRnn1_gpu[idx]
     GL = GL_gpu[IB]
-    GLnn1 = GLnn1_gpu[IB]
+    GLnn1 = GLnn1_gpu[idx]
     GG = GG_gpu[IB]
-    GGnn1 = GGnn1_gpu[IB]
+    GGnn1 = GGnn1_gpu[idx]
 
-    gr = gR_gpu[IB]
+    # NOTE: These were written directly to output in the last iteration of the backward pass
+    gr = GR_gpu[IB]
+    gl = GL_gpu[IB]
+    gg = GG_gpu[IB]
+
     pgr = gR_gpu[nIB]
-    gl = gL_gpu[IB]
     pgl = gL_gpu[nIB]
-    gg = gG_gpu[IB]
     pgg = gG_gpu[nIB]
     grh = gR_H_gpu[idx]
-    slb = SigLB_gpu[IB]
-    sgb = SigGB_gpu[IB]
 
-    if nIB < NB:
-        with comm_stream:
+    with comm_stream:
+            
+        if nIB < NB:
 
             nphu = ham_upper_gpu[nidx]
             nphl = ham_lower_gpu[nidx]
@@ -365,28 +403,50 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
             npsll.set(sl_lower[IB])
             npsgl.set(sg_lower[IB])
 
-        if IB < NB - 1:
+            if nIB < NB - 1:
 
-            nhu = ham_diag_gpu[nidx]
-            nhu.set(ham_upper[nIB])
+                nhu = ham_diag_gpu[nidx]
+                nhl = sl_diag_gpu[nidx]
+                nslu = sl_upper_gpu[nidx]
+                nsgu = sg_upper_gpu[nidx]
 
-            events[idx].record(stream=comm_stream)
+                nhu.set(ham_upper[nIB])
+                nhl.set(ham_lower[nIB])
+                nslu.set(sl_upper[nIB])
+                nsgu.set(sg_upper[nIB])
 
-    # Data already loaded? Yes!
+            events[nidx].record(stream=comm_stream)
+
+    comp_stream.wait_event(event=events[idx])
     cp.conjugate(pgr[:, 0:NP, 0:NP].transpose((0,2,1)), out=grh[:, 0:NP, 0:NP])
     hlh = cp.conjugate(hl[:, 0:NP, 0:NI].transpose((0,2,1)))
     grhu = gr[:, 0:NI, 0:NI] @ hu[:, 0:NI, 0:NP]
     hlhgrh = hlh @ grh[:, 0:NP, 0:NP]
-    GR[:] = gr
-    GRnn1[:, 0:NI, 0:NP] = -grhu @ pgr[:, 0:NP, 0:NP]
-    GL[:] = gl
-    GLnn1[:, 0:NI, 0:NP] = (gr[:, 0:NI, 0:NI] @ slu[:, 0:NI, 0:NP] @ grh[:, 0:NP, 0:NP] -
-                            grhu @ pgl[:, 0:NP, 0:NP] -
-                            gl[:, 0:NI, 0:NI] @ hlhgrh)
-    GG[:] = gg
-    GGnn1[:, 0:NI, 0:NP] = (gr[:, 0:NI, 0:NI] @ sgu[:, 0:NI, 0:NP] @ grh[:, 0:NP, 0:NP] -
-                            grhu @ pgg[:, 0:NP, 0:NP] -
-                            gg[:, 0:NI, 0:NI] @ hlhgrh)
+    # NOTE: These were written in the last iteration of the backward pass
+    # GR[:] = gr
+    # GL[:] = gl
+    # GG[:] = gg
+    cp.negative(grhu @ pgr[:, 0:NP, 0:NP], out=GRnn1[:, 0:NI, 0:NP])
+    cp.subtract(gr[:, 0:NI, 0:NI] @ slu[:, 0:NI, 0:NP] @ grh[:, 0:NP, 0:NP] - grhu @ pgl[:, 0:NP, 0:NP], gl[:, 0:NI, 0:NI] @ hlhgrh, out=GLnn1[:, 0:NI, 0:NP])
+    cp.subtract(gr[:, 0:NI, 0:NI] @ sgu[:, 0:NI, 0:NP] @ grh[:, 0:NP, 0:NP] - grhu @ pgg[:, 0:NP, 0:NP], gg[:, 0:NI, 0:NI] @ hlhgrh, out=GGnn1[:, 0:NI, 0:NP])
+
+    comp_stream.synchronize()
+    comp_event.record(stream=comp_stream)
+    with out_stream:
+        out_stream.wait_event(event=comp_event)
+        # GRnn1.get(out=GRnn1_host[0])
+        GLnn1.get(out=GLnn1_host[0])
+        GGnn1.get(out=GGnn1_host[0])
+        out_events[idx].record(stream=out_stream)
+
+    # GR_gpu.get(out=GR_host)
+    # GL_gpu.get(out=GL_host)
+    # GG_gpu.get(out=GG_host)
+    # GRnn1_gpu.get(out=GRnn1_host)
+    # GLnn1_gpu.get(out=GLnn1_host)
+    # GGnn1_gpu.get(out=GGnn1_host)
+    # comp_stream.synchronize()
+    # return
     
     # TODO: Add observables
 
@@ -413,12 +473,12 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
         # sgl = sg_lower_gpu[idx]
         psgl = sg_lower_gpu[pidx]
 
-        GR = GR_gpu[IB]
-        pGR = GR_gpu[pIB]
-        GL = GL_gpu[IB]
-        pGL = GL_gpu[pIB]
-        GG = GG_gpu[IB]
-        pGG = GG_gpu[pIB]
+        GR = GR_gpu[idx]
+        pGR = GR_gpu[pidx]
+        GL = GL_gpu[idx]
+        pGL = GL_gpu[pidx]
+        GG = GG_gpu[idx]
+        pGG = GG_gpu[pidx]
 
         gr = gR_gpu[IB]
         gl = gL_gpu[IB]
@@ -426,27 +486,52 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
         # slb = SigLB_gpu[IB]
         # sgb = SigGB_gpu[IB]
 
-        if nIB < NB:
-            with comm_stream:
+        with comm_stream:
+                
+            if nIB < NB:
 
                 nphu = ham_upper_gpu[idx]
                 nphl = ham_lower_gpu[idx]
                 npsll = sl_lower_gpu[idx]
                 npsgl = sg_lower_gpu[idx]
 
-                nphu.set(ham_upper[IB])
-                nphl.set(ham_lower[IB])
+                # nphu.set(ham_upper[IB])
+                # nphl.set(ham_lower[IB])
+                # NOTE: These are already on the GPU from the previous iteration
+                nphu[:] = ham_diag_gpu[idx]
+                nphl[:] = sl_diag_gpu[idx]
                 npsll.set(sl_lower[IB])
                 npsgl.set(sg_lower[IB])
 
-                if IB < NB - 1:
+
+                if nIB < NB - 1:
 
                     nhu = ham_diag_gpu[nidx]
+                    nhl = sl_diag_gpu[nidx]
+                    nslu = sl_upper_gpu[nidx]
+                    nsgu = sg_upper_gpu[nidx]
+
                     nhu.set(ham_upper[nIB])
+                    nhl.set(ham_lower[nIB])
+                    nslu.set(sl_upper[nIB])
+                    nsgu.set(sg_upper[nIB])
+                
+                else:
 
-                events[idx].record(stream=comm_stream)
+                    sl_diag_gpu[nidx].set(SigLBR)
+                    sg_diag_gpu[nidx].set(SigGBR)
 
-        comp_stream.wait_event(event=events[pidx])
+            events[nidx].record(stream=comm_stream)
+
+            # pGR.get(out=GR_host[pIB])
+            # pGL.get(out=GL_host[pIB])
+            # pGG.get(out=GG_host[pIB])
+
+            # pGRnn1.get(out=GRnn1_host[pIB])
+            # pGLnn1.get(out=GLnn1_host[pIB])
+            # pGGnn1.get(out=GGnn1_host[pIB])
+
+        comp_stream.wait_event(event=events[idx])
         pGRh = cp.conjugate(pGR[:, 0:NM, 0:NM].transpose((0,2,1)))
         phlh = cp.conjugate(phl[:, 0:NI, 0:NM].transpose((0,2,1)))
         grh = cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)))
@@ -454,44 +539,84 @@ def _rgf_batched(ham_diag, ham_upper, ham_lower,  # Input Hamiltonian + Boundary
         grphlpGRphu = grphl @ pGR[:, 0:NM, 0:NM] @ phu[:, 0:NM, 0:NI]
         phlhgrh = phlh @ grh
         pGRhphlhgrh = pGRh @ phlhgrh
-        comp_stream.synchronize()
-        GR[:, 0:NI, 0:NI] = (gr[:, 0:NI, 0:NI] +
-                             grphlpGRphu @ gr[:, 0:NI, 0:NI])
         al = gr[:, 0:NI, 0:NI] @ psll[:, 0:NI, 0:NI] @ pGRhphlhgrh
         bl = grphlpGRphu @ gl[:, 0:NI, 0:NI]
-        comp_stream.synchronize()
-        GL[:, 0:NI, 0:NI] = (gl[:, 0:NI, 0:NI] + grphl @ pGL[:, 0:NM, 0:NM] @ phlhgrh -
-                             al + cp.conjugate(al.transpose((0,2,1))) + bl - cp.conjugate(bl.transpose((0,2,1))))
         ag = gr[:, 0:NI, 0:NI] @ psgl[:, 0:NI, 0:NM] @ pGRhphlhgrh
         bg = grphlpGRphu @ gg[:, 0:NI, 0:NI]
-        comp_stream.synchronize()
-        GG[:, 0:NI, 0:NI] = (gg[:, 0:NI, 0:NI] + grphl @ pGG[:, 0:NM, 0:NM] @ phlhgrh -
-                             ag + cp.conjugate(ag.transpose((0,2,1))) + bg - cp.conjugate(bg.transpose((0,2,1))))
+        # comp_stream.synchronize()
+        cp.add(gr[:, 0:NI, 0:NI], grphlpGRphu @ gr[:, 0:NI, 0:NI], out=GR[:, 0:NI, 0:NI])
+        cp.subtract(gl[:, 0:NI, 0:NI] + grphl @ pGL[:, 0:NM, 0:NM] @ phlhgrh,
+                    al - cp.conjugate(al.transpose((0,2,1))) - bl + cp.conjugate(bl.transpose((0,2,1))),
+                    out=GL[:, 0:NI, 0:NI])
+        cp.subtract(gg[:, 0:NI, 0:NI] + grphl @ pGG[:, 0:NM, 0:NM] @ phlhgrh,
+                    ag - cp.conjugate(ag.transpose((0,2,1))) - bg + cp.conjugate(bg.transpose((0,2,1))),
+                    out=GG[:, 0:NI, 0:NI])
     
         if IB < NB - 1:
 
             NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
-            GRnn1 = GRnn1_gpu[IB]
-            GLnn1 = GLnn1_gpu[IB]
-            GGnn1 = GGnn1_gpu[IB]
+            GRnn1 = GRnn1_gpu[idx]
+            GLnn1 = GLnn1_gpu[idx]
+            GGnn1 = GGnn1_gpu[idx]
 
             ngr = gR_gpu[nIB]
             ngl = gL_gpu[nIB]
             ngg = gG_gpu[nIB]
 
             hu = ham_diag_gpu[idx]
+            hl = sl_diag_gpu[idx]
+            slu = sl_upper_gpu[idx]
+            sgu = sg_upper_gpu[idx]
 
-            GRnn1[:, 0:NI, 0:NP] = - GR[:, 0:NI, 0:NI] @ hu[:, 0:NI, 0:NP] @ ngr[:, 0:NP, 0:NP]
+            ngrh = cp.conjugate(ngr[:, 0:NP, 0:NP].transpose((0,2,1)))
+            hlh = cp.conjugate(hl[:, 0:NP, 0:NI].transpose((0,2,1)))
+            GRhu = GR[:, 0:NI, 0:NI] @ hu[:, 0:NI, 0:NP]
+            hlhngrh = hlh @ ngrh
+            # comp_stream.synchronize()
+            # comp_stream.wait_event(event=out_events[pidx])
+            cp.negative(GR[:, 0:NI, 0:NI] @ hu[:, 0:NI, 0:NP] @ ngr[:, 0:NP, 0:NP], out=GRnn1[:, 0:NI, 0:NP])
+            cp.subtract(GR[:, 0:NI, 0:NI] @ slu[:, 0:NI, 0:NP] @ ngrh,
+                        GRhu @ ngl[:, 0:NP, 0:NP] + GL[:, 0:NI, 0:NI] @ hlhngrh, out=GLnn1[:, 0:NI, 0:NP])
+            cp.subtract(GR[:, 0:NI, 0:NI] @ sgu[:, 0:NI, 0:NP] @ ngrh,
+                        GRhu @ ngg[:, 0:NP, 0:NP] + GG[:, 0:NI, 0:NI] @ hlhngrh, out=GGnn1[:, 0:NI, 0:NP])
+        
+            comp_stream.synchronize()
+            comp_event.record(stream=comp_stream)
+            with out_stream:
+                out_stream.wait_event(event=comp_event)
+                # GR.get(out=GR_host[IB])
+                GL.get(out=GL_host[IB])
+                GG.get(out=GG_host[IB])
+                # GRnn1.get(out=GRnn1_host[IB])
+                GLnn1.get(out=GLnn1_host[IB])
+                GGnn1.get(out=GGnn1_host[IB])
+                out_events[idx].record(stream=out_stream)
 
+            slb = SigLB_gpu[IB]
+            sgb = SigGB_gpu[IB]
+            
+            idE_gpu[:, IB] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ GL[:, 0:NI, 0:NI] -
+                                              GG[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
+        
+        DOS_gpu[:, IB] = 1j * cp.trace(GR[:, 0:NI, 0:NI] - cp.conjugate(GR[:, 0:NI, 0:NI].transpose(0,2,1)), axis1=1, axis2=2)
+        nE_gpu[:, IB] = -1j * cp.trace(GL[:, 0:NI, 0:NI], axis1=1, axis2=2)
+        nP_gpu[:, IB] = 1j * cp.trace(GG[:, 0:NI, 0:NI], axis1=1, axis2=2)
 
-    
-    GR_gpu.get(out=GR_host)
-    GL_gpu.get(out=GL_host)
-    GG_gpu.get(out=GG_host)
-    GRnn1_gpu.get(out=GRnn1_host)
-    GLnn1_gpu.get(out=GLnn1_host)
-    GGnn1_gpu.get(out=GGnn1_host)
+    nidx = (NB - 1) % 2
+    slb = sl_diag_gpu[nidx]
+    sgb = sg_diag_gpu[nidx]
+    comp_stream.wait_event(event=events[nidx])
+    idE_gpu[:, NB - 1] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ GL[:, 0:NI, 0:NI] -
+                                          GG[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
+
+    GL.get(out=GL_host[-1])
+    GG.get(out=GG_host[-1])
+    DOS_gpu.get(out=DOS)
+    nE_gpu.get(out=nE)
+    nP_gpu.get(out=nP)
+    idE_gpu.get(out=idE)
+    out_stream.synchronize()
     comp_stream.synchronize()
 
 
