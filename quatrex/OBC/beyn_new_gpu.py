@@ -818,5 +818,5 @@ def beyn_gpu(factor: int,
              YL=None,
              YR=None):
     
-    N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type)
+    N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, densify = True)
     return beyn_new_gpu(factor, matrix_blocks, N00, N01, N10, imag_lim, R, type, YL=YL, YR=YR)

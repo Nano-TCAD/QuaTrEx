@@ -18,6 +18,7 @@ from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 from quatrex.block_tri_solvers.rgf_GF_GPU import rgf_standaloneGF_batched_GPU
 from quatrex.OBC.obc_gf_cpu import obc_GF_cpu
+from quatrex.OBC.obc_gf_gpu import obc_GF_gpu
 
 from operator import mul
 
@@ -177,6 +178,16 @@ def calc_GF_pool_mpi_split(
         #for idx, res in enumerate(results):
         #    condl[idx] = res[0]
         #    condr[idx] = res[1]
+        
+    # for ie in range(ne):
+    #     condl[ie], condr[ie] = obc_GF_gpu(next(rgf_M_0),
+    #         SigR[ie],
+    #         fL[ie],
+    #         fR[ie],
+    #         SigRBL[ie], SigRBR[ie], SigLBL[ie], SigLBR[ie], SigGBL[ie], SigGBR[ie],
+    #         bmin,
+    #         bmax,
+    #         NCpSC)
     
     comm.Barrier()
     if rank == 0:

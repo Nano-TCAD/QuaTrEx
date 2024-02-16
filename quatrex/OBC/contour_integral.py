@@ -215,7 +215,7 @@ def contour_integral_batched_gpu(N: int,  # Reduced block size, i.e., N = block_
 
     T = cp.zeros((len(z), N, N), dtype=np.complex128)
 
-    num_threads = 1024
+    num_threads = 512
     num_blocks = (len(z) * N * N + num_threads - 1) // num_threads
     contour[num_blocks, num_threads](T.reshape(-1),
                                      matrix_blocks.reshape(-1),
