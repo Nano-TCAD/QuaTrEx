@@ -13,7 +13,8 @@ from quatrex.utils import change_format
 from quatrex.utils import matrix_creation
 from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
                                             extract_small_matrix_blocks, \
-                                            initialize_block_sigma
+                                            initialize_block_sigma, \
+                                            initialize_block_sigma_batched
 #from quatrex.utils.matrix_creation_gpu import initialize_block_sigma_batched
 from quatrex.block_tri_solvers import matrix_inversion_w, rgf_W_GPU
 from quatrex.OBC import obc_w_gpu
@@ -252,7 +253,7 @@ def p2w_pool_mpi_gpu_split(
 
     (mr_blco_diag, mr_blco_upper, mr_blco_lower,\
      ll_blco_diag, ll_blco_upper, ll_blco_lower,\
-     lg_blco_diag, lg_blco_upper, lg_blco_lower) = initialize_block_sigma(ne, nb_mm, lb_max_mm)
+     lg_blco_diag, lg_blco_upper, lg_blco_lower) = initialize_block_sigma_batched(ne, nb_mm, lb_max_mm)
     
     vh_upper = np.zeros((nb_mm-1, lb_max_mm, lb_max_mm), dtype=cp.complex128)
     vh_diag = np.zeros((nb_mm, lb_max_mm, lb_max_mm), dtype=cp.complex128)
@@ -260,28 +261,28 @@ def p2w_pool_mpi_gpu_split(
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         executor.map(change_format.sparse2block_no_map,
-                            mr, mr_blco_diag, mr_blco_upper, mr_blco_lower,
+                            mr, mr_blco_diag.transpose((1,0,2,3)), mr_blco_upper.transpose((1,0,2,3)), mr_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_mm), repeat(bmin_mm))
         executor.map(change_format.sparse2block_no_map,
-                            ll, ll_blco_diag, ll_blco_upper, ll_blco_lower,
+                            ll, ll_blco_diag.transpose((1,0,2,3)), ll_blco_upper.transpose((1,0,2,3)), ll_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_mm), repeat(bmin_mm))
         executor.map(change_format.sparse2block_no_map,
-                            lg, lg_blco_diag, lg_blco_upper, lg_blco_lower,
+                            lg, lg_blco_diag.transpose((1,0,2,3)), lg_blco_upper.transpose((1,0,2,3)), lg_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_mm), repeat(bmin_mm))   
 
     # change_format.sparse2block_no_map(mr[0], mr_blco_diag, mr_blco_upper, mr_blco_lower, bmax_mm, bmin_mm)
     # change_format.sparse2block_no_map(ll[0], ll_blco_diag, ll_blco_upper, ll_blco_lower, bmax_mm, bmin_mm)
     # change_format.sparse2block_no_map(lg[0], lg_blco_diag, lg_blco_upper, lg_blco_lower, bmax_mm, bmin_mm)
     change_format.sparse2block_no_map(vh, vh_diag, vh_upper, vh_lower, bmax_mm, bmin_mm)
-    mr_blco_diag = np.ascontiguousarray(mr_blco_diag.transpose((1,0,2,3)))
-    mr_blco_upper = np.ascontiguousarray(mr_blco_upper.transpose((1,0,2,3)))
-    mr_blco_lower = np.ascontiguousarray(mr_blco_lower.transpose((1,0,2,3)))
-    ll_blco_diag = np.ascontiguousarray(ll_blco_diag.transpose((1,0,2,3)))
-    ll_blco_upper = np.ascontiguousarray(ll_blco_upper.transpose((1,0,2,3)))
-    ll_blco_lower = np.ascontiguousarray(ll_blco_lower.transpose((1,0,2,3)))
-    lg_blco_diag = np.ascontiguousarray(lg_blco_diag.transpose((1,0,2,3)))
-    lg_blco_upper = np.ascontiguousarray(lg_blco_upper.transpose((1,0,2,3)))
-    lg_blco_lower = np.ascontiguousarray(lg_blco_lower.transpose((1,0,2,3)))
+    # mr_blco_diag = np.ascontiguousarray(mr_blco_diag.transpose((1,0,2,3)))
+    # mr_blco_upper = np.ascontiguousarray(mr_blco_upper.transpose((1,0,2,3)))
+    # mr_blco_lower = np.ascontiguousarray(mr_blco_lower.transpose((1,0,2,3)))
+    # ll_blco_diag = np.ascontiguousarray(ll_blco_diag.transpose((1,0,2,3)))
+    # ll_blco_upper = np.ascontiguousarray(ll_blco_upper.transpose((1,0,2,3)))
+    # ll_blco_lower = np.ascontiguousarray(ll_blco_lower.transpose((1,0,2,3)))
+    # lg_blco_diag = np.ascontiguousarray(lg_blco_diag.transpose((1,0,2,3)))
+    # lg_blco_upper = np.ascontiguousarray(lg_blco_upper.transpose((1,0,2,3)))
+    # lg_blco_lower = np.ascontiguousarray(lg_blco_lower.transpose((1,0,2,3)))
 
     # vh_diag[0,:,:] -= dvh_sd
     # vh_diag[-1,:,:] -= dvh_ed
