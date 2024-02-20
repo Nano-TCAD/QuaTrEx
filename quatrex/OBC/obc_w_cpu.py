@@ -22,6 +22,224 @@ from quatrex.OBC import dL_OBC_eigenmode_cpu
 import typing
 from functools import partial
 
+def obc_w_cpu_beynonly(dxr_sd: npt.NDArray[np.complex128],
+                          dxr_ed: npt.NDArray[np.complex128],
+                          dvh_sd: npt.NDArray[np.complex128],
+                          dvh_ed: npt.NDArray[np.complex128],
+                          dmr_sd: npt.NDArray[np.complex128],
+                          dmr_ed: npt.NDArray[np.complex128],
+                          mr_s: tuple,
+                          mr_e: tuple,
+                          vh_s: npt.NDArray[np.complex128],
+                          vh_e: npt.NDArray[np.complex128],
+                          mb00: npt.NDArray[np.complex128],
+                          mbNN: npt.NDArray[np.complex128],
+                          nbc: np.int32,
+                          NCpSC: np.int32 = 1,
+                          block_inv: bool = False,
+                          use_dace: bool = False,
+                          validate_dace: bool = False,
+                          ref_flag: bool = False,
+                          sancho_flag: bool = False):
+    
+    beyn = beyn_new.beyn_new
+    if use_dace:
+        # from OBC.beyn_dace import beyn, contour_integral_dace, sort_k_dace
+        # contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
+        # sortk, _ = sort_k_dace.load_precompiled_sdfg(f'.dacecache/{sort_k_dace.name}')
+        # beyn = partial(beyn, contour_integral=contour_integral, sortk=sortk)
+        from OBC.beyn_dace import beyn as beyn_dace
+        beyn = partial(beyn_dace, validate=validate_dace)
+
+    # limit for beyn
+    imag_lim = 1e-4
+    # todo find out what rr/R is
+    # (R only is against the style guide)
+    #todo, compare with matlab
+    rr = 1e4
+    # boundary correction calculations
+    cond_l = 0.0
+    cond_r = 0.0
+
+    # correction for first block
+    if not sancho_flag:
+        dmr, dxr_sd[:, :], cond_l, min_dEkL = beyn(nbc * NCpSC, mb00, mr_s[0], mr_s[1], mr_s[2], imag_lim, rr, "L")
+
+        if not np.isnan(cond_l):
+            dmr_sd -= dmr
+            dvh_sd[:, :] = mr_s[2] @ dxr_sd @ vh_s
+
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
+    #                                             mr_s[0],
+    #                                             mr_s[1],
+    #                                             mr_s[2],
+    #                                             imag_lim, rr, "L")
+
+    #     if not np.isnan(cond_l):
+    #         dmr_sd -= dmr
+    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
+
+    if np.isnan(cond_l) or sancho_flag:
+        dxr_sd[:, :], dmr, dvh_sd[:, :], cond_l = sancho.open_boundary_conditions(mr_s[0], mr_s[2], mr_s[1], vh_s)
+        dmr_sd -= dmr
+    # correction for last block
+    if not sancho_flag:
+        dmr, dxr_ed[:, :], cond_r, min_dEkR = beyn(nbc * NCpSC, mbNN, mr_e[0], mr_e[1], mr_e[2], imag_lim, rr, "R")
+        if not np.isnan(cond_r):
+            dmr_ed -= dmr
+            dvh_ed[:, :] = mr_e[1] @ dxr_ed @ vh_e
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
+    #                                             mr_e[0],
+    #                                             mr_e[1],
+    #                                             mr_e[2],
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dmr_ed -= dmr
+    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
+    if np.isnan(cond_r) or sancho_flag:
+        dxr_ed[:, :], dmr, dvh_ed[:, :], cond_r = sancho.open_boundary_conditions(mr_e[0], mr_e[1], mr_e[2], vh_e)
+        dmr_ed -= dmr
+    
+
+def obc_w_cpu_excludingmm(vh: sparse.csr_matrix,
+                          pg: sparse.csr_matrix,
+                          pl: sparse.csr_matrix,
+                          pr: sparse.csr_matrix,
+                          bmax: npt.NDArray[np.int32],
+                          bmin: npt.NDArray[np.int32],
+                          dvh_sd: npt.NDArray[np.complex128],
+                          dvh_ed: npt.NDArray[np.complex128],
+                          dmr_sd: npt.NDArray[np.complex128],
+                          dmr_ed: npt.NDArray[np.complex128],
+                          dlg_sd: npt.NDArray[np.complex128],
+                          dlg_ed: npt.NDArray[np.complex128],
+                          dll_sd: npt.NDArray[np.complex128],
+                          dll_ed: npt.NDArray[np.complex128],
+                          mr_s: tuple,
+                          mr_e: tuple,
+                          lg_s: tuple,
+                          lg_e: tuple,
+                          ll_s: tuple,
+                          ll_e: tuple,
+                          vh_s: npt.NDArray[np.complex128],
+                          vh_e: npt.NDArray[np.complex128],
+                          mb00: npt.NDArray[np.complex128],
+                          mbNN: npt.NDArray[np.complex128],
+                          nbc: np.int32,
+                          NCpSC: np.int32 = 1,
+                          block_inv: bool = False,
+                          use_dace: bool = False,
+                          validate_dace: bool = False,
+                          ref_flag: bool = False,
+                          sancho_flag: bool = False):
+    """
+    Calculates the standalone boundary correction terms for the screened interaction calculation.
+
+    Args:
+        vh (sparse.csr_matrix): Effective interaction
+        pg (sparse.csr_matrix): Greater Polarization
+        pl (sparse.csr_matrix): Lesser Polarization
+        pr (sparse.csr_matrix): Retarded Polarization
+        bmax (npt.NDArray[np.int32]): Start indices of blocks
+        bmin (npt.NDArray[np.int32]): End indices of blocks
+        dvh_sd (npt.NDArray[np.complex128]): Output start/left block of dvh
+        dvh_ed (npt.NDArray[np.complex128]): Output end/right block of dvh
+        dmr_ed (npt.NDArray[np.complex128]): Output end/right block of dmr
+        dmr_sd (npt.NDArray[np.complex128]): Output start/left block of dmr
+        dlg_sd (npt.NDArray[np.complex128]): Output start/left block of dlg
+        dlg_ed (npt.NDArray[np.complex128]): Output end/right block of dlg
+        dll_sd (npt.NDArray[np.complex128]): Output start/left block of dll
+        dll_ed (npt.NDArray[np.complex128]): Output end/right block of dll
+        nbc (np.int64): How block size changes after matrix multiplication
+        NCpSC (np.int32, optional): Number of unit cells per supercell. Defaults to 1.
+    """
+    beyn = beyn_new.beyn_new
+    if use_dace:
+        # from OBC.beyn_dace import beyn, contour_integral_dace, sort_k_dace
+        # contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
+        # sortk, _ = sort_k_dace.load_precompiled_sdfg(f'.dacecache/{sort_k_dace.name}')
+        # beyn = partial(beyn, contour_integral=contour_integral, sortk=sortk)
+        from OBC.beyn_dace import beyn as beyn_dace
+        beyn = partial(beyn_dace, validate=validate_dace)
+
+    # limit for beyn
+    imag_lim = 1e-4
+    # todo find out what rr/R is
+    # (R only is against the style guide)
+    #todo, compare with matlab
+    rr = 1e4
+    # boundary correction calculations
+    cond_l = 0.0
+    cond_r = 0.0
+
+    # correction for first block
+    if not sancho_flag:
+        dmr, dxr_sd, cond_l, min_dEkL = beyn(nbc * NCpSC, mb00, mr_s[0], mr_s[1], mr_s[2], imag_lim, rr, "L")
+
+        if not np.isnan(cond_l):
+            dmr_sd -= dmr
+            dvh_sd[:, :] = mr_s[2] @ dxr_sd @ vh_s
+
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
+    #                                             mr_s[0],
+    #                                             mr_s[1],
+    #                                             mr_s[2],
+    #                                             imag_lim, rr, "L")
+
+    #     if not np.isnan(cond_l):
+    #         dmr_sd -= dmr
+    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
+
+    if np.isnan(cond_l) or sancho_flag:
+        dxr_sd, dmr, dvh_sd[:, :], cond_l = sancho.open_boundary_conditions(mr_s[0], mr_s[2], mr_s[1], vh_s)
+        dmr_sd -= dmr
+    # correction for last block
+    if not sancho_flag:
+        dmr, dxr_ed, cond_r, min_dEkR = beyn(nbc * NCpSC, mbNN, mr_e[0], mr_e[1], mr_e[2], imag_lim, rr, "R")
+        if not np.isnan(cond_r):
+            dmr_ed -= dmr
+            dvh_ed[:, :] = mr_e[1] @ dxr_ed @ vh_e
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
+    #                                             mr_e[0],
+    #                                             mr_e[1],
+    #                                             mr_e[2],
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dmr_ed -= dmr
+    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
+    if np.isnan(cond_r) or sancho_flag:
+        dxr_ed, dmr, dvh_ed[:, :], cond_r = sancho.open_boundary_conditions(mr_e[0], mr_e[1], mr_e[2], vh_e)
+        dmr_ed -= dmr
+
+    # beyn gave a meaningful result
+    if not np.isnan(cond_l) and not np.isnan(cond_l):
+        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc_alt(dxr_sd, lg_s[0], lg_s[1], ll_s[0], ll_s[1], mr_s[2], blk="L")
+
+        if np.isnan(dll).any():
+            cond_l = np.nan
+        else:
+            dlg_sd += dlg
+            dll_sd += dll
+
+        dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc_alt(dxr_ed, lg_e[0], lg_e[1], ll_e[0], ll_e[1], mr_e[1], blk="R")
+
+        if np.isnan(dll).any():
+            cond_r = np.nan
+        else:
+            dlg_ed += dlg
+            dll_ed += dll
+
+    min_dEk = np.min((min_dEkL, min_dEkR))
+    return cond_l, cond_r
+
 def obc_w_cpu(vh: sparse.csr_matrix,
     pg: sparse.csr_matrix,
     pl: sparse.csr_matrix,
@@ -217,7 +435,7 @@ def obc_w_cpu(vh: sparse.csr_matrix,
 
         dlg, dll = dL_OBC_eigenmode_cpu.get_dl_obc_alt(dxr_ed, lg_e[0], lg_e[2], ll_e[0], ll_e[2], mr_e[1], blk="R")
 
-        if np.isnan(dll_ed).any():
+        if np.isnan(dll).any():
             cond_r = np.nan
         else:
             dlg_ed += dlg

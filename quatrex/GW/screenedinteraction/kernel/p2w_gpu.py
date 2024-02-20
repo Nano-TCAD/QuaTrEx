@@ -98,18 +98,6 @@ def p2w_pool_mpi_gpu_split(
     lb_start = lb_vec[0]
     lb_end = lb_vec[nb - 1]
 
-    # dvh_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    # dvh_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    # dmr_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    # dmr_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    # dlg_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    # dlg_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    # dll_sd = np.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    # dll_ed = np.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    # condl = np.zeros((ne), dtype = np.float64)
-    # condr = np.zeros((ne), dtype = np.float64)
-
-
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
@@ -121,7 +109,9 @@ def p2w_pool_mpi_gpu_split(
     lb_start_mm = lb_vec_mm[0]
     lb_end_mm = lb_vec_mm[nb_mm - 1]
 
-
+    #OBC buffers
+    dxr_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    dxr_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
     dvh_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
     dvh_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
     dmr_sd = np.zeros((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
@@ -132,6 +122,18 @@ def p2w_pool_mpi_gpu_split(
     dll_ed = np.zeros((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
     condl = np.zeros((ne), dtype = np.float64)
     condr = np.zeros((ne), dtype = np.float64)
+
+    # OBC MM dense buffers
+    mr_s = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128], NDArray[complex128]]
+    mr_e = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128], NDArray[complex128]]
+    lg_s = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128]]
+    lg_e = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128]]
+    ll_s = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128]]
+    ll_e = np.ndarray((ne,), dtype = object) # list of Tuple[NDArray[complex128], NDArray[complex128]]
+    vh_s =  np.ndarray((ne, lb_start_mm, lb_start_mm), dtype = np.complex128) # list of NDArray[complex128]
+    vh_e =  np.ndarray((ne, lb_start_mm, lb_start_mm), dtype = np.complex128) # list of NDArray[complex128]
+    mb00 = np.ndarray((ne, 2 * nbc * NCpSC + 1,  lb_start_mm // (nbc * NCpSC), lb_start_mm // (nbc * NCpSC)), dtype = np.complex128) # list of NDArray[complex128]
+    mbNN = np.ndarray((ne, 2 * nbc * NCpSC + 1, lb_start_mm // (nbc * NCpSC), lb_start_mm// (nbc * NCpSC)), dtype = np.complex128) # list of NDArray[complex128]
 
     # create empty buffer for screened interaction
     # in block format
@@ -183,25 +185,76 @@ def p2w_pool_mpi_gpu_split(
         time_OBC = -time.perf_counter()
 
     ref_flag = False
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-        executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-                               pg, pl, pr,
-                               repeat(bmax), repeat(bmin),
-                               dvh_sd, dvh_ed,
-                               dmr_sd, dmr_ed,
-                               dlg_sd, dlg_ed,
-                               dll_sd, dll_ed,
-                               repeat(nbc),
-                               repeat(NCpSC),
-                               repeat(block_inv),
-                               repeat(use_dace),
-                               repeat(validate_dace),repeat(ref_flag)
-                                )
-        # for idx, res in enumerate(results):
-        #     condl[idx] = res[0]
-        #     condr[idx] = res[1]
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+    #     executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+    #                            pg, pl, pr,
+    #                            repeat(bmax), repeat(bmin),
+    #                            dvh_sd, dvh_ed,
+    #                            dmr_sd, dmr_ed,
+    #                            dlg_sd, dlg_ed,
+    #                            dll_sd, dll_ed,
+    #                            repeat(nbc),
+    #                            repeat(NCpSC),
+    #                            repeat(block_inv),
+    #                            repeat(use_dace),
+    #                            repeat(validate_dace),repeat(ref_flag)
+    #                             )
+    #     # for idx, res in enumerate(results):
+    #     #     condl[idx] = res[0]
+    #     #     condr[idx] = res[1]
     
+    for ie in range(ne):
+        mr_s[ie] = tuple([np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for _ in range(3)])
+        mr_e[ie] = tuple([np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for _ in range(3)])
+        lg_s[ie] = tuple([np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for _ in range(2)])
+        lg_e[ie] = tuple([np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for _ in range(2)])
+        ll_s[ie] = tuple([np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for _ in range(2)])
+        ll_e[ie] = tuple([np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for _ in range(2)])
+
+        obc_w_gpu.obc_w_mm_gpu(vh, pg[ie], pl[ie], pr[ie], bmax, bmin, dvh_sd[ie], dvh_ed[ie], dmr_sd[ie], dmr_ed[ie], dlg_sd[ie], \
+                                dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], vh_s[ie], vh_e[ie], \
+                                 mb00[ie], mbNN[ie], nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
+        
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+    #     executor.map(obc_w_cpu.obc_w_cpu_excludingmm, repeat(vh),
+    #                            pg, pl, pr,
+    #                            repeat(bmax), repeat(bmin),
+    #                            dvh_sd, dvh_ed,
+    #                            dmr_sd, dmr_ed,
+    #                            dlg_sd, dlg_ed,
+    #                            dll_sd, dll_ed,
+    #                            mr_s, mr_e, lg_s, lg_e, ll_s, ll_e, vh_s, vh_e, mb00, mbNN,
+    #                            repeat(nbc),
+    #                            repeat(NCpSC),
+    #                            repeat(block_inv),
+    #                            repeat(use_dace),
+    #                            repeat(validate_dace),repeat(ref_flag)
+    #                             )
+    #     # for idx, res in enumerate(results):
+    #     #     condl[idx] = res[0]
+    #     #     condr[idx] = res[1]
+        
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+        executor.map(obc_w_cpu.obc_w_cpu_beynonly, dxr_sd, dxr_ed,
+                            dvh_sd, dvh_ed,
+                            dmr_sd, dmr_ed,
+                            mr_s, mr_e, vh_s, vh_e, mb00, mbNN,
+                            repeat(nbc),
+                            repeat(NCpSC),
+                            repeat(block_inv),
+                            repeat(use_dace),
+                            repeat(validate_dace),repeat(ref_flag)
+                            )
+    # for idx, res in enumerate(results):
+    #     condl[idx] = res[0]
+    #     condr[idx] = res[1]
+
+    for ie in range(ne):
+        obc_w_gpu.obc_w_L_lg(dlg_sd[ie], dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], \
+                    lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], dxr_sd[ie], dxr_ed[ie])
 
     l_defect = np.count_nonzero(np.isnan(condl))
     r_defect = np.count_nonzero(np.isnan(condr))
