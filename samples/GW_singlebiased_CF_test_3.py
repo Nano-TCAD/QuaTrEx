@@ -37,6 +37,8 @@ if utils_gpu.gpu_avail():
     try:
         from quatrex.GreensFunction import calc_GF_pool_GPU
         from quatrex.GW.screenedinteraction.kernel import p2w_gpu
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
     except ImportError:
         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -592,10 +594,19 @@ if __name__ == "__main__":
             print("Green's function calculated", flush = True)
 
         # calculate the polarization at every rank----------------------------------
-        if args.type in ("gpu") or args.type in ("cpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(pre_factor, gg_g2p, gl_g2p, gr_g2p,
-                                                                     gl_transposed_g2p)
-        else:
+        if args.type in ("cpu"):
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
+                                                pre_factor,
+                                                gg_g2p,
+                                                gl_g2p,
+                                                gl_transposed_g2p)
+        elif args.type in ("gpu"):
+            pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+                                                pre_factor,
+                                                gg_g2p,
+                                                gl_g2p,
+                                                gl_transposed_g2p)
+        else: 
             raise ValueError("Argument error, input type not possible")
 
         # distribute polarization function according to p2w step--------------------
@@ -603,12 +614,12 @@ if __name__ == "__main__":
         # create local buffers
         pg_p2w = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
         pl_p2w = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
-        pr_p2w = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        pr_p2w = np.zeros((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
+        alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
@@ -713,8 +724,13 @@ if __name__ == "__main__":
             print("Finish p2w", flush=True)
 
         # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("gpu") or args.type in ("cpu"):
+        if args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+            
+        elif args.type in ("gpu"):
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         else:

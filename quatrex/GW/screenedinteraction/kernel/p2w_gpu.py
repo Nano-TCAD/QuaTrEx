@@ -47,6 +47,7 @@ def p2w_pool_mpi_gpu_split(
     NCpSC: int = 1,
     mkl_threads: int = 1,
     worker_num: int = 1,
+    compute_mode: int = 0,
     block_inv: bool = False,
     use_dace: bool = False,
     validate_dace: bool = False):
@@ -216,45 +217,48 @@ def p2w_pool_mpi_gpu_split(
                                 dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], vh_s[ie], vh_e[ie], \
                                  mb00[ie], mbNN[ie], nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
         
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-    #     executor.map(obc_w_cpu.obc_w_cpu_excludingmm, repeat(vh),
-    #                            pg, pl, pr,
-    #                            repeat(bmax), repeat(bmin),
-    #                            dvh_sd, dvh_ed,
-    #                            dmr_sd, dmr_ed,
-    #                            dlg_sd, dlg_ed,
-    #                            dll_sd, dll_ed,
-    #                            mr_s, mr_e, lg_s, lg_e, ll_s, ll_e, vh_s, vh_e, mb00, mbNN,
-    #                            repeat(nbc),
-    #                            repeat(NCpSC),
-    #                            repeat(block_inv),
-    #                            repeat(use_dace),
-    #                            repeat(validate_dace),repeat(ref_flag)
-    #                             )
-    #     # for idx, res in enumerate(results):
-    #     #     condl[idx] = res[0]
-    #     #     condr[idx] = res[1]
+    if compute_mode == 0:
         
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-        executor.map(obc_w_cpu.obc_w_cpu_beynonly, dxr_sd, dxr_ed,
-                            dvh_sd, dvh_ed,
-                            dmr_sd, dmr_ed,
-                            mr_s, mr_e, vh_s, vh_e, mb00, mbNN,
-                            repeat(nbc),
-                            repeat(NCpSC),
-                            repeat(block_inv),
-                            repeat(use_dace),
-                            repeat(validate_dace),repeat(ref_flag)
-                            )
-    # for idx, res in enumerate(results):
-    #     condl[idx] = res[0]
-    #     condr[idx] = res[1]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+            executor.map(obc_w_cpu.obc_w_cpu_excludingmm, repeat(vh),
+                                pg, pl, pr,
+                                repeat(bmax), repeat(bmin),
+                                dvh_sd, dvh_ed,
+                                dmr_sd, dmr_ed,
+                                dlg_sd, dlg_ed,
+                                dll_sd, dll_ed,
+                                mr_s, mr_e, lg_s, lg_e, ll_s, ll_e, vh_s, vh_e, mb00, mbNN,
+                                repeat(nbc),
+                                repeat(NCpSC),
+                                repeat(block_inv),
+                                repeat(use_dace),
+                                repeat(validate_dace),repeat(ref_flag)
+                                    )
+            # for idx, res in enumerate(results):
+            #     condl[idx] = res[0]
+            #     condr[idx] = res[1]
+        
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+            executor.map(obc_w_cpu.obc_w_cpu_beynonly, dxr_sd, dxr_ed,
+                                dvh_sd, dvh_ed,
+                                dmr_sd, dmr_ed,
+                                mr_s, mr_e, vh_s, vh_e, mb00, mbNN,
+                                repeat(nbc),
+                                repeat(NCpSC),
+                                repeat(block_inv),
+                                repeat(use_dace),
+                                repeat(validate_dace),repeat(ref_flag)
+                                )
+        # for idx, res in enumerate(results):
+        #     condl[idx] = res[0]
+        #     condr[idx] = res[1]
 
-    for ie in range(ne):
-        obc_w_gpu.obc_w_L_lg(dlg_sd[ie], dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], \
-                    lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], dxr_sd[ie], dxr_ed[ie])
+        for ie in range(ne):
+            obc_w_gpu.obc_w_L_lg(dlg_sd[ie], dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], \
+                        lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], dxr_sd[ie], dxr_ed[ie])
 
     l_defect = np.count_nonzero(np.isnan(condl))
     r_defect = np.count_nonzero(np.isnan(condr))

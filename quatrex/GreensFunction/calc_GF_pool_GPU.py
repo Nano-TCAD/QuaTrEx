@@ -214,26 +214,26 @@ def calc_GF_pool_mpi_split(
     if homogenize:
         (sr_blco_diag, sr_blco_upper, sr_blco_lower,\
         sl_blco_diag, sl_blco_upper, sl_blco_lower,\
-        sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma(ne, nb, lb)
+        sg_blco_diag, sg_blco_upper, sg_blco_lower) = initialize_block_sigma_batched(ne, nb, lb)
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
             executor.map(change_format.sparse2block_no_map,
-                            SigR, sr_blco_diag, sr_blco_upper, sr_blco_lower,
+                            SigR, sr_blco_diag.transpose((1,0,2,3)), sr_blco_upper.transpose((1,0,2,3)), sr_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_fi), repeat(bmin_fi))
             executor.map(change_format.sparse2block_no_map,
-                            SigL, sl_blco_diag, sl_blco_upper, sl_blco_lower,
+                            SigL, sl_blco_diag.transpose((1,0,2,3)), sl_blco_upper.transpose((1,0,2,3)), sl_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_fi), repeat(bmin_fi))
             executor.map(change_format.sparse2block_no_map,
-                            SigG, sg_blco_diag, sg_blco_upper, sg_blco_lower,
+                            SigG, sg_blco_diag.transpose((1,0,2,3)), sg_blco_upper.transpose((1,0,2,3)), sg_blco_lower.transpose((1,0,2,3)),
                             repeat(bmax_fi), repeat(bmin_fi))
-        sr_blco_diag = sr_blco_diag.transpose((1,0,2,3))
-        sr_blco_upper = sr_blco_upper.transpose((1,0,2,3))
-        sr_blco_lower = sr_blco_lower.transpose((1,0,2,3))
-        sl_blco_diag = sl_blco_diag.transpose((1,0,2,3))
-        sl_blco_upper = sl_blco_upper.transpose((1,0,2,3))
-        sl_blco_lower = sl_blco_lower.transpose((1,0,2,3))
-        sg_blco_diag = sg_blco_diag.transpose((1,0,2,3))
-        sg_blco_upper = sg_blco_upper.transpose((1,0,2,3))
-        sg_blco_lower = sg_blco_lower.transpose((1,0,2,3))
+        # sr_blco_diag = sr_blco_diag.transpose((1,0,2,3))
+        # sr_blco_upper = sr_blco_upper.transpose((1,0,2,3))
+        # sr_blco_lower = sr_blco_lower.transpose((1,0,2,3))
+        # sl_blco_diag = sl_blco_diag.transpose((1,0,2,3))
+        # sl_blco_upper = sl_blco_upper.transpose((1,0,2,3))
+        # sl_blco_lower = sl_blco_lower.transpose((1,0,2,3))
+        # sg_blco_diag = sg_blco_diag.transpose((1,0,2,3))
+        # sg_blco_upper = sg_blco_upper.transpose((1,0,2,3))
+        # sg_blco_lower = sg_blco_lower.transpose((1,0,2,3))
 
 
     else:
