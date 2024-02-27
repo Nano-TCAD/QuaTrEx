@@ -687,7 +687,8 @@ def p2w_pool_mpi_cpu_kpoint(
                     repeat(NCpSC),
                     repeat(block_inv),
                     repeat(use_dace),
-                    repeat(validate_dace),repeat(ref_flag))
+                    repeat(validate_dace),
+                    repeat(ref_flag))
         for res in results:
            assert isinstance(res, np.ndarray)
 

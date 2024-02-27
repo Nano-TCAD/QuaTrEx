@@ -365,8 +365,6 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
     """Calculates the polarization with fft on the cpu(see file description). 
         The Green's function and the lesser transposed are needed. This one includes the
         convolution of the k-points. So far the implementation is very naive. 
-        
-        Not finished!!
 
     Args:
         pre_factor      (np.complex128): pre_factor, multiplied at the end
@@ -404,10 +402,11 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
         gr_ts = fft.fft(gr[:, i*ne:(i+1)*ne], n=ne2, axis=1)
         gl_transposed_ts = fft.fft(gl_transposed[:, i*ne:(i+1)*ne], n=ne2, axis=1)  # Have to fix this
         # Assert identities
-        assert np.allclose(gl_transposed_ts, gl_ts[ij2ji])  
-        assert np.allclose(gg_ts, -np.conjugate(gg_ts[ij2ji, ::-1]))
-        assert np.allclose(gl_ts, -np.conjugate(gl_ts[ij2ji, ::-1])) 
-        assert np.allclose(gr_ts - np.conjugate(gr_ts[ij2ji]), gg_ts - gl_ts)
+        # I don't think these work if several (>1) ranks are used (because of ij2ji) 
+        # assert np.allclose(gl_transposed_ts, gl_ts[ij2ji])
+        # assert np.allclose(gg_ts, -np.conjugate(gg_ts[ij2ji, ::-1]))
+        # assert np.allclose(gl_ts, -np.conjugate(gl_ts[ij2ji, ::-1]))
+        # assert np.allclose(gr_ts - np.conjugate(gr_ts[ij2ji]), gg_ts - gl_ts)
         gg_t[:, i*ne2:(i+1)*ne2] = gg_ts
         gl_t[:, i*ne2:(i+1)*ne2] = gl_ts
         gr_t[:, i*ne2:(i+1)*ne2] = gr_ts
@@ -441,7 +440,8 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
         pl_temp = -np.conjugate((pg_temp[:, ::-1]))
 
         # assert more identities
-        assert np.allclose(pl_temp, pg_temp[ij2ji, ::-1])
+        # This is not working with several ranks
+        # assert np.allclose(pl_temp, pg_temp[ij2ji, ::-1])
 
         pg[:, i*ne:(i+1)*ne] = pg_temp
         pr[:, i*ne:(i+1)*ne] = pr_temp

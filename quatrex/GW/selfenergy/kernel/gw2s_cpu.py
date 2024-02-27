@@ -617,7 +617,7 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
             ekd = int(ind_mat[md] * ne)
 
             # create the flattened Coulomb matrix
-            vh1D = vh1D_k[ki]
+            vh1D = np.squeeze(vh1D_k[ki])
 
             # todo possibility to avoid fft in global chain
             # fft
@@ -659,6 +659,7 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
             # Calculating the truncated fock part
             # vh1d = np.asarray(vh[rows, cols].reshape(-1))
             gl_density = np.imag(np.sum(gl[:, ek:ek+ne], axis=1))
+            assert gl_density.shape[0] == vh1D[disp[0, rank]:disp[0, rank]+count[0, rank]].shape[0], f"gl_density.shape={gl_density.shape} vh1D.shape={vh1D[disp[0, rank]:disp[0, rank]+count[0, rank]].shape} rank={rank} disp={disp[0, rank]} count={count[0, rank]}"
             rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape(
                 (gl_density.shape[0], 1)) * np.abs(pre_factor)
             # rSigmaRF = np.tile(rSigmaRF, (1,ne))
