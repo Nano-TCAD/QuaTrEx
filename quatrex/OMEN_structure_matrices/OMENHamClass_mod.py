@@ -23,6 +23,8 @@ def find_block_sizes(matrix: sparse.spmatrix) -> tuple[npt.NDArray, npt.NDArray]
     It also only checks the upper triangular part of the matrix, but the same methodology can be used to
     study the lower triangular part.
 
+    CURRENTLY NOT USED AND BUGGY!
+
     Parameters
     ----------
     matrix : spmatrix
@@ -148,6 +150,9 @@ class Matrices:
             # Prepare block properties. Should be done from the k_Hamiltonian
             self.NBlocks, self.Bmin, self.Bmax = self.prepare_block_properties(self.k_Hamiltonian[(0, 0, 0)])
             assert self.size == self.Bmax[-1] - self.Bmin[0] + 1, f"Size of the Ham.: ({self.size}) does not match Bmax[-1] - Bmin[0] +1: ({self.Bmax[-1] - self.Bmin[0]+1})"
+            assert len(set(self.Bmax-self.Bmin)) == 1, f"Block sizes are not equal. {self.Bmax-self.Bmin}"
+            assert self.NBlocks % 3 == 0, f"Number of blocks is not divisible by 3. NBlocks: {self.NBlocks}. This can cause some problems because the blocksizes for the calculation of the Screened interaction wont be the same."
+            assert self.NBlocks != 3, f"Number of blocks is 3. NBlocks: {self.NBlocks}. This can cause some problems because the calculation of the screened interaction is then only for a single block."
 
             # returns the sparse indices of the k_Hamiltonian
             self.columns, self.rows = self.map_sparse_indices(self.k_Hamiltonian[(0, 0, 0)])
@@ -206,7 +211,8 @@ class Matrices:
         """
         Function that prepares the block properties of the Hamiltonian. Not sure where it is needed.
 
-        Based on the matrix_assembler function called find_block_sizes.
+        Based on the matrix_assembler function called find_block_sizes. THIS METHOD IS BUGGY!
+
         Parameters
         ----------
         matrix : sparse matrix
@@ -216,7 +222,8 @@ class Matrices:
         Bmin,Bmax : ndarray of length NBlocks (number of blocks) of type uint
             Arrays with start and end orbital indices of all blocks
         """
-        Bmin, Bmax = find_block_sizes(matrix)
+        # Bmin, Bmax = find_block_sizes(matrix)
+        Bmin, Bmax = np.load(self.sim_folder + '/Bmin.npy'), np.load(self.sim_folder + '/Bmax.npy')
         NBlocks = len(Bmin)  # or len(Bmax)
         return NBlocks, Bmin, Bmax
 
@@ -406,7 +413,6 @@ class Matrices:
                 if k_key not in Mk.keys():
                     Mk[k_key] = np.exp(2 * np.pi * 1j * rp @
                                        kp[ik]) * int_mat[key]
-                # Not sure this is needed...
                 else:
                     Mk[k_key] += np.exp(2 * np.pi * 1j * rp @
                                         kp[ik]) * int_mat[key]
