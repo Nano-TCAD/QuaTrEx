@@ -9,44 +9,44 @@ from functools import partial
 
 
 def rgf_standaloneGF(
-           M,
-           H,
-           SigL,
-           SigG,
-           SigRBL,
-           SigRBR,
-           SigLBL,
-           SigLBR,
-           SigGBL,
-           SigGBR,
-           condL,
-           condR,
-           GR,
-           GRnn1,
-           GL,
-           GLnn1,
-           GG,
-           GGnn1,
-           DOS,
-           nE,
-           nP,
-           idE,
-           Bmin_fi,
-           Bmax_fi,
-           factor=1.0,
-           index_E=0,
-           block_inv=False,
-           use_dace=False,
-           validate_dace=False,
-           sancho=False,
-           min_dEk=1e8
+    M,
+    H,
+    SigL,
+    SigG,
+    SigRBL,
+    SigRBR,
+    SigLBL,
+    SigLBR,
+    SigGBL,
+    SigGBR,
+    condL,
+    condR,
+    GR,
+    GRnn1,
+    GL,
+    GLnn1,
+    GG,
+    GGnn1,
+    DOS,
+    nE,
+    nP,
+    idE,
+    Bmin_fi,
+    Bmax_fi,
+    factor=1.0,
+    index_E=0,
+    block_inv=False,
+    use_dace=False,
+    validate_dace=False,
+    sancho=False,
+    min_dEk=1e8
 
 
 ):
     # rgf_GF(DH, E, EfL, EfR, Temp) This could be the function call considering Leo's code
     '''
     Working!
-    
+
     '''
 
     min_dEkL = 1e8
@@ -63,24 +63,26 @@ def rgf_standaloneGF(
     gR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
     gL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
     gG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    # Lesser boundary self-energy
+    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)
+    # Greater boundary self-energy
+    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)
 
-    #Correction terms from OBC
-    #M[:LBsize, :LBsize]  -=  SigRBL
-    #SigL[:LBsize, :LBsize] += SigLBL
-    #SigG[:LBsize, :LBsize] += SigGBL
+    # Correction terms from OBC
+    # M[:LBsize, :LBsize]  -=  SigRBL
+    # SigL[:LBsize, :LBsize] += SigLBL
+    # SigG[:LBsize, :LBsize] += SigGBL
 
-    #M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
-    #SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
-    #SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
+    # M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
+    # SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
+    # SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
 
     IdE = np.zeros(NB)
     n = np.zeros(NB)
     p = np.zeros(NB)
 
-    #GR/GL/GG OBC Left
-    #_, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
+    # GR/GL/GG OBC Left
+    # _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
 
     min_dEk = np.min((min_dEkL, min_dEkR))
@@ -88,26 +90,27 @@ def rgf_standaloneGF(
     if not (np.isnan(condL) or np.isnan(condR)):
         # First step of iteration
         NN = Bmax[-1] - Bmin[-1] + 1
-        gR[-1, 0:NN, 0:NN] = np.linalg.inv(M[Bmin[-1]:Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray() - SigRBR)
+        gR[-1, 0:NN, 0:NN] = np.linalg.inv(
+            M[Bmin[-1]:Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray() - SigRBR)
         gL[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ (SigL[Bmin[-1]:Bmax[-1] + 1,
-                                                       Bmin[-1]:Bmax[-1] + 1].toarray() + SigLBR) @ gR[-1, 0:NN, 0:NN].T.conj()
+                                                        Bmin[-1]:Bmax[-1] + 1].toarray() + SigLBR) @ gR[-1, 0:NN, 0:NN].T.conj()
         gG[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ (SigG[Bmin[-1]:Bmax[-1] + 1,
-                                                       Bmin[-1]:Bmax[-1] + 1].toarray() + SigGBR) @ gR[-1, 0:NN, 0:NN].T.conj()
+                                                        Bmin[-1]:Bmax[-1] + 1].toarray() + SigGBR) @ gR[-1, 0:NN, 0:NN].T.conj()
 
         for IB in range(NB - 2, -1, -1):
             NI = Bmax[IB] - Bmin[IB] + 1
             NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
             # Extracting diagonal Hamiltonian block
-            if(IB == 0):
-                M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray() - SigRBL
-                SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray() + SigLBL
-                SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray() + SigGBL
-            else: 
+            if (IB == 0):
+                M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB] :Bmax[IB] + 1].toarray() - SigRBL
+                SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB] :Bmax[IB] + 1].toarray() + SigLBL
+                SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB] :Bmax[IB] + 1].toarray() + SigGBL
+            else:
                 M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
                 SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
                 SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
-            #M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            # M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal Hamiltonian block (right)
             M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
@@ -116,31 +119,31 @@ def rgf_standaloneGF(
             M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting diagonal lesser Self-energy block
-            #SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            # SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal lesser Self-energy block (lower)
             SigL_l = SigL[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting diagonal greater Self-energy block
-            #SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            # SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal greater Self-energy block (lower)
-            SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] +
+                          1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
-
-            gR[IB, 0:NI, 0:NI] = np.linalg.inv(M_c \
-                                - M_r \
-                                @ gR[IB+1, 0:NP, 0:NP] \
-                                @ M_d)#######
+            gR[IB, 0:NI, 0:NI] = np.linalg.inv(M_c
+                                               - M_r
+                                               @ gR[IB+1, 0:NP, 0:NP]
+                                               @ M_d)
             # AL, What is this? Handling off-diagonal sigma elements?
             AL = M_r \
                 @ gR[IB+1, 0:NP, 0:NP] \
                 @ SigL_l
-            
+
             SigLB[IB, 0:NI, 0:NI] = M_r \
-                                @ gL[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AL - AL.T.conj())
+                @ gL[IB+1, 0:NP, 0:NP] \
+                @ M_r.T.conj() \
+                - (AL - AL.T.conj())
 
             # gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
             #                     @ (SigL_c \
@@ -151,11 +154,11 @@ def rgf_standaloneGF(
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
 
             gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigL_c \
-                                + SigLB[IB, 0:NI, 0:NI])  \
-                                @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
+                @ (SigL_c
+                   + SigLB[IB, 0:NI, 0:NI])  \
+                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AL
 
-            ### What is this?
+            # What is this?
             AG = M_r \
                 @ gR[IB+1, 0:NP, 0:NP] \
                 @ SigG_l     # Handling off-diagonal sigma elements? Prob. need to check
@@ -166,32 +169,36 @@ def rgf_standaloneGF(
             #                     @ gG[IB+1, 0:NP, 0:NP] \
             #                     @ M_r.T.conj() \
             #                     - (AG - AG.T.conj())) \
-            #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
+            #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG.
             SigGB[IB, 0:NI, 0:NI] = M_r \
-                                @ gG[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AG - AG.T.conj())
+                @ gG[IB+1, 0:NP, 0:NP] \
+                @ M_r.T.conj() \
+                - (AG - AG.T.conj())
 
             gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigG_c \
-                                 + SigGB[IB, 0:NI, 0:NI]) \
-                                 @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
-        
-        #Second step of iteration
+                @ (SigG_c
+                   + SigGB[IB, 0:NI, 0:NI]) \
+                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AG.
+
+        # Second step of iteration
         GR[0, :NI, :NI] = gR[0, :NI, :NI]
-        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] + 1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
+        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] +
+                                                  1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
 
         GL[0, :NI, :NI] = gL[0, :NI, :NI]
         GLnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigL[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
-                    - GR[0,:NI,:NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gL[1, :NP, :NP] \
-                    - GL[0,:NI,:NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+            - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gL[1, :NP, :NP] \
+            - GL[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
+                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
 
         GG[0, :NI, :NI] = gG[0, :NI, :NI]
         GGnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigG[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
-                    - GR[0,:NI,:NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gG[1, :NP, :NP] \
-                    - GG[0,:NI,:NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj() 
-        
-        idE[0] = np.real(np.trace(SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
+            - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gG[1, :NP, :NP] \
+            - GG[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
+                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+
+        idE[0] = np.real(np.trace(
+            SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
 
         for IB in range(1, NB):
 
@@ -199,22 +206,26 @@ def rgf_standaloneGF(
             NI = Bmax[IB] - Bmin[IB] + 1
 
             # # Extracting off-diagonal Hamiltonian block (upper)
-            M_u = M[Bmin[IB - 1]:Bmax[IB - 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            M_u = M[Bmin[IB - 1]:Bmax[IB - 1] + 1,
+                    Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # # Extracting off-diagonal Hamiltonian block (left)
-            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]
+                :Bmax[IB - 1] + 1].toarray()
 
             # Extracting off-diagonal lesser Self-energy block (left)
-            SigL_l = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            SigL_l = SigL[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
 
             # Extracting off-diagonal greater Self-energy block (left)
-            SigG_l = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            SigG_l = SigG[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
 
             GR[IB, :NI, :NI] = gR[IB, :NI, :NI] + gR[IB, :NI, :NI] \
-                            @ M_l \
-                            @ GR[IB-1,0:NM, 0:NM] \
-                            @ M_u \
-                            @ gR[IB, :NI, :NI]
+                @ M_l \
+                @ GR[IB-1, 0:NM, 0:NM] \
+                @ M_u \
+                @ gR[IB, :NI, :NI]
             # What is this? Handling off-diagonal elements?
             AL = gR[IB, :NI, :NI] \
                 @ SigL_l \
@@ -229,13 +240,12 @@ def rgf_standaloneGF(
                 @ gL[IB, :NI, :NI]
 
             GL[IB, 0:NI, 0:NI] = gL[IB, :NI, :NI] \
-                                + gR[IB, 0:NI, 0:NI] \
-                                @ M_l \
-                                @ GL[IB-1, 0:NM, 0:NM] \
-                                @ M_l.T.conj() \
-                                @ gR[IB, :NI, :NI].T.conj() \
-                                - (AL - AL.T.conj()) + (BL - BL.T.conj())
-
+                + gR[IB, 0:NI, 0:NI] \
+                @ M_l \
+                @ GL[IB-1, 0:NM, 0:NM] \
+                @ M_l.T.conj() \
+                @ gR[IB, :NI, :NI].T.conj() \
+                - (AL - AL.T.conj()) + (BL - BL.T.conj())
 
             AG = gR[IB, 0:NI, 0:NI] \
                 @ SigG_l \
@@ -250,54 +260,59 @@ def rgf_standaloneGF(
                 @ gG[IB, 0:NI, 0:NI]
 
             GG[IB, 0:NI, 0:NI] = gG[IB, 0:NI, 0:NI] \
-                                + gR[IB, 0:NI, 0:NI] \
-                                @ M_l \
-                                @ GG[IB-1, 0:NM, 0:NM] \
-                                @ M_l.T.conj() \
-                                @ gR[IB, 0:NI, 0:NI].T.conj() \
-                                - (AG - AG.T.conj()) + (BG - BG.T.conj()) #
+                + gR[IB, 0:NI, 0:NI] \
+                @ M_l \
+                @ GG[IB-1, 0:NM, 0:NM] \
+                @ M_l.T.conj() \
+                @ gR[IB, 0:NI, 0:NI].T.conj() \
+                - (AG - AG.T.conj()) + (BG - BG.T.conj())
 
-            if IB < NB - 1:  #Off-diagonal are only interesting for IdE!
+            if IB < NB - 1:  # Off-diagonal are only interesting for IdE!
 
                 # # Extracting off-diagonal Hamiltonian block (right)
-                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]
+                    :Bmax[IB + 1] + 1].toarray()
 
                 # # Extracting off-diagonal Hamiltonian block (lower)
-                M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+                M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1,
+                        Bmin[IB]:Bmax[IB] + 1].toarray()
 
                 # Extracting off-diagonal lesser Self-energy block (right)
-                SigL_r = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                SigL_r = SigL[Bmin[IB]:Bmax[IB] + 1,
+                              Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
                 # Extracting off-diagonal greater Self-energy block (right)
-                SigG_r = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                SigG_r = SigG[Bmin[IB]:Bmax[IB] + 1,
+                              Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
                 NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
                 GRnn1[IB, 0:NI, 0:NP] = - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gR[IB+1, 0:NP, 0:NP]
+                    @ M_r \
+                    @ gR[IB+1, 0:NP, 0:NP]
 
                 GLnn1[IB, 0:NI, 0:NP] = GR[IB, 0:NI, 0:NI] \
-                                        @ SigL_r \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj() \
-                                        - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gL[IB+1, 0:NP, 0:NP] \
-                                        - GL[IB, :NI, :NI] \
-                                        @ M_d.T.conj() \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj()
+                    @ SigL_r \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj() \
+                    - GR[IB, 0:NI, 0:NI] \
+                    @ M_r \
+                    @ gL[IB+1, 0:NP, 0:NP] \
+                    - GL[IB, :NI, :NI] \
+                    @ M_d.T.conj() \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj()
                 GGnn1[IB, 0:NI, 0:NP] = GR[IB, 0:NI, 0:NI] \
-                                        @ SigG_r \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj() \
-                                        - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gG[IB+1, 0:NP, 0:NP] \
-                                        - GG[IB, 0:NI, 0:NI] \
-                                        @ M_d.T.conj() \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj()   
-                idE[IB] = np.real(np.trace(SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))    
+                    @ SigG_r \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj() \
+                    - GR[IB, 0:NI, 0:NI] \
+                    @ M_r \
+                    @ gG[IB+1, 0:NP, 0:NP] \
+                    - GG[IB, 0:NI, 0:NI] \
+                    @ M_d.T.conj() \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj()
+                idE[IB] = np.real(np.trace(
+                    SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))
         for IB in range(NB):
-           
+
             NI = Bmax[IB] - Bmin[IB] + 1
             GR[IB, :, :] *= factor
             GL[IB, :, :] *= factor
@@ -308,45 +323,98 @@ def rgf_standaloneGF(
 
             if IB < NB-1:
                 NP = Bmax[IB+1] - Bmin[IB+1] + 1
-                #idE[IB] = -2 * np.trace(np.real(H[Bmin[IB+1]:Bmax[IB+1]+1, Bmin[IB]:Bmax[IB]+1].toarray() @ GLnn1[IB, 0:NI, 0:NP]))
+                # idE[IB] = -2 * np.trace(np.real(H[Bmin[IB+1]:Bmax[IB+1]+1, Bmin[IB]:Bmax[IB]+1].toarray() @ GLnn1[IB, 0:NI, 0:NP]))
                 GRnn1[IB, :, :] *= factor
                 GLnn1[IB, :, :] *= factor
                 GGnn1[IB, :, :] *= factor
 
-        
-        #idE[NB - 1] = idE[NB - 2]
-        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI, :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
+        # idE[NB - 1] = idE[NB - 2]
+        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI,
+                            :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
 
-def rgf_GF(M,
-           H,
-           SigL,
-           SigG,
-           GR,
-           GRnn1,
-           GL,
-           GLnn1,
-           GG,
-           GGnn1,
-           DOS,
-           nE,
-           nP,
-           idE,
-           fL,
-           fR,
-           Bmin_fi,
-           Bmax_fi,
-           factor=1.0,
-           index_E=0,
-           NCpSC=1,
-           block_inv=False,
-           use_dace=False,
-           validate_dace=False,
-           sancho=False,
-           min_dEk=1e8):
+
+def rgf_GF(M: sparse.csr_matrix,
+           SigL: sparse.csr_matrix,
+           SigG: sparse.csr_matrix,
+           GR: np.ndarray,
+           GRnn1: np.ndarray,
+           GL: np.ndarray,
+           GLnn1: np.ndarray,
+           GG: np.ndarray,
+           GGnn1: np.ndarray,
+           DOS: np.array,
+           nE: np.array,
+           nP: np.array,
+           idE: np.array,
+           fL: float,
+           fR: float,
+           Bmin: np.array,
+           Bmax: np.array,
+           factor: float = 1.0,
+           NCpSC: int = 1,
+           block_inv: bool = False,
+           use_dace: bool = False,
+           validate_dace: bool = False,
+           sancho: bool = False):
     # rgf_GF(DH, E, EfL, EfR, Temp) This could be the function call considering Leo's code
     '''
-    Working!
-    
+    Recursive Green's function calculation with Open Boundary Conditions
+
+    Parameters
+    ----------
+    M : sparse.csr_matrix
+        Hamiltonian matrix
+    SigL : sparse.csr_matrix
+        Lesser self-energy
+    SigG : sparse.csr_matrix
+        Greater self-energy
+    GR : np.ndarray
+        Buffer for retarded Green's function
+    GRnn1 : np.ndarray
+        Buffer for off-diagonal retarded Green's function
+    GL : np.ndarray
+        Buffer for lesser Green's function
+    GLnn1 : np.ndarray
+        Buffer for off-diagonal lesser Green's function
+    GG : np.ndarray
+        Buffer for greater Green's function
+    GGnn1 : np.ndarray
+        Buffer for off-diagonal greater Green's function
+    DOS : np.array
+        Buffer for density of states
+    nE : np.array
+        Buffer for electron occupation number (charge density?)
+    nP : np.array
+        Buffer for hole occupation number
+    idE : np.array
+        Buffer for current
+    fL : float
+        Fermi function for left lead
+    fR : float
+        Fermi function for right lead
+    Bmin_fi : np.array
+        Lower boundary of the block
+    Bmax_fi : np.array
+        Upper boundary of the block
+    factor : float, optional
+        Factor to multiply the Green's functions with, by default 1.0
+    NCpSC : int, optional
+        [description], by default 1
+    block_inv : bool, optional
+        [description], by default False
+    use_dace : bool, optional
+        To use dace, by default False
+    validate_dace : bool, optional
+        [description], by default False
+    sancho : bool, optional
+        To use Sancho's OBC, by default False
+
+    Returns
+    -------
+    SigRBL : np.ndarray
+        Retarded boundary self-energy for left lead
+    SigRBR : np.ndarray
+        Retarded boundary self-energy for right lead
     '''
 
     beyn_func = beyn
@@ -357,13 +425,11 @@ def rgf_GF(M,
     imag_lim = 5e-4
     R = 1000
 
-    min_dEkL = 1e8
-    min_dEkR = 1e8
-    Bmax = Bmax_fi - 1
-    Bmin = Bmin_fi - 1
+    # Largest block size
     Bsize = max(Bmax - Bmin + 1)  # Used for declaration of variables
+    # Number of blocks
     NB = len(Bmin)
-    NT = Bmax[NB - 1] + 1  # Not used in this fcn
+    NT = Bmax[NB - 1] + 1
 
     LBsize = Bmax[0] - Bmin[0] + 1
     RBsize = Bmax[NB - 1] - Bmin[NB - 1] + 1
@@ -371,38 +437,40 @@ def rgf_GF(M,
     gR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
     gL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
     gG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    #GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Retarded GF
-    #GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) #Off-diagonal GR
-    #GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Lesser GF
-    #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GL
-    #GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Greater GF
-    #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
-    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    # GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Retarded GF
+    # GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) #Off-diagonal GR
+    # GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Lesser GF
+    # GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GL
+    # GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Greater GF
+    # GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
+    # Lesser boundary self-energy
+    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)
+    # Greater boundary self-energy
+    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)
 
-    IdE = np.zeros(NB)
-    n = np.zeros(NB)
-    p = np.zeros(NB)
     condL = 0.0
     condR = 0.0
 
-    #GR/GL/GG OBC Left
-    #_, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
+    # GR/GL/GG OBC Left
+    # _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(),
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
         SigRBL, _, condL, min_dEkL = beyn_func(NCpSC, M[:LBsize, :LBsize].toarray(),
-                                                  M[:LBsize, LBsize:2 * LBsize].toarray(),
-                                                  M[LBsize:2 * LBsize, :LBsize].toarray(),
-                                                  imag_lim,
-                                                  R,
-                                                  'L')
+                                               M[:LBsize, LBsize:2 *
+                                                   LBsize].toarray(),
+                                               M[LBsize:2 * LBsize,
+                                                   :LBsize].toarray(),
+                                               imag_lim,
+                                               R,
+                                               'L')
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(),
-                                                       M[LBsize:2 * LBsize, :LBsize].toarray(),
+                                                       M[LBsize:2 * LBsize,
+                                                           :LBsize].toarray(),
                                                        M[:LBsize, LBsize:2 * LBsize].toarray(), np.eye(LBsize, LBsize))
 
-    #condL = np.nan
+    # condL = np.nan
     if not np.isnan(condL):
         M[:LBsize, :LBsize] -= SigRBL
         GammaL = 1j * (SigRBL - SigRBL.conj().T)
@@ -411,21 +479,25 @@ def rgf_GF(M,
         SigL[:LBsize, :LBsize] += SigLBL
         SigG[:LBsize, :LBsize] += SigGBL
 
-    #GR/GL/GG OBC right
+    # GR/GL/GG OBC right
     if not sancho:
         SigRBR, _, condR, min_dEkR = beyn_func(NCpSC, M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
-                                                  M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
-                                                  M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
-                                                  imag_lim,
-                                                  R,
-                                                  'R')
-                                                  
+                                               M[NT - 2 * RBsize:NT - RBsize,
+                                                   NT - RBsize:NT].toarray(),
+                                               M[NT - RBsize:NT, NT - 2 *
+                                                   RBsize:NT - RBsize].toarray(),
+                                               imag_lim,
+                                               R,
+                                               'R')
+
     if np.isnan(condR) or sancho:
         _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
-                                                       M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
-                                                       M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
+                                                       M[NT - 2 * RBsize:NT - RBsize,
+                                                           NT - RBsize:NT].toarray(),
+                                                       M[NT - RBsize:NT, NT - 2 *
+                                                           RBsize:NT - RBsize].toarray(),
                                                        np.eye(RBsize, RBsize))
-    #condR = np.nan
+    # condR = np.nan
     if not np.isnan(condR):
         M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
         GammaR = 1j * (SigRBR - SigRBR.conj().T)
@@ -434,12 +506,11 @@ def rgf_GF(M,
         SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
         SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
 
-    min_dEk = np.min((min_dEkL, min_dEkR))
-
     if not (np.isnan(condL) or np.isnan(condR)):
         # First step of iteration
         NN = Bmax[-1] - Bmin[-1] + 1
-        gR[-1, 0:NN, 0:NN] = np.linalg.inv(M[Bmin[-1]:Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray())
+        gR[-1, 0:NN, 0:NN] = np.linalg.inv(M[Bmin[-1]
+                                           :Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray())
         gL[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ SigL[Bmin[-1]:Bmax[-1] + 1,
                                                        Bmin[-1]:Bmax[-1] + 1].toarray() @ gR[-1, 0:NN, 0:NN].T.conj()
         gG[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ SigG[Bmin[-1]:Bmax[-1] + 1,
@@ -453,37 +524,42 @@ def rgf_GF(M,
             M_c = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal Hamiltonian block (right)
-            M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+            M_r = M[Bmin[IB]:Bmax[IB] + 1,
+                    Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
             # Extracting off-diagonal Hamiltonian block (lower)
-            M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1,
+                    Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting diagonal lesser Self-energy block
-            SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            SigL_c = SigL[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal lesser Self-energy block (lower)
-            SigL_l = SigL[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            SigL_l = SigL[Bmin[IB + 1]:Bmax[IB + 1] +
+                          1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting diagonal greater Self-energy block
-            SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            SigG_c = SigG[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # Extracting off-diagonal greater Self-energy block (lower)
-            SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] +
+                          1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
+            gR[IB, 0:NI, 0:NI] = np.linalg.inv(M_c
+                                               - M_r
+                                               @ gR[IB+1, 0:NP, 0:NP]
+                                               @ M_d)
 
-            gR[IB, 0:NI, 0:NI] = np.linalg.inv(M_c \
-                                - M_r \
-                                @ gR[IB+1, 0:NP, 0:NP] \
-                                @ M_d)#######
-            # AL, What is this? Handling off-diagonal sigma elements?
             AL = M_r \
                 @ gR[IB+1, 0:NP, 0:NP] \
                 @ SigL_l
-            
+
             SigLB[IB, 0:NI, 0:NI] = M_r \
-                                @ gL[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AL - AL.T.conj())
+                @ gL[IB+1, 0:NP, 0:NP] \
+                @ M_r.T.conj() \
+                - (AL - AL.T.conj())
 
             # gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
             #                     @ (SigL_c \
@@ -494,11 +570,11 @@ def rgf_GF(M,
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
 
             gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigL_c \
-                                + SigLB[IB, 0:NI, 0:NI])  \
-                                @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
+                @ (SigL_c
+                   + SigLB[IB, 0:NI, 0:NI])  \
+                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AL
 
-            ### What is this?
+            # What is this?
             AG = M_r \
                 @ gR[IB+1, 0:NP, 0:NP] \
                 @ SigG_l     # Handling off-diagonal sigma elements? Prob. need to check
@@ -509,32 +585,36 @@ def rgf_GF(M,
             #                     @ gG[IB+1, 0:NP, 0:NP] \
             #                     @ M_r.T.conj() \
             #                     - (AG - AG.T.conj())) \
-            #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
+            #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG.
             SigGB[IB, 0:NI, 0:NI] = M_r \
-                                @ gG[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AG - AG.T.conj())
+                @ gG[IB+1, 0:NP, 0:NP] \
+                @ M_r.T.conj() \
+                - (AG - AG.T.conj())
 
             gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigG_c \
-                                 + SigGB[IB, 0:NI, 0:NI]) \
-                                 @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
-        
-        #Second step of iteration
+                @ (SigG_c
+                   + SigGB[IB, 0:NI, 0:NI]) \
+                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AG.
+
+        # Second step of iteration
         GR[0, :NI, :NI] = gR[0, :NI, :NI]
-        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] + 1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
+        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] +
+                                                  1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
 
         GL[0, :NI, :NI] = gL[0, :NI, :NI]
         GLnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigL[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
-                    - GR[0,:NI,:NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gL[1, :NP, :NP] \
-                    - GL[0,:NI,:NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+            - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gL[1, :NP, :NP] \
+            - GL[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
+                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
 
         GG[0, :NI, :NI] = gG[0, :NI, :NI]
         GGnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigG[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
-                    - GR[0,:NI,:NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gG[1, :NP, :NP] \
-                    - GG[0,:NI,:NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj() 
-        
-        idE[0] = np.real(np.trace(SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
+            - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gG[1, :NP, :NP] \
+            - GG[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
+                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+
+        idE[0] = np.real(np.trace(
+            SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
 
         for IB in range(1, NB):
 
@@ -542,22 +622,26 @@ def rgf_GF(M,
             NI = Bmax[IB] - Bmin[IB] + 1
 
             # # Extracting off-diagonal Hamiltonian block (upper)
-            M_u = M[Bmin[IB - 1]:Bmax[IB - 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+            M_u = M[Bmin[IB - 1]:Bmax[IB - 1] + 1,
+                    Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # # Extracting off-diagonal Hamiltonian block (left)
-            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]
+                :Bmax[IB - 1] + 1].toarray()
 
             # Extracting off-diagonal lesser Self-energy block (left)
-            SigL_l = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            SigL_l = SigL[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
 
             # Extracting off-diagonal greater Self-energy block (left)
-            SigG_l = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
+            SigG_l = SigG[Bmin[IB]:Bmax[IB] + 1,
+                          Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
 
             GR[IB, :NI, :NI] = gR[IB, :NI, :NI] + gR[IB, :NI, :NI] \
-                            @ M_l \
-                            @ GR[IB-1,0:NM, 0:NM] \
-                            @ M_u \
-                            @ gR[IB, :NI, :NI]
+                @ M_l \
+                @ GR[IB-1, 0:NM, 0:NM] \
+                @ M_u \
+                @ gR[IB, :NI, :NI]
             # What is this? Handling off-diagonal elements?
             AL = gR[IB, :NI, :NI] \
                 @ SigL_l \
@@ -572,13 +656,12 @@ def rgf_GF(M,
                 @ gL[IB, :NI, :NI]
 
             GL[IB, 0:NI, 0:NI] = gL[IB, :NI, :NI] \
-                                + gR[IB, 0:NI, 0:NI] \
-                                @ M_l \
-                                @ GL[IB-1, 0:NM, 0:NM] \
-                                @ M_l.T.conj() \
-                                @ gR[IB, :NI, :NI].T.conj() \
-                                - (AL - AL.T.conj()) + (BL - BL.T.conj())
-
+                + gR[IB, 0:NI, 0:NI] \
+                @ M_l \
+                @ GL[IB-1, 0:NM, 0:NM] \
+                @ M_l.T.conj() \
+                @ gR[IB, :NI, :NI].T.conj() \
+                - (AL - AL.T.conj()) + (BL - BL.T.conj())
 
             AG = gR[IB, 0:NI, 0:NI] \
                 @ SigG_l \
@@ -593,54 +676,59 @@ def rgf_GF(M,
                 @ gG[IB, 0:NI, 0:NI]
 
             GG[IB, 0:NI, 0:NI] = gG[IB, 0:NI, 0:NI] \
-                                + gR[IB, 0:NI, 0:NI] \
-                                @ M_l \
-                                @ GG[IB-1, 0:NM, 0:NM] \
-                                @ M_l.T.conj() \
-                                @ gR[IB, 0:NI, 0:NI].T.conj() \
-                                - (AG - AG.T.conj()) + (BG - BG.T.conj()) #
+                + gR[IB, 0:NI, 0:NI] \
+                @ M_l \
+                @ GG[IB-1, 0:NM, 0:NM] \
+                @ M_l.T.conj() \
+                @ gR[IB, 0:NI, 0:NI].T.conj() \
+                - (AG - AG.T.conj()) + (BG - BG.T.conj())
 
-            if IB < NB - 1:  #Off-diagonal are only interesting for IdE!
+            if IB < NB - 1:  # Off-diagonal are only interesting for IdE!
 
                 # # Extracting off-diagonal Hamiltonian block (right)
-                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]
+                    :Bmax[IB + 1] + 1].toarray()
 
                 # # Extracting off-diagonal Hamiltonian block (lower)
-                M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
+                M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1,
+                        Bmin[IB]:Bmax[IB] + 1].toarray()
 
                 # Extracting off-diagonal lesser Self-energy block (right)
-                SigL_r = SigL[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                SigL_r = SigL[Bmin[IB]:Bmax[IB] + 1,
+                              Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
                 # Extracting off-diagonal greater Self-energy block (right)
-                SigG_r = SigG[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
+                SigG_r = SigG[Bmin[IB]:Bmax[IB] + 1,
+                              Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
                 NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
                 GRnn1[IB, 0:NI, 0:NP] = - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gR[IB+1, 0:NP, 0:NP]
+                    @ M_r \
+                    @ gR[IB+1, 0:NP, 0:NP]
 
                 GLnn1[IB, 0:NI, 0:NP] = GR[IB, 0:NI, 0:NI] \
-                                        @ SigL_r \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj() \
-                                        - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gL[IB+1, 0:NP, 0:NP] \
-                                        - GL[IB, :NI, :NI] \
-                                        @ M_d.T.conj() \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj()
+                    @ SigL_r \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj() \
+                    - GR[IB, 0:NI, 0:NI] \
+                    @ M_r \
+                    @ gL[IB+1, 0:NP, 0:NP] \
+                    - GL[IB, :NI, :NI] \
+                    @ M_d.T.conj() \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj()
                 GGnn1[IB, 0:NI, 0:NP] = GR[IB, 0:NI, 0:NI] \
-                                        @ SigG_r \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj() \
-                                        - GR[IB, 0:NI, 0:NI] \
-                                        @ M_r \
-                                        @ gG[IB+1, 0:NP, 0:NP] \
-                                        - GG[IB, 0:NI, 0:NI] \
-                                        @ M_d.T.conj() \
-                                        @ gR[IB+1, 0:NP, 0:NP].T.conj()   
-                idE[IB] = np.real(np.trace(SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))    
+                    @ SigG_r \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj() \
+                    - GR[IB, 0:NI, 0:NI] \
+                    @ M_r \
+                    @ gG[IB+1, 0:NP, 0:NP] \
+                    - GG[IB, 0:NI, 0:NI] \
+                    @ M_d.T.conj() \
+                    @ gR[IB+1, 0:NP, 0:NP].T.conj()
+                idE[IB] = np.real(np.trace(
+                    SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))
         for IB in range(NB):
-           
+
             NI = Bmax[IB] - Bmin[IB] + 1
             GR[IB, :, :] *= factor
             GL[IB, :, :] *= factor
@@ -651,15 +739,15 @@ def rgf_GF(M,
 
             if IB < NB-1:
                 NP = Bmax[IB+1] - Bmin[IB+1] + 1
-                #idE[IB] = -2 * np.trace(np.real(H[Bmin[IB+1]:Bmax[IB+1]+1, Bmin[IB]:Bmax[IB]+1].toarray() @ GLnn1[IB, 0:NI, 0:NP]))
+                # idE[IB] = -2 * np.trace(np.real(H[Bmin[IB+1]:Bmax[IB+1]+1, Bmin[IB]:Bmax[IB]+1].toarray() @ GLnn1[IB, 0:NI, 0:NP]))
                 GRnn1[IB, :, :] *= factor
                 GLnn1[IB, :, :] *= factor
                 GGnn1[IB, :, :] *= factor
 
-        
-        #idE[NB - 1] = idE[NB - 2]
-        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI, :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
-    
+        # idE[NB - 1] = idE[NB - 2]
+        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI,
+                            :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
+
     return SigRBL, SigRBR
 
 
@@ -677,7 +765,8 @@ if __name__ == '__main__':
     SBL = (SBL + SBL.T) / 2
     SBR = sparse.random(n, n, 1, dtype=np.cfloat)
     SBR = (SBR + SBR.T) / 2
-    SB = sparse.block_diag((SBL, sparse.csc_matrix((n * (nBlocks - 2), n * (nBlocks - 2))), SBR))
+    SB = sparse.block_diag((SBL, sparse.csc_matrix(
+        (n * (nBlocks - 2), n * (nBlocks - 2))), SBR))
     M = H + SB
 
     nt = n * nBlocks
@@ -686,9 +775,11 @@ if __name__ == '__main__':
     block_ends = np.array(range(n - 1, nt, n))
 
     if len(block_ends) != len(block_starts):
-        raise Exception("specified number of block starts does not match with specified block ends!")
+        raise Exception(
+            "specified number of block starts does not match with specified block ends!")
 
-    (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E) = initialize_block_G(NE, nBlocks, n)
+    (GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E,
+     GGnn1_3D_E) = initialize_block_G(NE, nBlocks, n)
 
     rgf_GF(M.copy(),
            SL.copy(),
@@ -712,11 +803,12 @@ if __name__ == '__main__':
     fL = 0.5
     fR = 0.5
 
-    #GR/GL/GG OBC Left
+    # GR/GL/GG OBC Left
     _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(),
-                                                   M[LBsize:2 * LBsize, :LBsize].toarray(),
+                                                   M[LBsize:2 * LBsize,
+                                                       :LBsize].toarray(),
                                                    M[:LBsize, LBsize:2 * LBsize].toarray(), np.eye(LBsize, LBsize))
-    #_, condL, _, SigRBL, min_dEkL  = beyn(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), 5e-4, 1000, 'L')
+    # _, condL, _, SigRBL, min_dEkL  = beyn(M[:LBsize, :LBsize].toarray(), M[:LBsize, LBsize:2*LBsize].toarray(), M[LBsize:2*LBsize, :LBsize].toarray(), 5e-4, 1000, 'L')
     if not np.isnan(condL):
         M[:LBsize, :LBsize] -= SigRBL
         GammaL = 1j * (SigRBL - SigRBL.conj().T)
@@ -725,12 +817,14 @@ if __name__ == '__main__':
         SL[:LBsize, :LBsize] += SigLBL
         SG[:LBsize, :LBsize] += SigGBL
 
-    #GR/GL/GG OBC right
+    # GR/GL/GG OBC right
     _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
-                                                   M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
-                                                   M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
+                                                   M[NT - 2 * RBsize:NT - RBsize,
+                                                       NT - RBsize:NT].toarray(),
+                                                   M[NT - RBsize:NT, NT - 2 *
+                                                       RBsize:NT - RBsize].toarray(),
                                                    np.eye(RBsize, RBsize))
-    #_, condR, _, SigRBR, min_dEkR  = beyn(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  5e-4, 1000, 'R')
+    # _, condR, _, SigRBR, min_dEkR  = beyn(M[NT - RBsize:NT, NT - RBsize:NT].toarray(), M[NT - 2*RBsize:NT - RBsize, NT - RBsize:NT].toarray(), M[NT - RBsize:NT, NT - 2*RBsize:NT - RBsize].toarray(),  5e-4, 1000, 'R')
     if not np.isnan(condR):
         M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
         GammaR = 1j * (SigRBR - SigRBR.conj().T)
@@ -766,6 +860,9 @@ if __name__ == '__main__':
                                format='sparse',
                                type='R')
 
-    np.testing.assert_allclose(GL_full[n:2 * n, :3 * n], GL_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
-    np.testing.assert_allclose(GR_full[n:2 * n, :3 * n], GR_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
-    np.testing.assert_allclose(GG_full[n:2 * n, :3 * n], GG_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(
+        GL_full[n:2 * n, :3 * n], GL_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(
+        GR_full[n:2 * n, :3 * n], GR_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(
+        GG_full[n:2 * n, :3 * n], GG_2D[n:2 * n, :3 * n].toarray(), rtol=1e-6, atol=1e-6)
