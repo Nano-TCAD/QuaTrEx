@@ -757,6 +757,10 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
 
+    map_diag_dev = [cp.empty_like(m) for m in map_diag]
+    map_upper_dev = [cp.empty_like(m) for m in map_upper]
+    map_lower_dev = [cp.empty_like(m) for m in map_lower]
+
     md = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     mu = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     ml = cp.empty((batch_size, block_size, block_size), dtype=dtype)
@@ -831,7 +835,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     GL_compressed = cp.zeros_like(GL_host)
     GG_compressed = cp.zeros_like(GG_host)
 
-    SR_dev, SL_dev, SG_dev = None, None, None
+    SR_dev = cp.empty_like(SR_host)
+    SL_dev = cp.empty_like(SL_host)
+    SG_dev = cp.empty_like(SG_host)
     SigRB_dev = [None for _ in range(num_blocks)]
     SigLB_dev = [None for _ in range(num_blocks)]
     SigGB_dev = [None for _ in range(num_blocks)]
@@ -850,14 +856,16 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
     with input_stream:
 
-        map_diag_dev = cp.asarray(map_diag)
-        map_upper_dev = cp.asarray(map_upper)
-        map_lower_dev = cp.asarray(map_lower)
+        for i in range(num_blocks):
+            map_diag_dev[i].set(map_diag[i])
+            if i < num_blocks - 1:
+                map_upper_dev[i].set(map_upper[i])
+                map_lower_dev[i].set(map_lower[i])
         _copy_csr_to_gpu(H_diag_host[IB], H_diag_buffer[idx])
         _copy_csr_to_gpu(S_diag_host[IB], S_diag_buffer[idx])
-        SR_dev = cp.asarray(SR_host)
-        SL_dev = cp.asarray(SL_host)
-        SG_dev = cp.asarray(SG_host)
+        SR_dev.set(SR_host)
+        SL_dev.set(SL_host)
+        SG_dev.set(SG_host)
         input_events[idx].record(stream=input_stream)
 
         if num_blocks > 1:
@@ -1107,9 +1115,6 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     GR = GR_gpu[IB]
     GL = GL_gpu[IB]
     GG = GG_gpu[IB]
-    # GRnn1 = GRnn1_gpu[idx]
-    # GLnn1 = GLnn1_gpu[idx]
-    # GGnn1 = GGnn1_gpu[idx]
     GRnn1 = GRnn1_gpu[0]
     GLnn1 = GLnn1_gpu[0]
     GGnn1 = GGnn1_gpu[0]
@@ -1232,9 +1237,6 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
             NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
-            # GRnn1 = GRnn1_gpu[idx]
-            # GLnn1 = GLnn1_gpu[idx]
-            # GGnn1 = GGnn1_gpu[idx]
             GRnn1 = GRnn1_gpu[0]
             GLnn1 = GLnn1_gpu[0]
             GGnn1 = GGnn1_gpu[0]
@@ -1294,12 +1296,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     
 
     computation_stream.synchronize()
-    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, None, num_blocks - 1, GR_compressed)
     with input_stream:
         _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GL, None, num_blocks - 1, GL_compressed)
         _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GG, None, num_blocks - 1, GG_compressed)
         GL_compressed.get(out=GL_host)
         GG_compressed.get(out=GG_host)
+    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, None, num_blocks - 1, GR_compressed)
     GR_compressed.get(out=GR_host)
     DOS_gpu.get(out=DOS)
     nE_gpu.get(out=nE)
