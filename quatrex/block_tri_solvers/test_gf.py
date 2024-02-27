@@ -2,21 +2,27 @@ import cupy as cp
 import cupyx as cpx
 import numpy as np
 import scipy.sparse as sp
+import time
 
 from quatrex.utils.change_format import (sparse2block_energyhamgen_no_map, sparse2block_energy_forbatchedblockwise,
                                          block2sparse_energy_alt)
 from quatrex.utils.matrix_creation import initialize_block_sigma_batched, initialize_block_G_batched
 
+from collections import namedtuple
+csr_matrix = namedtuple('csr_matrix', ['data', 'indices', 'indptr'])
+
 
 def random_complex(shape, rng: np.random.Generator):
-    return rng.random(shape) + 1j * rng.random(shape)
+    result = cpx.empty_pinned(shape, dtype=np.complex128)
+    result[:] = rng.random(shape) + 1j * rng.random(shape)
+    return result
 
 
 def map_to_mapping(map, num_blocks):
     mapping = [None for _ in range(num_blocks)]
     for block_id in range(num_blocks):
         block_indices = np.nonzero(map[0] == block_id)[0]
-        block_map = np.empty((3, len(block_indices)), dtype=np.int32)
+        block_map = cpx.empty_pinned((3, len(block_indices)), dtype=np.int32)
         block_map[0] = map[3][block_indices]  # data indices
         block_map[1] = map[1][block_indices]  # rows
         block_map[2] = map[2][block_indices]  # cols
@@ -34,6 +40,15 @@ def canonicalize_csr(csr: sp.csr_matrix):
     result.has_canonical_format = True
     return result
 
+def _set_block_pinned(block) -> csr_matrix:
+    data = cpx.empty_like_pinned(block.data)
+    indices = cpx.empty_like_pinned(block.indices)
+    indptr = cpx.empty_like_pinned(block.indptr)
+    data[:] = block.data
+    indices[:] = block.indices
+    indptr[:] = block.indptr
+    return csr_matrix(data, indices, indptr)
+
 
 def csr_to_block_tridiagonal_csr(csr: sp.csr_matrix, bmin, bmax):
     num_blocks = len(bmin)
@@ -43,11 +58,11 @@ def csr_to_block_tridiagonal_csr(csr: sp.csr_matrix, bmin, bmax):
 
     for block_id in range(num_blocks):
         diag_slice = slice(bmin[block_id], bmax[block_id])
-        block_diag[block_id] = canonicalize_csr(csr[diag_slice, diag_slice])
+        block_diag[block_id] = _set_block_pinned(canonicalize_csr(csr[diag_slice, diag_slice]))
         if block_id < num_blocks - 1:
             upper_slice = lower_slice = slice(bmin[block_id + 1], bmax[block_id + 1])
-            block_upper[block_id] = canonicalize_csr(csr[diag_slice, upper_slice])
-            block_lower[block_id] = canonicalize_csr(csr[lower_slice, diag_slice])
+            block_upper[block_id] = _set_block_pinned(canonicalize_csr(csr[diag_slice, upper_slice]))
+            block_lower[block_id] = _set_block_pinned(canonicalize_csr(csr[lower_slice, diag_slice]))
 
     return block_diag, block_upper, block_lower
 
@@ -548,11 +563,16 @@ def rgf_standaloneGF_batched_GPU(
     cp.cuda.Stream.null.synchronize()
 
 
-def _copy_csr_to_gpu(csr):
-    tmp = cp.sparse.csr_matrix((cp.asarray(csr.data), cp.asarray(csr.indices), cp.asarray(csr.indptr)),
-                               shape=csr.shape, dtype=csr.dtype)
-    tmp.has_canonical_format = True
-    return tmp
+def _copy_csr_to_gpu(csr, csr_matrix):
+    # tmp = cp.sparse.csr_matrix((cp.asarray(csr.data), cp.asarray(csr.indices), cp.asarray(csr.indptr)),
+    #                            shape=csr.shape, dtype=csr.dtype)
+    # tmp.has_canonical_format = True
+    # return tmp
+    # return csr_matrix(cp.asarray(csr.data), cp.asarray(csr.indices), cp.asarray(csr.indptr))
+    nnz = csr.data.size
+    csr_matrix.data[:nnz].set(csr.data)
+    csr_matrix.indices[:nnz].set(csr.indices)
+    csr_matrix.indptr.set(csr.indptr)
 
 
 def _get_dense_block_batch(compressed_data,  # Input data, (NE, NNZ) format
@@ -570,31 +590,82 @@ def _get_dense_block_batch(compressed_data,  # Input data, (NE, NNZ) format
         uncompressed_data += add_block
 
 
+@cpx.jit.rawkernel()
+def _store_block_compressed(mapping, uncompressed, compressed, batch_size, copy_size, nnz, bsize, lower):
+    tid = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    if tid < batch_size * copy_size:
+        ie = tid // copy_size
+        idx = tid % copy_size
+        out = mapping[0][idx]
+        row = mapping[1][idx]
+        col = mapping[2][idx]
+        out_idx = ie * nnz + out
+        if lower:
+            inp_idx = ie * bsize * bsize + col * bsize + row
+            compressed[out_idx] = -uncompressed[inp_idx]
+        else:
+            inp_idx = ie * bsize * bsize + row * bsize + col
+            compressed[out_idx] = uncompressed[inp_idx]
+
+
+# @cpx.jit.rawkernel()
+# def _create_block_compressed(mapping, uncompressed, compressed, batch_size, copy_size):
+
+
 def _store_compressed(mapping_diag, mapping_upper, mapping_lower,
                       uncompressed_diag, uncompressed_upper,
                       block_idx,
                       compressed_data):
-    block_data_indices = mapping_diag[block_idx][0]
-    block_rows = mapping_diag[block_idx][1]
-    block_cols = mapping_diag[block_idx][2]
-    # compressed_data[:, block_data_indices] = uncompressed_diag[:, block_rows, block_cols]
-    compressed_data[:, block_data_indices] = cp.asnumpy(uncompressed_diag[:, block_rows, block_cols])
-    # uncompressed_diag[:, block_rows, block_cols].get(out=compressed_data[:, block_data_indices])
+    # block_data_indices = mapping_diag[block_idx][0]
+    # block_rows = mapping_diag[block_idx][1]
+    # block_cols = mapping_diag[block_idx][2]
+    # # compressed_data[:, block_data_indices] = uncompressed_diag[:, block_rows, block_cols]
+    # compressed_data[:, block_data_indices.get()] = cp.asnumpy(uncompressed_diag[:, block_rows, block_cols])
+    # # uncompressed_diag[:, block_rows, block_cols].get(out=compressed_data[:, block_data_indices])
+
+    batch_size = uncompressed_diag.shape[0]
+    copy_size = mapping_diag[block_idx][0].size
+    nnz = compressed_data.shape[1]
+    bsize = uncompressed_diag.shape[1]
+    num_threads = 1024
+    num_blocks = (batch_size * copy_size + num_threads - 1) // num_threads
+    # print(f"batch_size: {batch_size}, copy_size: {copy_size}, nnz: {nnz}, bsize: {bsize}, num_blocks: {num_blocks}, num_threads: {num_threads}")
+    _store_block_compressed[num_blocks, num_threads](mapping_diag[block_idx],
+                                                     uncompressed_diag.reshape(-1),
+                                                     compressed_data.reshape(-1),
+                                                     batch_size, copy_size, nnz, bsize, False)
+    
 
     if uncompressed_upper is not None:
         block_data_indices = mapping_upper[block_idx][0]
-        block_rows = mapping_upper[block_idx][1]
-        block_cols = mapping_upper[block_idx][2]
-        # compressed_data[:, block_data_indices] = uncompressed_upper[:, block_rows, block_cols]
-        compressed_data[:, block_data_indices] = cp.asnumpy(uncompressed_upper[:, block_rows, block_cols])
-        # uncompressed_upper[:, block_rows, block_cols].get(out=compressed_data[:, block_data_indices])
-        block_data_indices = mapping_lower[block_idx][0]
-        block_rows = mapping_lower[block_idx][1]
-        block_cols = mapping_lower[block_idx][2]
-        # compressed_data[:, block_data_indices] =  -uncompressed_upper[:, block_cols, block_rows].conj()
-        compressed_data[:, block_data_indices] = cp.asnumpy(-uncompressed_upper[:, block_cols, block_rows].conj())
-        # (-uncompressed_upper[:, block_cols, block_rows].conj()).get(out=compressed_data[:, block_data_indices])
-        # compressed_data[:, block_data_indices] =  -uncompressed_upper.transpose((0, 2, 1)).conj()[:, block_rows, block_cols]
+        # block_rows = mapping_upper[block_idx][1]
+        # block_cols = mapping_upper[block_idx][2]
+        # # compressed_data[:, block_data_indices] = uncompressed_upper[:, block_rows, block_cols]
+        # compressed_data[:, block_data_indices.get()] = cp.asnumpy(uncompressed_upper[:, block_rows, block_cols])
+        # # uncompressed_upper[:, block_rows, block_cols].get(out=compressed_data[:, block_data_indices])
+        # block_data_indices = mapping_lower[block_idx][0]
+        # block_rows = mapping_lower[block_idx][1]
+        # block_cols = mapping_lower[block_idx][2]
+        # # compressed_data[:, block_data_indices] =  -uncompressed_upper[:, block_cols, block_rows].conj()
+        # compressed_data[:, block_data_indices.get()] = cp.asnumpy(-uncompressed_upper[:, block_cols, block_rows].conj())
+        # # (-uncompressed_upper[:, block_cols, block_rows].conj()).get(out=compressed_data[:, block_data_indices])
+        # # compressed_data[:, block_data_indices] =  -uncompressed_upper.transpose((0, 2, 1)).conj()[:, block_rows, block_cols]
+
+        copy_size = mapping_upper[block_idx][0].size
+        num_blocks = (batch_size * copy_size + num_threads - 1) // num_threads
+        _store_block_compressed[num_blocks, num_threads](mapping_upper[block_idx],
+                                                        uncompressed_upper.reshape(-1),
+                                                        compressed_data.reshape(-1),
+                                                        batch_size, copy_size, nnz, bsize, False)
+        
+        copy_size = mapping_lower[block_idx][0].size
+        num_blocks = (batch_size * copy_size + num_threads - 1) // num_threads
+        _store_block_compressed[num_blocks, num_threads](mapping_lower[block_idx],
+                                                        uncompressed_upper.conj().reshape(-1),
+                                                        compressed_data.reshape(-1),
+                                                        batch_size, copy_size, nnz, bsize, True)
+
+
 
 
 @cpx.jit.rawkernel()
@@ -656,30 +727,22 @@ def _get_system_matrix_block_batch(energies,  # Energy vector, dense format
 
 
 def rgf_batched_GPU(energies,  # Energy vector, dense format
-                    
                     map_diag, map_upper, map_lower,  # Mapping (NE, NNZ) format to (NB, NE, BS, BS) format
-                    
                     H_diag_host, H_upper_host, H_lower_host,  # Hamiltonian matrix, CSR format
                     S_diag_host, S_upper_host, S_lower_host,  # Overlap matrix, CSR format
                     SR_host, SL_host, SG_host,  # Retarded, Lesser, Greater self-energy, (NE, NNZ) format
                     SigRB_left_host, SigRB_right_host,  # Retarded boundary conditions, dense format
                     SigLB_left_host, SigLB_right_host,  # Lesser boundary conditions, dense format
                     SigGB_left_host, SigGB_right_host,  # Greater boundary conditions, dense format
-
-                    # SR_diag_host, SR_upper_host, SR_lower_host,  # Retarded self-energy, CSR format
-                    # SL_diag_host, SL_upper_host, SL_lower_host,  # Lesser self-energy, CSR format
-                    # SG_diag_host, SG_upper_host, SG_lower_host,  # Greater self-energy, CSR format
-
-                                #  GR_host, GRnn1_host,  # Output Retarded Green's Functions (unused)
-                                #  GL_host, GLnn1_host,  # Output Lesser Green's Functions
-                                #  GG_host, GGnn1_host,  # Output Greater Green's Functions
-                                GR_host, GL_host, GG_host,  # Output Green's Functions
-                                 DOS, nE, nP, idE,  # Output Observables
-                                 Bmin_fi, Bmax_fi,  # Indices
-                                 solve: bool = True,
-                                 input_stream: cp.cuda.Stream = None,
-                                 output_stream: cp.cuda.Stream = None,
-                                ):
+                    GR_host, GL_host, GG_host,  # Output Green's Functions, (NE, NNZ) format
+                    DOS, nE, nP, idE,  # Output Observables
+                    Bmin_fi, Bmax_fi,  # Indices
+                    solve: bool = True,
+                    input_stream: cp.cuda.Stream = None
+                    ):
+    
+    start = time.time()
+    print(f"Starting RGF: {start}")
 
     # Sizes
     # Why are subtracing by 1 every time? Fix 0-based indexing
@@ -689,28 +752,48 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     num_blocks = len(H_diag_host)
     block_size = max(Bmax - Bmin + 1)
     dtype = np.complex128
+    hdtype = np.float64
 
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
+
     md = cp.empty((batch_size, block_size, block_size), dtype=dtype)
+    mu = cp.empty((batch_size, block_size, block_size), dtype=dtype)
+    ml = cp.empty((batch_size, block_size, block_size), dtype=dtype)
 
-    # (energy[k]+ 1j * 1e-12) * S - H
 
-    # H_diag_buffer = cp.empty((2, batch_size, block_size, block_size), dtype=H_diag_host.dtype)
-    # H_upper_buffer = cp.empty((2, batch_size, block_size, block_size), dtype=H_diag_host.dtype)
-    # H_lower_buffer = cp.empty((2, batch_size, block_size, block_size), dtype=H_diag_host.dtype)
+    H_diag_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                cp.empty(block_size * block_size, cp.int32),
+                                cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    H_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    H_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_diag_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                cp.empty(block_size * block_size, cp.int32),
+                                cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    
 
-    H_diag_buffer = [None, None]
-    H_upper_buffer = [None, None]
-    H_lower_buffer = [None, None]
-    S_diag_buffer = [None, None]
-    S_upper_buffer = [None, None]
-    S_lower_buffer = [None, None]
-
-    prev_H_upper_buffer = [None, None]
-    prev_H_lower_buffer = [None, None]
-    prev_S_upper_buffer = [None, None]
-    prev_S_lower_buffer = [None, None]
+    prev_H_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                      cp.empty(block_size * block_size, cp.int32),
+                                      cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    prev_H_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                      cp.empty(block_size * block_size, cp.int32),
+                                      cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    prev_S_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                      cp.empty(block_size * block_size, cp.int32),
+                                      cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    prev_S_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                      cp.empty(block_size * block_size, cp.int32),
+                                      cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
 
     SR_diag_buffer = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)
     SR_upper_buffer = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)
@@ -724,9 +807,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
     computation_stream = cp.cuda.Stream.null
     input_stream = input_stream or cp.cuda.Stream(non_blocking=True)
-    output_stream = output_stream or cp.cuda.Stream(non_blocking=True)
     input_events = [cp.cuda.Event() for _ in range(2)]
-    computation_event = cp.cuda.Event()
+    backward_events = [cp.cuda.Event() for _ in range(2)]
 
     gR_gpu = cp.empty((num_blocks, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
     gL_gpu = cp.empty((num_blocks, batch_size, block_size, block_size), dtype=dtype)  # Lesser (right)
@@ -739,16 +821,23 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype)
 
     GR_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
-    GRnn1_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
+    GRnn1_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
     GL_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Lesser (right)
-    GLnn1_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Lesser (right)
+    GLnn1_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Lesser (right)
     GG_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
-    GGnn1_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
+    GGnn1_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
+
+    GR_compressed = cp.zeros_like(GR_host)
+    GL_compressed = cp.zeros_like(GL_host)
+    GG_compressed = cp.zeros_like(GG_host)
 
     SR_dev, SL_dev, SG_dev = None, None, None
     SigRB_dev = [None for _ in range(num_blocks)]
     SigLB_dev = [None for _ in range(num_blocks)]
     SigGB_dev = [None for _ in range(num_blocks)]
+
+    med = time.time()
+    print(f"Memory allocation: {med - start}")
     
     # Backward pass IB \in {NB - 1, ..., 0}
 
@@ -764,8 +853,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         map_diag_dev = cp.asarray(map_diag)
         map_upper_dev = cp.asarray(map_upper)
         map_lower_dev = cp.asarray(map_lower)
-        H_diag_buffer[idx] = _copy_csr_to_gpu(H_diag_host[IB])
-        S_diag_buffer[idx] = _copy_csr_to_gpu(S_diag_host[IB])
+        _copy_csr_to_gpu(H_diag_host[IB], H_diag_buffer[idx])
+        _copy_csr_to_gpu(S_diag_host[IB], S_diag_buffer[idx])
         SR_dev = cp.asarray(SR_host)
         SL_dev = cp.asarray(SL_host)
         SG_dev = cp.asarray(SG_host)
@@ -781,12 +870,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
             nsgd = SG_diag_buffer[nidx]
             nsgl = SG_lower_buffer[nidx]
 
-            H_diag_buffer[nidx] = _copy_csr_to_gpu(H_diag_host[nIB])
-            H_upper_buffer[nidx] = _copy_csr_to_gpu(H_upper_host[nIB])
-            H_lower_buffer[nidx] = _copy_csr_to_gpu(H_lower_host[nIB])
-            S_diag_buffer[nidx] = _copy_csr_to_gpu(S_diag_host[nIB])
-            S_upper_buffer[nidx] = _copy_csr_to_gpu(S_upper_host[nIB])
-            S_lower_buffer[nidx] = _copy_csr_to_gpu(S_lower_host[nIB])
+            _copy_csr_to_gpu(H_diag_host[nIB], H_diag_buffer[nidx])
+            _copy_csr_to_gpu(H_upper_host[nIB], H_upper_buffer[nidx])
+            _copy_csr_to_gpu(H_lower_host[nIB], H_lower_buffer[nidx])
+            _copy_csr_to_gpu(S_diag_host[nIB], S_diag_buffer[nidx])
+            _copy_csr_to_gpu(S_upper_host[nIB], S_upper_buffer[nidx])
+            _copy_csr_to_gpu(S_lower_host[nIB], S_lower_buffer[nidx])
 
             # NOTE: We are assuming here that the next block is not in the boundary.
             _get_dense_block_batch(SR_dev, map_diag_dev, nIB, nsrd)
@@ -806,8 +895,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     SigLB_dev[-1] = cp.asarray(SigLB_right_host)
     SigGB_dev[0] = cp.asarray(SigGB_left_host)
     SigGB_dev[-1] = cp.asarray(SigGB_right_host)
+
     computation_stream.wait_event(event=input_events[idx])
-    computation_stream.synchronize()
 
     hd = H_diag_buffer[idx]
     sd = S_diag_buffer[idx]
@@ -826,7 +915,6 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     _get_dense_block_batch(SR_dev, map_diag_dev, IB, srd, srb)
     _get_dense_block_batch(SL_dev, map_diag_dev, IB, sld, slb)
     _get_dense_block_batch(SG_dev, map_diag_dev, IB, sgd, sgb)
-    # md =_get_system_matrix_block_batch(energies_dev, hd, sd, srd, batch_size, block_size)
     _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
                                                        hd.data, hd.indices, hd.indptr,
                                                        sd.data, sd.indices, sd.indptr,
@@ -836,12 +924,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         gpu_identity = cp.identity(NN, dtype=md.dtype)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], batch_size, axis=0)
         gr[:, 0:NN, 0:NN] = cp.linalg.solve(md[:, 0:NN, 0:NN], gpu_identity_batch)
-        computation_stream.synchronize()
     else:
         gr[:, 0:NN, 0:NN] = cp.linalg.inv(md[:, 0:NN, 0:NN])
     gr_h = cp.conjugate(gr[:, 0:NN, 0:NN].transpose((0,2,1)))
     cp.matmul(gr[:, 0:NN, 0:NN] @ sld[:, 0:NN, 0:NN], gr_h[:, 0:NN, 0:NN], out=gl[:, 0:NN, 0:NN])
     cp.matmul(gr[:, 0:NN, 0:NN] @ sgd[:, 0:NN, 0:NN], gr_h[:, 0:NN, 0:NN], out=gg[:, 0:NN, 0:NN])
+    backward_events[idx].record(stream=computation_stream)
 
     # Rest iterations IB \in {NB - 2, ..., 0}
     for IB in range(num_blocks - 2, -1, -1):
@@ -854,9 +942,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         NI = Bmax[IB] - Bmin[IB] + 1
         NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
-        computation_stream.synchronize()
         with input_stream:
                 
+            input_stream.wait_event(event=backward_events[pidx])
             if nIB >= 0:
 
                 nsrd = SR_diag_buffer[nidx]
@@ -867,12 +955,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                 nsgd = SG_diag_buffer[nidx]
                 nsgl = SG_lower_buffer[nidx]
 
-                H_diag_buffer[nidx] = _copy_csr_to_gpu(H_diag_host[nIB])
-                H_upper_buffer[nidx] = _copy_csr_to_gpu(H_upper_host[nIB])
-                H_lower_buffer[nidx] = _copy_csr_to_gpu(H_lower_host[nIB])
-                S_diag_buffer[nidx] = _copy_csr_to_gpu(S_diag_host[nIB])
-                S_upper_buffer[nidx] = _copy_csr_to_gpu(S_upper_host[nIB])
-                S_lower_buffer[nidx] = _copy_csr_to_gpu(S_lower_host[nIB])
+                _copy_csr_to_gpu(H_diag_host[nIB], H_diag_buffer[nidx])
+                _copy_csr_to_gpu(H_upper_host[nIB], H_upper_buffer[nidx])
+                _copy_csr_to_gpu(H_lower_host[nIB], H_lower_buffer[nidx])
+                _copy_csr_to_gpu(S_diag_host[nIB], S_diag_buffer[nidx])
+                _copy_csr_to_gpu(S_upper_host[nIB], S_upper_buffer[nidx])
+                _copy_csr_to_gpu(S_lower_host[nIB], S_lower_buffer[nidx])
 
                 nsrb = SigRB_dev[nIB]
                 nslb = SigLB_dev[nIB]
@@ -926,9 +1014,19 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
             gg = GG_gpu[0]
 
         computation_stream.wait_event(event=input_events[idx])
-        md = _get_system_matrix_block_batch(energies_dev, hd, sd, srd, batch_size, block_size)
-        mu = _get_system_matrix_block_batch(energies_dev, hu, su, sru, batch_size, block_size)
-        ml = _get_system_matrix_block_batch(energies_dev, hl, sl, srl, batch_size, block_size)
+        _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                           hd.data, hd.indices, hd.indptr,
+                                                           sd.data, sd.indices, sd.indptr,
+                                                           srd, md, batch_size, block_size)
+        _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                           hu.data, hu.indices, hu.indptr,
+                                                           su.data, su.indices, su.indptr,
+                                                           sru, mu, batch_size, block_size)
+        _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                           hl.data, hl.indices, hl.indptr,
+                                                           sl.data, sl.indices, sl.indptr,
+                                                           srl, ml, batch_size, block_size)
+
         mu_h = cp.conjugate(mu[:, 0:NI, 0:NP].transpose((0,2,1)))
         mu_x_pgr = mu[:, 0:NI, 0:NP] @ pgr[:, 0:NP, 0:NP]
         al = mu_x_pgr @ sll[:, 0:NP, 0:NI]
@@ -938,7 +1036,6 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
             gpu_identity = cp.identity(NI, dtype=inv_arg.dtype)
             gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], batch_size, axis=0)
             gr[:, 0:NI, 0:NI] = cp.linalg.solve(inv_arg, gpu_identity_batch)
-            computation_stream.synchronize()
         else:
             gr[:, 0:NI, 0:NI] = cp.linalg.inv(inv_arg)
         gr_h = cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)))
@@ -948,20 +1045,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                     ag - cp.conjugate(ag.transpose((0,2,1))), out=sgb[:, 0:NI, 0:NI])  # SGB must change
         cp.matmul(gr[:, 0:NI, 0:NI] @ (sld[:, 0:NI, 0:NI] + slb[:, 0:NI, 0:NI]), gr_h[:, 0:NI, 0:NI], out=gl[:, 0:NI, 0:NI])
         cp.matmul(gr[:, 0:NI, 0:NI] @ (sgd[:, 0:NI, 0:NI] + sgb[:, 0:NI, 0:NI]), gr_h[:, 0:NI, 0:NI], out=gg[:, 0:NI, 0:NI])
+        backward_events[idx].record(stream=computation_stream)
 
         if IB == 0:
-
-            computation_stream.synchronize()
-            computation_event.record(stream=computation_stream)
-
-            # with output_stream:
-            #     output_stream.wait_event(event=computation_event)
-            #     # GR_gpu[0].get(out=GR_host[0])
-            #     # GL_gpu[0].get(out=GL_host[0])
-            #     # GG_gpu[0].get(out=GG_host[0])
-            #     _store_compressed(mapping_diag, mapping_upper, mapping_lower, GR2[IB], GRnn12[IB], IB, GR_host)
-            #     _store_compressed(mapping_diag, mapping_upper, mapping_lower, GL2[IB], GLnn12[IB], IB, GL_host)
-            #     _store_compressed(mapping_diag, mapping_upper, mapping_lower, GG2[IB], GGnn12[IB], IB, GG_host)
 
             DOS_gpu[:, 0] = 1j * cp.trace(gr[:, 0:NI, 0:NI] - gr_h[:, 0:NI, 0:NI], axis1=1, axis2=2)
             nE_gpu[:, 0] = -1j * cp.trace(gl[:, 0:NI, 0:NI], axis1=1, axis2=2)
@@ -977,18 +1063,18 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     idx = IB % 2
     nidx = nIB % 2
 
-    computation_stream.synchronize()
     with input_stream:
-            
+
+        input_stream.wait_event(event=backward_events[idx])      
         if nIB < num_blocks:
 
             npsll = SL_lower_buffer[nidx]
             npsgl = SG_lower_buffer[nidx]
 
-            prev_H_upper_buffer[nidx] = _copy_csr_to_gpu(H_upper_host[IB])
-            prev_H_lower_buffer[nidx] = _copy_csr_to_gpu(H_lower_host[IB])
-            prev_S_upper_buffer[nidx] = _copy_csr_to_gpu(S_upper_host[IB])
-            prev_S_lower_buffer[nidx] = _copy_csr_to_gpu(S_lower_host[IB])
+            _copy_csr_to_gpu(H_upper_host[IB], prev_H_upper_buffer[nidx])
+            _copy_csr_to_gpu(H_lower_host[IB], prev_H_lower_buffer[nidx])
+            _copy_csr_to_gpu(S_upper_host[IB], prev_S_upper_buffer[nidx])
+            _copy_csr_to_gpu(S_lower_host[IB], prev_S_lower_buffer[nidx])
 
             _get_dense_block_batch(SL_dev, map_lower_dev, IB, npsll)
             _get_dense_block_batch(SG_dev, map_lower_dev, IB, npsgl)
@@ -999,11 +1085,10 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                 nsrl = SR_lower_buffer[nidx]
                 nslu = SL_upper_buffer[nidx]
                 nsgu = SG_upper_buffer[nidx]
-
-                H_upper_buffer[nidx] = _copy_csr_to_gpu(H_upper_host[nIB])
-                H_lower_buffer[nidx] = _copy_csr_to_gpu(H_lower_host[nIB])
-                S_upper_buffer[nidx] = _copy_csr_to_gpu(S_upper_host[nIB])
-                S_lower_buffer[nidx] = _copy_csr_to_gpu(S_lower_host[nIB])
+                _copy_csr_to_gpu(H_upper_host[nIB], H_upper_buffer[nidx])
+                _copy_csr_to_gpu(H_lower_host[nIB], H_lower_buffer[nidx])
+                _copy_csr_to_gpu(S_upper_host[nIB], S_upper_buffer[nidx])
+                _copy_csr_to_gpu(S_lower_host[nIB], S_lower_buffer[nidx])
 
                 _get_dense_block_batch(SR_dev, map_upper_dev, nIB, nsru)
                 _get_dense_block_batch(SR_dev, map_lower_dev, nIB, nsrl)
@@ -1020,11 +1105,14 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     sgu = SG_upper_buffer[idx]
 
     GR = GR_gpu[IB]
-    GRnn1 = GRnn1_gpu[idx]
     GL = GL_gpu[IB]
-    GLnn1 = GLnn1_gpu[idx]
     GG = GG_gpu[IB]
-    GGnn1 = GGnn1_gpu[idx]
+    # GRnn1 = GRnn1_gpu[idx]
+    # GLnn1 = GLnn1_gpu[idx]
+    # GGnn1 = GGnn1_gpu[idx]
+    GRnn1 = GRnn1_gpu[0]
+    GLnn1 = GLnn1_gpu[0]
+    GGnn1 = GGnn1_gpu[0]
 
     # NOTE: These were written directly to output in the last iteration of the backward pass
     gr = GR_gpu[IB]
@@ -1036,8 +1124,14 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     pgg = gG_gpu[nIB]
 
     computation_stream.wait_event(event=input_events[nidx])
-    mu = _get_system_matrix_block_batch(energies_dev, hu, su, sru, batch_size, block_size)
-    ml = _get_system_matrix_block_batch(energies_dev, hl, sl, srl, batch_size, block_size)
+    _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                       hu.data, hu.indices, hu.indptr,
+                                                       su.data, su.indices, su.indptr,
+                                                       sru, mu, batch_size, block_size)
+    _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                       hl.data, hl.indices, hl.indptr,
+                                                       sl.data, sl.indices, sl.indptr,
+                                                       srl, ml, batch_size, block_size)
     gr_h = cp.conjugate(pgr[:, 0:NP, 0:NP].transpose((0,2,1)))
     ml_h = cp.conjugate(ml[:, 0:NP, 0:NI].transpose((0,2,1)))
     gr_x_mu = gr[:, 0:NI, 0:NI] @ mu[:, 0:NI, 0:NP]
@@ -1049,19 +1143,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     cp.negative(gr_x_mu @ pgr[:, 0:NP, 0:NP], out=GRnn1[:, 0:NI, 0:NP])
     cp.subtract(gr[:, 0:NI, 0:NI] @ slu[:, 0:NI, 0:NP] @ gr_h[:, 0:NP, 0:NP] - gr_x_mu @ pgl[:, 0:NP, 0:NP], gl[:, 0:NI, 0:NI] @ ml_h_x_gr_h, out=GLnn1[:, 0:NI, 0:NP])
     cp.subtract(gr[:, 0:NI, 0:NI] @ sgu[:, 0:NI, 0:NP] @ gr_h[:, 0:NP, 0:NP] - gr_x_mu @ pgg[:, 0:NP, 0:NP], gg[:, 0:NI, 0:NI] @ ml_h_x_gr_h, out=GGnn1[:, 0:NI, 0:NP])
+    backward_events[nidx].record(stream=computation_stream)
 
     computation_stream.synchronize()
-    computation_event.record(stream=computation_stream)
-    # with output_stream:
-    #     output_stream.wait_event(event=computation_event)
-    #     GRnn1.get(out=GRnn1_host[0])
-    #     GLnn1.get(out=GLnn1_host[0])
-    #     GGnn1.get(out=GGnn1_host[0])
-    with output_stream:
-        output_stream.wait_event(event=computation_event)
-        _store_compressed(mapping_diag, mapping_upper, mapping_lower, GR, GRnn1, IB, GR_host)
-        _store_compressed(mapping_diag, mapping_upper, mapping_lower, GL, GLnn1, IB, GL_host)
-        _store_compressed(mapping_diag, mapping_upper, mapping_lower, GG, GGnn1, IB, GG_host)
+    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, GRnn1, IB, GR_compressed)
+    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GL, GLnn1, IB, GL_compressed)
+    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GG, GGnn1, IB, GG_compressed)
 
     # Rest iterations
     for IB in range(1, num_blocks):
@@ -1074,9 +1161,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         NI = Bmax[IB] - Bmin[IB] + 1
         NM = Bmax[IB - 1] - Bmin[IB - 1] + 1
 
-        computation_stream.synchronize()
         with input_stream:
                 
+            input_stream.wait_event(event=backward_events[idx])
             if nIB < num_blocks:
 
                 npsll = SL_lower_buffer[idx]
@@ -1093,10 +1180,10 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                     nslu = SL_upper_buffer[nidx]
                     nsgu = SG_upper_buffer[nidx]
 
-                    H_upper_buffer[nidx] = _copy_csr_to_gpu(H_upper_host[nIB])
-                    H_lower_buffer[nidx] = _copy_csr_to_gpu(H_lower_host[nIB])
-                    S_upper_buffer[nidx] = _copy_csr_to_gpu(S_upper_host[nIB])
-                    S_lower_buffer[nidx] = _copy_csr_to_gpu(S_lower_host[nIB])
+                    _copy_csr_to_gpu(H_upper_host[nIB], H_upper_buffer[nidx])
+                    _copy_csr_to_gpu(H_lower_host[nIB], H_lower_buffer[nidx])
+                    _copy_csr_to_gpu(S_upper_host[nIB], S_upper_buffer[nidx])
+                    _copy_csr_to_gpu(S_lower_host[nIB], S_lower_buffer[nidx])
 
                     _get_dense_block_batch(SR_dev, map_upper_dev, nIB, nsru)
                     _get_dense_block_batch(SR_dev, map_lower_dev, nIB, nsrl)
@@ -1105,10 +1192,6 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
             input_events[idx].record(stream=input_stream)
         
-        # phu = prev_H_upper_buffer[pidx]
-        # phl = prev_H_lower_buffer[pidx]
-        # psu = prev_S_upper_buffer[pidx]
-        # psl = prev_S_lower_buffer[pidx]
         pmu = mu
         pml = ml
         psll = SL_lower_buffer[pidx]
@@ -1149,9 +1232,12 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
             NP = Bmax[IB + 1] - Bmin[IB + 1] + 1
 
-            GRnn1 = GRnn1_gpu[idx]
-            GLnn1 = GLnn1_gpu[idx]
-            GGnn1 = GGnn1_gpu[idx]
+            # GRnn1 = GRnn1_gpu[idx]
+            # GLnn1 = GLnn1_gpu[idx]
+            # GGnn1 = GGnn1_gpu[idx]
+            GRnn1 = GRnn1_gpu[0]
+            GLnn1 = GLnn1_gpu[0]
+            GGnn1 = GGnn1_gpu[0]
 
             ngr = gR_gpu[nIB]
             ngl = gL_gpu[nIB]
@@ -1166,8 +1252,14 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
             slu = SL_upper_buffer[idx]
             sgu = SG_upper_buffer[idx]
 
-            mu = _get_system_matrix_block_batch(energies_dev, hu, su, sru, batch_size, block_size)
-            ml = _get_system_matrix_block_batch(energies_dev, hl, sl, srl, batch_size, block_size)
+            _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                               hu.data, hu.indices, hu.indptr,
+                                                               su.data, su.indices, su.indptr,
+                                                               sru, mu, batch_size, block_size)
+            _get_system_matrix[num_thread_blocks, num_threads](energies_dev,
+                                                               hl.data, hl.indices, hl.indptr,
+                                                               sl.data, sl.indices, sl.indptr,
+                                                               srl, ml, batch_size, block_size)
 
             ngrh = cp.conjugate(ngr[:, 0:NP, 0:NP].transpose((0,2,1)))
             hlh = cp.conjugate(ml[:, 0:NP, 0:NI].transpose((0,2,1)))
@@ -1178,29 +1270,19 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                         GRhu @ ngl[:, 0:NP, 0:NP] + GL[:, 0:NI, 0:NI] @ hlhngrh, out=GLnn1[:, 0:NI, 0:NP])
             cp.subtract(GR[:, 0:NI, 0:NI] @ sgu[:, 0:NI, 0:NP] @ ngrh,
                         GRhu @ ngg[:, 0:NP, 0:NP] + GG[:, 0:NI, 0:NI] @ hlhngrh, out=GGnn1[:, 0:NI, 0:NP])
-        
+            backward_events[idx].record(stream=computation_stream)
+
             computation_stream.synchronize()
-            computation_event.record(stream=computation_stream)
-            # with output_stream:
-            #     output_stream.wait_event(event=computation_event)
-            #     GR.get(out=GR_host[IB])
-            #     GL.get(out=GL_host[IB])
-            #     GG.get(out=GG_host[IB])
-            #     GRnn1.get(out=GRnn1_host[IB])
-            #     GLnn1.get(out=GLnn1_host[IB])
-            #     GGnn1.get(out=GGnn1_host[IB])
-            with output_stream:
-                output_stream.wait_event(event=computation_event)
-                _store_compressed(mapping_diag, mapping_upper, mapping_lower, GR, GRnn1, IB, GR_host)
-                _store_compressed(mapping_diag, mapping_upper, mapping_lower, GL, GLnn1, IB, GL_host)
-                _store_compressed(mapping_diag, mapping_upper, mapping_lower, GG, GGnn1, IB, GG_host)
+            _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, GRnn1, IB, GR_compressed)
+            _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GL, GLnn1, IB, GL_compressed)
+            _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GG, GGnn1, IB, GG_compressed)
 
             slb = SigLB_gpu[IB]
             sgb = SigGB_gpu[IB]
             
             idE_gpu[:, IB] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ GL[:, 0:NI, 0:NI] -
                                               GG[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
-        
+
         DOS_gpu[:, IB] = 1j * cp.trace(GR[:, 0:NI, 0:NI] - cp.conjugate(GR[:, 0:NI, 0:NI].transpose(0,2,1)), axis1=1, axis2=2)
         nE_gpu[:, IB] = -1j * cp.trace(GL[:, 0:NI, 0:NI], axis1=1, axis2=2)
         nP_gpu[:, IB] = 1j * cp.trace(GG[:, 0:NI, 0:NI], axis1=1, axis2=2)
@@ -1211,19 +1293,23 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                                           GG[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
     
 
-    # GR.get(out=GR_host[-1])
-    # GL.get(out=GL_host[-1])
-    # GG.get(out=GG_host[-1])
-    _store_compressed(mapping_diag, mapping_upper, mapping_lower, GR, None, num_blocks - 1, GR_host)
-    _store_compressed(mapping_diag, mapping_upper, mapping_lower, GL, None, num_blocks - 1, GL_host)
-    _store_compressed(mapping_diag, mapping_upper, mapping_lower, GG, None, num_blocks - 1, GG_host)
+    computation_stream.synchronize()
+    _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, None, num_blocks - 1, GR_compressed)
+    with input_stream:
+        _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GL, None, num_blocks - 1, GL_compressed)
+        _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GG, None, num_blocks - 1, GG_compressed)
+        GL_compressed.get(out=GL_host)
+        GG_compressed.get(out=GG_host)
+    GR_compressed.get(out=GR_host)
     DOS_gpu.get(out=DOS)
     nE_gpu.get(out=nE)
     nP_gpu.get(out=nP)
     idE_gpu.get(out=idE)
     input_stream.synchronize()
-    output_stream.synchronize()
     computation_stream.synchronize()
+
+    end = time.time()
+    print(f"Computation: {end - med}")
 
 
 if __name__ == "__main__":
@@ -1231,7 +1317,7 @@ if __name__ == "__main__":
     validate = False
 
     # Data sizes
-    num_energies = 10
+    num_energies = 20
     num_blocks = 13
     block_size = 416
     full_size = num_blocks * block_size
@@ -1252,6 +1338,42 @@ if __name__ == "__main__":
 
     # RNG
     rng = np.random.default_rng(42)
+
+    # # Test store-compressed kernel
+    # map_diag_dev = [cp.asarray(mapping_diag[i])for i in range(num_blocks)]
+    # map_upper_dev = [cp.asarray(mapping_upper[i]) for i in range(num_blocks - 1)]
+    # map_lower_dev = [cp.asarray(mapping_lower[i]) for i in range(num_blocks - 1)]
+    # GR_uncompressed_diag = random_complex((num_energies, block_size, block_size), rng)
+    # GR_uncompressed_upper = random_complex((num_energies, block_size, block_size), rng)
+    # GR_uncompressed_diag_dev = cp.asarray(GR_uncompressed_diag)
+    # GR_uncompressed_upper_dev = cp.asarray(GR_uncompressed_upper)
+    # GR_compressed_ref = np.zeros((num_energies, nnz), dtype=np.complex128)
+    # GR_compressed_dev = cp.zeros((num_energies, nnz), dtype=cp.complex128)
+    # block_data_indices = mapping_diag[0][0]
+    # block_rows = mapping_diag[0][1]
+    # block_cols = mapping_diag[0][2]
+    # GR_compressed_ref[:, block_data_indices] = GR_uncompressed_diag[:, block_rows, block_cols]
+    # block_data_indices = mapping_upper[0][0]
+    # block_rows = mapping_upper[0][1]
+    # block_cols = mapping_upper[0][2]
+    # GR_compressed_ref[:, block_data_indices] = GR_uncompressed_upper[:, block_rows, block_cols]
+    # block_data_indices = mapping_lower[0][0]
+    # block_rows = mapping_lower[0][1]
+    # block_cols = mapping_lower[0][2]
+    # GR_compressed_ref[:, block_data_indices] = -GR_uncompressed_upper[:, block_cols, block_rows].conj()
+    # # copy_size = block_data_indices.size
+    # # assert copy_size == block_rows.size
+    # # assert copy_size == block_cols.size
+    # # num_threads = 1024
+    # # num_thread_blocks = (num_energies * copy_size + num_threads - 1) // num_threads
+    # # _store_block_compressed[num_thread_blocks, num_threads](map_diag_dev[0],
+    # #                                                   GR_uncompressed_dev.reshape(-1),
+    # #                                                   GR_compressed_dev.reshape(-1),
+    # #                                                   num_energies, copy_size, nnz, block_size, False)
+    # _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR_uncompressed_diag_dev, GR_uncompressed_upper_dev, 0, GR_compressed_dev)
+    # assert np.allclose(GR_compressed_dev.get(), GR_compressed_ref)
+    # print("Success: store-compressed kernel")
+
 
     # Energies
     energies = rng.random(num_energies)
@@ -1369,20 +1491,22 @@ if __name__ == "__main__":
     gg_h2g = block2sparse_energy_alt(map_diag, map_upper, map_lower, gg_diag, gg_upper, gg_lower, nnz, num_energies, False)
                                      
     # New RGF
-    gr_h2g_2 = cpx.empty_pinned((num_energies, nnz), dtype=np.complex128)
-    gl_h2g_2 = cpx.empty_pinned((num_energies, nnz), dtype=np.complex128)
-    gg_h2g_2 = cpx.empty_pinned((num_energies, nnz), dtype=np.complex128)
-    rgf_batched_GPU(energies,
-                    mapping_diag, mapping_upper, mapping_lower,
-                    hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
-                    overlap_diag, overlap_upper, overlap_lower,
-                    self_energies_retarded, self_energies_lesser, self_energies_greater,
-                    sigma_retarded_boundary_left, sigma_retarded_boundary_right,
-                    sigma_lesser_boundary_left, sigma_lesser_boundary_right,
-                    sigma_greater_boundary_left, sigma_greater_boundary_right,
-                    # GR2, GRnn12, GL2, GLnn12, GG2, GGnn12,
-                    gr_h2g_2, gl_h2g_2, gg_h2g_2,
-                    DOS2, nE2, nP2, idE2, bmin + 1, bmax, solve=True)
+    gr_h2g_2 = cpx.zeros_pinned((num_energies, nnz), dtype=np.complex128)
+    gl_h2g_2 = cpx.zeros_pinned((num_energies, nnz), dtype=np.complex128)
+    gg_h2g_2 = cpx.zeros_pinned((num_energies, nnz), dtype=np.complex128)
+    input_stream = cp.cuda.stream.Stream(non_blocking=True)
+    for i in range(10):
+        rgf_batched_GPU(energies,
+                        mapping_diag, mapping_upper, mapping_lower,
+                        hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
+                        overlap_diag, overlap_upper, overlap_lower,
+                        self_energies_retarded, self_energies_lesser, self_energies_greater,
+                        sigma_retarded_boundary_left, sigma_retarded_boundary_right,
+                        sigma_lesser_boundary_left, sigma_lesser_boundary_right,
+                        sigma_greater_boundary_left, sigma_greater_boundary_right,
+                        # GR2, GRnn12, GL2, GLnn12, GG2, GGnn12,
+                        gr_h2g_2, gl_h2g_2, gg_h2g_2,
+                        DOS2, nE2, nP2, idE2, bmin + 1, bmax, solve=True, input_stream=input_stream)
     # for i in range(num_blocks - 1):
     #     _store_compressed(mapping_diag, mapping_upper, mapping_lower, GR2[i], GRnn12[i], i, gr_h2g_2)
     #     _store_compressed(mapping_diag, mapping_upper, mapping_lower, GL2[i], GLnn12[i], i, gl_h2g_2)
@@ -1406,4 +1530,3 @@ if __name__ == "__main__":
     assert np.allclose(nE, nE2)
     assert np.allclose(nP, nP2)
     assert np.allclose(idE, idE2)
-    print("Success!")
