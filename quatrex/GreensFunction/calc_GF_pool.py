@@ -9,6 +9,7 @@ import numpy as np
 import numpy.typing as npt
 from scipy import sparse
 import mkl
+import pickle
 
 from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
     homogenize_matrix_Rnosym, extract_small_matrix_blocks
@@ -306,7 +307,7 @@ def calc_GF_pool_mpi(
     # number of energy points x kpoints
     ne = energy.shape[0]
     # number of blocks
-    nb = DH.Bmin.shape[0]
+    nb = DH.NBlocks
     # length of the largest block
     lb = np.max(DH.Bmax - DH.Bmin + 1)
     # init
@@ -315,7 +316,6 @@ def calc_GF_pool_mpi(
 
     mkl.set_num_threads(mkl_threads)
 
-    index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
     if (return_sigma_boundary):
@@ -332,6 +332,7 @@ def calc_GF_pool_mpi(
         SigL[ie] = (SigL[ie] - SigL[ie].T.conj()) / 2
         SigG[ie] = (SigG[ie] - SigG[ie].T.conj()) / 2
         # SigR[ie] = np.real(SigR[ie]) + 1j * np.imag(SigG[ie] - SigL[ie]) / 2
+        # Why this?
         SigR[ie] = np.real(SigR[ie]) + (SigG[ie] - SigL[ie]) / 2
         # SigR[ie] = (SigR[ie] + SigR[ie].T) / 2
 
@@ -340,34 +341,37 @@ def calc_GF_pool_mpi(
         SigR[ie] += SigR_ephn[ie]
 
         if homogenize:
-            (SigR00, SigR01, SigR10, _) = extract_small_matrix_blocks(SigR[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
-                                                                      SigR[ie][bmin[0] - 1:bmax[0],
-                                                                               bmin[1] - 1:bmax[1]],
-                                                                      SigR[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+            (SigR00, SigR01, SigR10, _) = extract_small_matrix_blocks(SigR[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                                                      SigR[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
+                                                                      SigR[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             SigR[ie] = homogenize_matrix_Rnosym(SigR00,
                                                 SigR01,
                                                 SigR10,
                                                 len(bmax))
-            (SigL00, SigL01, SigL10, _) = extract_small_matrix_blocks(SigL[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
-                                                                      SigL[ie][bmin[0] - 1:bmax[0],
-                                                                               bmin[1] - 1:bmax[1]],
-                                                                      SigL[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+            (SigL00, SigL01, SigL10, _) = extract_small_matrix_blocks(SigL[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                                                      SigL[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
+                                                                      SigL[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             SigL[ie] = homogenize_matrix_Rnosym(SigL00,
                                                 SigL01,
                                                 SigL10,
                                                 len(bmax))
-            (SigG00, SigG01, SigG10, _) = extract_small_matrix_blocks(SigG[ie][bmin[0] - 1:bmax[0], bmin[0] - 1:bmax[0]],
-                                                                      SigG[ie][bmin[0] - 1:bmax[0],
-                                                                               bmin[1] - 1:bmax[1]],
-                                                                      SigG[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
+            (SigG00, SigG01, SigG10, _) = extract_small_matrix_blocks(SigG[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
+                                                                      SigG[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
+                                                                      SigG[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             SigG[ie] = homogenize_matrix_Rnosym(SigG00,
-                                                SigG01, SigG10, len(bmax))
+                                                SigG01,
+                                                SigG10,
+                                                len(bmax))
 
     rgf_M = generator_rgf_Hamiltonian(energy, idx_k, DH, SigR)
-    rgf_H = generator_rgf_currentdens_Hamiltonian(energy, idx_k, DH)
-    index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
+
+    # pickle.dump(SigL, open("../tests/test/SigL.pkl", "wb"))
+    # pickle.dump(SigG, open("../tests/test/SigG.pkl", "wb"))
+    # pickle.dump(SigR, open("../tests/test/SigR.pkl", "wb"))
+
+    assert SigL.shape[0] == SigG.shape[0] == GR_3D_E.shape[0] == GRnn1_3D_E.shape[0] == GL_3D_E.shape[0] == GLnn1_3D_E.shape[0] == GG_3D_E.shape[0] == GGnn1_3D_E.shape[0] == DOS.shape[0] == nE.shape[0] == nP.shape[0] == idE.shape[0] == fL.shape[0] == fR.shape[0] == len(idx_k) == len(energy), f"{SigL.shape[0]}, {SigG.shape[0]}, {GR_3D_E.shape[0]}, {GRnn1_3D_E.shape[0]}, {GL_3D_E.shape[0]}, {GLnn1_3D_E.shape[0]}, {GG_3D_E.shape[0]}, {GGnn1_3D_E.shape[0]}, {DOS.shape[0]}, {nE.shape[0]}, {nP.shape[0]}, {idE.shape[0]}, {fL.shape[0]}, {fR.shape[0]}, {len(idx_k)}, {len(energy)}"
 
     # Create a process pool with 4 workers
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
@@ -377,17 +381,17 @@ def calc_GF_pool_mpi(
         # results = list(executor.map(lambda args: inv_matrices(args[0], const_arg1, const_arg2, args[1]), ((matrices_pairs[i], i) for i in range(len(matrices_pairs)))))
         # results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG,
         if (return_sigma_boundary):
-            results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+            results = executor.map(rgf_GF, rgf_M, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
                                    DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(
-                                       bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
+                                       bmax), factor, repeat(NCpSC), repeat(block_inv),
                                    repeat(use_dace), repeat(validate_dace))
             for idx, res in enumerate(results):
                 SigRBL[idx, :, :] = res[0]
                 SigRBR[idx, :, :] = res[1]
         else:
-            executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
+            executor.map(rgf_GF, rgf_M, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
                          DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(
-                             bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
+                             bmax), factor, repeat(NCpSC), repeat(block_inv),
                          repeat(use_dace), repeat(validate_dace))
         # for res in results:
         #    assert res == 0

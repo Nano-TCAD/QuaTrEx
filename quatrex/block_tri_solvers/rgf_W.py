@@ -868,7 +868,6 @@ def rgf_w_opt(
     # # new correction of matrix multiplication
     # mr_st, mr_et, lg_st, lg_et, ll_st, ll_et, dmr_st, dmr_et, dlg_st, dlg_et, dll_st, dll_et, vh_st, vh_et = \
     #     periodic_matmul_correction.correction_system_matrix(mr, vh, pr, pl, pg, ll, lg, bmin, bmax, bmin_mm, bmax_mm)
-    
 
     # correct first and last block to account for the contacts in multiplication
     dmr_sd = dmr_s[0]
@@ -960,8 +959,6 @@ def rgf_w_opt(
         else:
             dlg_ed += dlg
             dll_ed += dll
-
-    min_dEk = np.min((min_dEkL, min_dEkR))
 
     times[4] += time.perf_counter()
     # start of rgf_W------------------------------------------------------------
