@@ -51,15 +51,15 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    # This won't work as is!
-    scratch_path = "/home/awinka/Python/Mat_assembly/MoS2/quatrex_inputs/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
+    # solution_path not used
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(
         solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(
         solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
-    matrix_path = "/home/awinka/Python/Mat_assembly/MoS2/quatrex_inputs/"
+    matrix_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/"
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -133,14 +133,14 @@ if __name__ == "__main__":
         bg.contour_integral_block = utils.distributed_compile(
             ci_block_sdfg, comm)
         bg.sort_k = utils.distributed_compile(sk_sdfg, comm)
-        commgBarrier()
+        comm.Barrier()
 
     # create hamiltonian object
     Vappl = 0.0  # 0.2  # Applied voltage
     # Number of kpoints in x-, y-, and z-directions
-    num_kpoints = np.array([1, 3, 1])
+    num_kpoints = np.array([1, 5, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-10, 20, 128, endpoint=True,
+    energy = np.linspace(-15, 20, 512, endpoint=True,
                          dtype=float)  # Energy Vector
     EPHN = np.array([0.0]) # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -163,8 +163,7 @@ if __name__ == "__main__":
     bmax = matrix_obj.Bmax  # - 1
     bmin = matrix_obj.Bmin  # - 1
 
-    ij2ji:      npt.NDArray[np.int32] = change_format.find_idx_transposed(
-        rows, columns)
+    ij2ji:      npt.NDArray[np.int32] = change_format.find_idx_transposed( rows, columns)
     denergy:    npt.NDArray[np.double] = energy[1] - energy[0]
     nkpts:      np.int32 = np.int32(np.prod(num_kpoints))
     ne:         np.int32 = np.int32(energy.shape[0])
@@ -182,12 +181,11 @@ if __name__ == "__main__":
     # number of blocks
     nb = bmin.shape[0]
     # nbc = 2
-    nbc = get_number_connected_blocks(
-        matrix_obj.size, bmin, bmax, rows, columns)
+    nbc = get_number_connected_blocks(matrix_obj.size, bmin, bmax, rows, columns)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
-    # when do I use this? And why?
+    # when do I use this? And why? For calculation of screened interaction because block sizes will be bigger
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(
         rows, columns, bmax_mm, bmin_mm)
 
@@ -226,12 +224,12 @@ if __name__ == "__main__":
     # create the corresponding factor to mask. What is this?
     # number of points to smooth the edges of the Green's Function
     dnp = 50
-    factor_w = np.ones(ne)
+    factor_w = np.ones(nkpts*ne)
     # factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     # factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # create factor for the Green's Function
-    factor_g = np.ones(ne)
+    factor_g = np.ones(nkpts*ne)
     # factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     # factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
@@ -259,10 +257,9 @@ if __name__ == "__main__":
     Idx_k_repeated = np.repeat(Idx_k, ne)
     Idx_k_loc = Idx_k_repeated[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
-    # split up the factor between the ranks. What is this factor
+    # split up the factor between the ranks. What is this factor?
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
     factor_g_loc = factor_g[disp[1, rank]:disp[1, rank] + count[1, rank]]
-
     # print rank distribution
     print(
         f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}",
@@ -412,9 +409,9 @@ if __name__ == "__main__":
     mem_s = 0.8
     mem_g = 0.0
     mem_w = 0.0
+    
     # max number of iterations
-
-    max_iter = 250
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -469,6 +466,10 @@ if __name__ == "__main__":
         time_start = -time.perf_counter()
     # output folder
     folder = '/quatrex/results/mos2_testing/'
+    # checkpoint folder
+    checkpoint_folder = './checkpoints/'
+    # checkpoints created. Not working!
+    checkpoint = False
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -513,8 +514,8 @@ if __name__ == "__main__":
         # Why only sr_ephn_h2g_vec?
         (ECmin_vec[iter_num+1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
                                                                      energy,
-                                                                     matrix_obj.Overlap[( 0, 0, 0)],
-                                                                     matrix_obj.k_Hamiltonian[( 0, 0, 0)],
+                                                                     matrix_obj.Overlap[(0, 0, 0)],
+                                                                     matrix_obj.k_Hamiltonian[(0, 0, 0)],
                                                                      sr_h2g_vec,
                                                                      sl_h2g_vec,
                                                                      sg_h2g_vec,
@@ -574,7 +575,7 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=False,
+                homogenize=True,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
                 block_inv=args.block_inv,
@@ -609,6 +610,25 @@ if __name__ == "__main__":
 
         comm.Barrier()
 
+        
+        # Create checkpoint. CURRENTLY NOT WORKING
+        if checkpoint:
+            if rank == 0:
+                
+                if not os.path.exists(checkpoint_folder):
+                    os.makedirs(checkpoint_folder)
+                with open(checkpoint_folder + f'checkpoint_{iter_num}.pkl', 'wb') as f:
+                    pickle.dump([gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper], f)
+
+            if rank == 0:
+                comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+                comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
+
+            else:
+                comm.Reduce(dos, None, op=MPI.SUM, root=0)
+                comm.Reduce(ide, None, op=MPI.SUM, root=0)
+
+        
         if rank == 0:
             gf_time += time.perf_counter()
             print(f"    GF time: {gf_time:.3f} s", flush=True)
@@ -620,11 +640,8 @@ if __name__ == "__main__":
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
 
         # Assert diagonal blocks satisfy the same physics identity
-        assert np.allclose(
-            gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
-        assert np.allclose(
-            gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
-        assert np.allclose(gr_diag, gr_diag.transpose((0, 1, 3, 2)))
+        assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
+        assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
 
         if iter_num == 0:
             gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
@@ -816,7 +833,7 @@ if __name__ == "__main__":
                     rank,
                     size,
                     nbc,
-                    homogenize=False,
+                    homogenize=True,
                     NCpSC=1,
                     mkl_threads=w_mkl_threads,
                     worker_num=w_worker_threads,
@@ -1043,22 +1060,22 @@ if __name__ == "__main__":
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
-        #Extract diagonal bands
+        # Extract diagonal bands
         gg_diag_band = gg_h2g[:, rows == columns]
         gl_diag_band = gl_h2g[:, rows == columns]
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now.
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-                                                                             gl_diag_band,
-                                                                             gg_diag_band,
-                                                                             sg_phn,
-                                                                             sl_phn,
-                                                                             sr_phn,
-                                                                             EPHN,
-                                                                             DPHN,
-                                                                             temp,
-                                                                             mem_s)
+        # sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+        #                                                                      gl_diag_band,
+        #                                                                      gg_diag_band,
+        #                                                                      sg_phn,
+        #                                                                      sl_phn,
+        #                                                                      sr_phn,
+        #                                                                      EPHN,
+        #                                                                      DPHN,
+        #                                                                      temp,
+        #                                                                      mem_s)
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
         #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)

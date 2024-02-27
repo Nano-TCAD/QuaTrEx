@@ -490,7 +490,7 @@ def map_block2sparse_alt(
         map_upper = np.concatenate((map_upper, map_loc_upper), axis=1)
         map_lower = np.concatenate((map_lower, map_loc_lower), axis=1)
 
-    assert no == rows.size
+    assert no == rows.size, "This error is usually thrown when not all elements are included by the blocks, ie the blocks are to small"
 
     return map_diag, map_upper, map_lower
 
