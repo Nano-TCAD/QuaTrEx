@@ -214,7 +214,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     num_blocks = len(H_diag_host)
     block_size = max(Bmax - Bmin + 1)
     dtype = np.complex128
-    hdtype = np.float64
+    #hdtype = np.float64
+    hdtype = np.complex128
 
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
