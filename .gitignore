@@ -148,3 +148,5 @@ gmon.out
 
 # Local testing
 samples/testing.ipynb
+tests/test/*.pkl
+tests/test/generator_testing.ipynb
