@@ -9,6 +9,7 @@ print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
 import sys
 import numpy as np
+import cupyx as cpx
 import numpy.typing as npt
 import os
 import argparse
@@ -47,7 +48,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 # if utils_gpu.gpu_avail():
 #     try:
-from quatrex.GreensFunction import calc_GF_pool_GPU
+from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt
 from quatrex.GW.screenedinteraction.kernel import p2w_gpu
 from quatrex.GW.polarization.kernel import g2p_gpu
 from quatrex.GW.selfenergy.kernel import gw2s_gpu
@@ -226,7 +227,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 2.0
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
@@ -420,9 +421,9 @@ if __name__ == "__main__":
         change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
 
     # initialize Green's function------------------------------------------------
-    gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
-    gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
-    #gr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    gl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
     wg_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
@@ -502,19 +503,19 @@ if __name__ == "__main__":
 
         # initialize observables----------------------------------------------------
         # density of states
-        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         dosw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # occupied states/unoccupied states
-        nE = np.zeros(shape=(ne,nb), dtype = np.complex128)
-        nP = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+        nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
         # occupied screening/unoccupied screening
         nEw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
         nPw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # current per energy
-        ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
         
 
@@ -593,11 +594,8 @@ if __name__ == "__main__":
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         elif args.type in ("gpu"):
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool_GPU.calc_GF_pool_mpi_split(
+            calc_GF_pool_GPU_memopt.calc_GF_pool_mpi_split_memopt(
                 hamiltonian_obj,
-                blocked_hamiltonian_diag,
-                blocked_hamiltonian_upper,
-                blocked_hamiltonian_lower,
                 energy_loc,
                 sr_h2g_vec,
                 sl_h2g_vec,
@@ -611,6 +609,9 @@ if __name__ == "__main__":
                 sr_phn,
                 sl_phn,
                 sg_phn,
+                gr_h2g,
+                gl_h2g,
+                gg_h2g,
                 map_diag,
                 map_upper,
                 map_lower,
@@ -629,10 +630,10 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
-                return_sigma_boundary=False,
                 NCpSC=NCpSC,
-                mkl_threads=gf_mkl_threads_gpu,
+                mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
+
         
         comm.Barrier()
 
@@ -642,37 +643,37 @@ if __name__ == "__main__":
             pre_comm0_time = -time.perf_counter()
             
 
-        # lower diagonal blocks from physics identity
-        gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
-        gl_lower = -gl_upper.conjugate().transpose((0,1,3,2))
-        #gr_lower = gr_upper.transpose((0,1,3,2))
-        if iter_num == 0:
-            gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-                                                            map_lower, gg_diag, gg_upper,
-                                                            gg_lower, no, count[1,rank],
-                                                            energy_contiguous=False)
-            gl_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-                                                            map_lower, gl_diag, gl_upper,
-                                                            gl_lower, no, count[1,rank],
-                                                            energy_contiguous=False)
-            # gr_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-            #                                                 map_lower, gr_diag, gr_upper,
-            #                                                 gr_lower, no, count[1,rank],
-            #                                                 energy_contiguous=False)
-        else:   
-            # add new contribution to the Green's function
-            gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-                                                            map_lower, gg_diag, gg_upper,
-                                                            gg_lower, no, count[1,rank],
-                                                            energy_contiguous=False) + mem_g * gg_h2g
-            gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-                                                            map_lower, gl_diag, gl_upper,
-                                                            gl_lower, no, count[1,rank],
-                                                            energy_contiguous=False) + mem_g * gl_h2g
-            # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-            #                                                 map_lower, gr_diag, gr_upper,
-            #                                                 gr_lower, no, count[1,rank],
-            #                                                 energy_contiguous=False) + mem_g * gr_h2g 
+        # # lower diagonal blocks from physics identity
+        # gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
+        # gl_lower = -gl_upper.conjugate().transpose((0,1,3,2))
+        # #gr_lower = gr_upper.transpose((0,1,3,2))
+        # if iter_num == 0:
+        #     gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #                                                     map_lower, gg_diag, gg_upper,
+        #                                                     gg_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     gl_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #                                                     map_lower, gl_diag, gl_upper,
+        #                                                     gl_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     # gr_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #     #                                                 map_lower, gr_diag, gr_upper,
+        #     #                                                 gr_lower, no, count[1,rank],
+        #     #                                                 energy_contiguous=False)
+        # else:   
+        #     # add new contribution to the Green's function
+        #     gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #                                                     map_lower, gg_diag, gg_upper,
+        #                                                     gg_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False) + mem_g * gg_h2g
+        #     gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #                                                     map_lower, gl_diag, gl_upper,
+        #                                                     gl_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False) + mem_g * gl_h2g
+        #     # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+        #     #                                                 map_lower, gr_diag, gr_upper,
+        #     #                                                 gr_lower, no, count[1,rank],
+        #     #                                                 energy_contiguous=False) + mem_g * gr_h2g 
 
 
         # calculate the transposed

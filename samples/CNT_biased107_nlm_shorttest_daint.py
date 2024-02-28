@@ -148,11 +148,11 @@ if __name__ == "__main__":
     no_orb = np.array([1, 1])
     NCpSC = 2
     Vappl = 0.2
-    energy = np.linspace(-35, 25, 5000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-35, 25, 10000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix107.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -239,8 +239,10 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
-    #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    vh_1 = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
+    vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    indices_V_incomplete = np.where(np.abs(vh.data) < 0.001)
+    vh.data[indices_V_incomplete] = vh_1.data[indices_V_incomplete]
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -270,6 +272,7 @@ if __name__ == "__main__":
     print(
     f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", 
     name)
+    #exit(0)
 
     # adding checks
     assert energy_loc.size == count[1,rank]
@@ -422,7 +425,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 250
+    max_iter = 700
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -476,7 +479,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_cf_epsR1_n107_approxV/'
+    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_cf_epsR1_n165/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -706,7 +709,7 @@ if __name__ == "__main__":
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
-                                                gl_transposed_g2p, batch_size = 500)   
+                                                gl_transposed_g2p, batch_size = 250)   
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -960,7 +963,7 @@ if __name__ == "__main__":
         elif args.type in ("gpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 500)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 250)
         else:
             raise ValueError("Argument error, input type not possible")
         comm.Barrier()
