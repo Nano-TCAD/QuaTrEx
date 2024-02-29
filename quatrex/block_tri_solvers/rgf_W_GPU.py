@@ -1288,7 +1288,7 @@ def rgf_w_opt_standalone_batched_gpu(
         else:
             #vh_r = vh_cp[slb_p, slb_c].toarray()
             #vh_c = vh_cp[slb_c, slb_c].toarray() - dvh_ed
-            wr_diag_gpu[idx_ib, :lb_i, :lb_i] = xr_lower[idx_ib - 1, :lb_i, :lb_p] @ cp.repeat(vh_upper_gpu[idx_ib - 1, cp.newaxis, :lb_p, :lb_i], energy_batchsize, axis=0) + xr_diag_gpu[idx_ib, :lb_i, :lb_i] @ vh_diag_gpu[idx_ib, :, :lb_i, :lb_i]
+            wr_diag_gpu[idx_ib, :, :lb_i, :lb_i] = xr_lower[idx_ib - 1, :, :lb_i, :lb_p] @ cp.repeat(vh_upper_gpu[idx_ib - 1, cp.newaxis, :lb_p, :lb_i], energy_batchsize, axis=0) + xr_diag_gpu[idx_ib, :, :lb_i, :lb_i] @ vh_diag_gpu[idx_ib, :, :lb_i, :lb_i]
 
     for idx_ib in range(0, nb_mm):
         # xr_diag[idx_ib, :, :] *= factor
