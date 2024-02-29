@@ -39,6 +39,8 @@ if utils_gpu.gpu_avail():
     try:
         from quatrex.GreensFunction import calc_GF_pool_GPU
         from quatrex.GW.screenedinteraction.kernel import p2w_gpu
+        from quatrex.GW.polarization.kernel import g2p_gpu
+        from quatrex.GW.selfenergy.kernel import gw2s_gpu
     except ImportError:
         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -53,7 +55,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
+    solution_path = os.path.join(scratch_path, "CNT_32_newlayer/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -65,7 +67,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="gpu",
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
@@ -128,11 +130,11 @@ if __name__ == "__main__":
     no_orb = np.array([1, 1])
     NCpSC = 2
     Vappl = 0.2
-    energy = np.linspace(-35, 25, 3000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-35, 25, 10, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix107.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -178,11 +180,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 3
+    w_worker_threads = 6
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 3
+    gf_worker_threads = 6
 
     # physical parameter -----------
 
@@ -219,8 +221,10 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
+    vh_1 = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    indices_V_incomplete = np.where(np.abs(vh.data) < 0.001)
+    vh.data[indices_V_incomplete] = vh_1.data[indices_V_incomplete]
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -675,12 +679,18 @@ if __name__ == "__main__":
             g2p_time = -time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
-        if args.type in ("gpu") or args.type in ("cpu"):
+        if args.type in ("cpu"):
             pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
                                                 gl_transposed_g2p)
+        elif args.type in ("gpu"):
+             pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+                                                pre_factor,
+                                                gg_g2p,
+                                                gl_g2p,
+                                                gl_transposed_g2p, batch_size = 250)   
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -903,7 +913,7 @@ if __name__ == "__main__":
             gw2s_time = -time.perf_counter()
 
     # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("gpu") or args.type in ("cpu"):
+        if args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, 
                                                                            wg_gw2s, wl_gw2s, 
                                                                             wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
@@ -930,6 +940,10 @@ if __name__ == "__main__":
             #                                                     wg_transposed_gw2s,
             #                                                     wl_transposed_gw2s
             #                                                     )
+        elif args.type in ("gpu"):
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 250)
         else:
             raise ValueError("Argument error, input type not possible")
         

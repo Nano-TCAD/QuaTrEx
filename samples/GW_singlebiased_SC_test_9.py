@@ -405,7 +405,7 @@ if __name__ == "__main__":
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        nP = np.zeros(shape=(ne, nb), dtype=np.complex128)
+        nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
         # occupied screening/unoccupied screening
         nEw = np.zeros(shape=(ne, nb // nbc), dtype=np.complex128)
