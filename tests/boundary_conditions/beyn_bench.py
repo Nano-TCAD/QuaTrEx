@@ -1,13 +1,16 @@
 import cupy as cp
 import numpy as np
+import mkl
 import scipy.io  as io
 import os
 import timeit
 
+from concurrent.futures import ThreadPoolExecutor
+
 from quatrex.OBC.beyn_new import extract_small_matrix_blocks, contour_integral, beyn_svd, beyn_eig, beyn_phi, beyn_sigma
-from quatrex.OBC.beyn_new import contour_integral_batched, contour_integral_gpu, contour_integral_batched_gpu
-from quatrex.OBC.beyn_new import extract_small_matrix_blocks_gpu, beyn_svd_gpu, beyn_eig_gpu, beyn_phi_gpu, beyn_sigma_gpu
-from quatrex.OBC.beyn_new import beyn, beyn_gpu
+from quatrex.OBC.beyn_new import contour_integral_batched
+from quatrex.OBC.beyn_new_gpu import contour_integral_gpu, contour_integral_batched_gpu, beyn_gpu
+from quatrex.OBC.beyn_new_gpu import extract_small_matrix_blocks_gpu, beyn_svd_gpu, beyn_eig_gpu, beyn_phi_gpu, beyn_sigma_gpu
 
 
 def _cmplx_random(shape, rng):
@@ -18,12 +21,14 @@ def test_cpu():
 
     rng = np.random.default_rng(42)
 
+    num_energies = 20
+
     # for N  in (128, 256, 512, 1024, 2048, 4096):
     for N in (416,):
 
-        M00 = _cmplx_random((N, N), rng)
-        M01 = _cmplx_random((N, N), rng)
-        M10 = _cmplx_random((N, N), rng)
+        M00 = _cmplx_random((num_energies, N, N), rng)
+        M01 = _cmplx_random((num_energies, N, N), rng)
+        M10 = _cmplx_random((num_energies, N, N), rng)
         imag_lim = 0.5
         R = 1.0
 
@@ -40,6 +45,27 @@ def test_cpu():
                 # runtimes = timeit.repeat("beyn(factor, M00, M01, M10, imag_lim, R, type)",
                 #                          globals={**globals(), **locals()}, number=1, repeat=10)
                 # print(f'Beyn CPU: Avg {np.mean(runtimes)}s, Median {np.median(runtimes)}s')
+
+                beyn_gpu(factor, M00_d[0], M01_d[0], M10_d[0], imag_lim, R, type)
+
+                def _test():
+                    for i in range(num_energies):
+                        beyn_gpu(factor, M00_d[i], M01_d[i], M10_d[i], imag_lim, R, type)
+                runtimes = timeit.repeat("_test(); cp.cuda.stream.get_current_stream().synchronize()",
+                                         setup="cp.cuda.stream.get_current_stream().synchronize()",
+                                         globals={**globals(), **locals()}, number=1, repeat=3)
+                print(f'Beyn GPU: Avg {np.mean(runtimes)}s, Median {np.median(runtimes)}s')
+
+                def _test2():
+                    mkl.set_num_threads(1)
+                    with ThreadPoolExecutor(max_workers=20) as executor:
+                        executor.map(lambda x: beyn_gpu(factor, M00_d[x], M01_d[x], M10_d[x], imag_lim, R, type), range(num_energies))
+                runtimes = timeit.repeat("_test2(); cp.cuda.stream.get_current_stream().synchronize()",
+                                            setup="cp.cuda.stream.get_current_stream().synchronize()",
+                                            globals={**globals(), **locals()}, number=1, repeat=3)
+                print(f'Beyn GPU 4 workers X 7 threads (28 threads): Avg {np.mean(runtimes)}s, Median {np.median(runtimes)}s')
+                continue
+
 
                 beyn_gpu(factor, M00_d, M01_d, M10_d, imag_lim, R, type)
                 runtimes = timeit.repeat("beyn_gpu(factor, M00_d, M01_d, M10_d, imag_lim, R, type); cp.cuda.stream.get_current_stream().synchronize()",
