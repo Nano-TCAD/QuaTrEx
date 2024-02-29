@@ -882,7 +882,7 @@ def beyn_new_gpu(factor: int,
     
     # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
     # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
-    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
     if LS.size == 0 or RS.size == 0:
         cond = np.nan
@@ -890,8 +890,8 @@ def beyn_new_gpu(factor: int,
         gR = None
         return Sigma, gR, cond, min_dEk
 
-    Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
-    kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
+    Lu, Llambda, Ru, Rlambda = beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
     Sigma, gR, min_dEk = beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
 
     return Sigma, gR, cond, min_dEk
@@ -909,3 +909,50 @@ def beyn_gpu(factor: int,
     
     N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, densify = True)
     return beyn_new_gpu(factor, matrix_blocks, N00, N01, N10, imag_lim, R, type, YL=YL, YR=YR)
+
+
+def beyn_new_mix(factor: int,
+                 matrix_blocks,
+                 M00,
+                 M01,
+                 M10,
+                 imag_lim,
+                 R,
+                 type,
+                 YL=None,
+                 YR=None):
+    
+
+    cond = 0
+    min_dEk = 1e8
+
+    
+    # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
+    # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+
+    if LS.size == 0 or RS.size == 0:
+        cond = np.nan
+        Sigma = None
+        gR = None
+        return Sigma, gR, cond, min_dEk
+
+    Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
+    Sigma, gR, min_dEk = beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
+
+    return Sigma, gR, cond, min_dEk
+
+
+def beyn_mix(factor: int,
+             M00,
+             M01,
+             M10,
+             imag_lim,
+             R,
+             type,
+             YL=None,
+             YR=None):
+    
+    N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, densify = True)
+    return beyn_new_mix(factor, matrix_blocks, N00, N01, N10, imag_lim, R, type, YL=YL, YR=YR)
