@@ -429,6 +429,81 @@ def contour_svd_gpu(factor: int,
     return LP1, LV, LS, LW, RP1, RV, RS, RW
 
 
+def contour_svd_mix(factor: int,
+                    matrix_blocks: np.ndarray,
+                    big_N: int,
+                    R: float,
+                    side: str,
+                    YL=None,
+                    YR=None,
+                    eps_lim=1e-8):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = cp.random.rand(N, NM)
+    if YR is None:
+        YR = cp.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    LV, LS, LW = np.linalg.svd(LP0.get(), full_matrices=False)
+    Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+    RV, RS, RW = np.linalg.svd(RP0.get(), full_matrices=False)
+    Rind = np.where(np.abs(RS) > eps_lim)[0]
+
+    if len(Lind) == N or len(Rind) == N:
+
+        P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
+
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
+
+        LP0 = P0@YL
+        LP1 = P1@YL
+
+        RP0 = YR@P0
+        RP1 = YR@P1
+
+        LV, LS, LW = np.linalg.svd(LP0.get(), full_matrices=False)
+        Lind = np.where(np.abs(LS) > eps_lim)[0]
+
+        RV, RS, RW = np.linalg.svd(RP0.get(), full_matrices=False)
+        Rind = np.where(np.abs(RS) > eps_lim)[0]
+    
+    if len(Lind) == 0:
+        Lind = [0]
+    if len(Rind) == 0:
+        Rind = [0]
+
+    LV = LV[:, Lind]
+    LS = np.diag(LS[Lind])
+    LW = LW[Lind, :].T.conj()
+
+    RV = RV[:, Rind]
+    RS = np.diag(RS[Rind])
+    RW = RW[Rind, :].T.conj()
+
+    return LP1, LV, LS, LW, RP1, RV, RS, RW
+
+
 def beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1):
 
     Llambda, Lu = eig(cp.asnumpy(LV.conj().T @ LP1 @ LW @ cp.linalg.inv(LS)))
@@ -441,12 +516,26 @@ def beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1):
 
     return Lu, Llambda, Ru, Rlambda
 
+
+def beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1):
+
+    Llambda, Lu = eig(LV.T.conj() @ LP1.get() @ LW @ np.linalg.inv(LS))
+    Rlambda, Ru = eig(np.linalg.inv(RS) @ RV.T.conj() @ RP1.get() @ RW)
+
+    Llambda = cp.asarray(Llambda)
+    Lu = cp.asarray(Lu)
+    Rlambda = cp.asarray(Rlambda)
+    Ru = cp.asarray(Ru)
+
+    return Lu, Llambda, Ru, Rlambda
+
+
 def beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type):
 
     N = LV.shape[0]
 
     phiL = LV @ Lu
-    phiR = cp.linalg.solve(Ru, RW.conj().T)
+    phiR = cp.linalg.solve(Ru, RW.T.conj())
 
     if type == 'L':
         kL = 1j * cp.log(Llambda)
@@ -793,7 +882,7 @@ def beyn_new_gpu(factor: int,
     
     # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
     # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
-    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
     if LS.size == 0 or RS.size == 0:
         cond = np.nan
@@ -801,8 +890,8 @@ def beyn_new_gpu(factor: int,
         gR = None
         return Sigma, gR, cond, min_dEk
 
-    Lu, Llambda, Ru, Rlambda = beyn_eig_gpu(LV, LS, LW, LP1, RV, RS, RW, RP1)
-    kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
+    Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
     Sigma, gR, min_dEk = beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
 
     return Sigma, gR, cond, min_dEk
