@@ -475,7 +475,8 @@ def rgf_GF(M: sparse.csr_matrix,
         M[:LBsize, :LBsize] -= SigRBL
         GammaL = 1j * (SigRBL - SigRBL.conj().T)
         SigLBL = 1j * fL * GammaL
-        SigGBL = 1j * (fL - 1) * GammaL
+        # is this correct? Shouldn't it be 1-fL?
+        SigGBL = 1j * (1 - fL) * GammaL
         SigL[:LBsize, :LBsize] += SigLBL
         SigG[:LBsize, :LBsize] += SigGBL
 
@@ -502,15 +503,15 @@ def rgf_GF(M: sparse.csr_matrix,
         M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
         GammaR = 1j * (SigRBR - SigRBR.conj().T)
         SigLBR = 1j * fR * GammaR
-        SigGBR = 1j * (fR - 1) * GammaR
+        # Is this correct? Shouldn't it be 1-fR?
+        SigGBR = 1j * (1 - fR) * GammaR
         SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
         SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
 
     if not (np.isnan(condL) or np.isnan(condR)):
         # First step of iteration
         NN = Bmax[-1] - Bmin[-1] + 1
-        gR[-1, 0:NN, 0:NN] = np.linalg.inv(M[Bmin[-1]
-                                           :Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray())
+        gR[-1, 0:NN, 0:NN] = np.linalg.inv(M[Bmin[-1]:Bmax[-1] + 1, Bmin[-1]:Bmax[-1] + 1].toarray())
         gL[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ SigL[Bmin[-1]:Bmax[-1] + 1,
                                                        Bmin[-1]:Bmax[-1] + 1].toarray() @ gR[-1, 0:NN, 0:NN].T.conj()
         gG[-1, 0:NN, 0:NN] = gR[-1, 0:NN, 0:NN] @ SigG[Bmin[-1]:Bmax[-1] + 1,
