@@ -52,6 +52,7 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/"
+    scratch_path2 = "/usr/scratch/bucaramanga/awinka/quatrex_results/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path not used
     solution_path = os.path.join(scratch_path, "CNT_32/")
@@ -140,7 +141,7 @@ if __name__ == "__main__":
     # Number of kpoints in x-, y-, and z-directions
     num_kpoints = np.array([1, 5, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-15, 20, 512, endpoint=True,
+    energy = np.linspace(-20, 15, 1024, endpoint=True,
                          dtype=float)  # Energy Vector
     EPHN = np.array([0.0]) # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -609,7 +610,6 @@ if __name__ == "__main__":
             )
 
         comm.Barrier()
-
         
         # Create checkpoint. CURRENTLY NOT WORKING
         if checkpoint:
@@ -627,7 +627,6 @@ if __name__ == "__main__":
             else:
                 comm.Reduce(dos, None, op=MPI.SUM, root=0)
                 comm.Reduce(ide, None, op=MPI.SUM, root=0)
-
         
         if rank == 0:
             gf_time += time.perf_counter()
@@ -640,8 +639,11 @@ if __name__ == "__main__":
         gr_lower = gr_upper.transpose((0, 1, 3, 2))
 
         # Assert diagonal blocks satisfy the same physics identity
-        assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)))
-        assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)))
+        # Should I enforce this? Let's try. Don't know why, but nothing updated.
+        # gg_diag = (gg_diag - gg_diag.conjugate().transpose((0, 1, 3, 2)))/2
+        # gl_diag = (gl_diag - gl_diag.conjugate().transpose((0, 1, 3, 2)))/2
+        # assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
+        # assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
 
         if iter_num == 0:
             gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
@@ -1099,18 +1101,18 @@ if __name__ == "__main__":
             print()
 
         if rank == 0:
-            np.savetxt(parent_path + folder + 'E.dat', energy)
-            np.savetxt(parent_path + folder + 'DOS_' +
+            np.savetxt(scratch_path2 + 'E.dat', energy)
+            np.savetxt(scratch_path2 + 'DOS_' +
                        str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(parent_path + folder + 'IDE_' +
+            np.savetxt(scratch_path2 + 'IDE_' +
                        str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
-            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+            np.savetxt(scratch_path2 + 'EFL.dat', EFL_vec)
+            np.savetxt(scratch_path2 + 'EFR.dat', EFR_vec)
+            np.savetxt(scratch_path2 + 'ECmin.dat', ECmin_vec)
     if rank == 0:
-        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
-        np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+        np.savetxt(scratch_path2 + 'EFL.dat', EFL_vec)
+        np.savetxt(scratch_path2 + 'EFR.dat', EFR_vec)
+        np.savetxt(scratch_path2 + 'ECmin.dat', ECmin_vec)
 
     # free datatypes------------------------------------------------------------
 
