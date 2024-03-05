@@ -463,11 +463,14 @@ def contour_svd_mix(factor: int,
     RP0 = YR@P0
     RP1 = YR@P1
 
+    # start = time.time()
     LV, LS, LW = np.linalg.svd(LP0.get(), full_matrices=False)
     Lind = np.where(np.abs(LS) > eps_lim)[0]
 
     RV, RS, RW = np.linalg.svd(RP0.get(), full_matrices=False)
     Rind = np.where(np.abs(RS) > eps_lim)[0]
+    # finish = time.time()
+    # print('time to calculate svd (1): ', finish - start, flush=True)
 
     if len(Lind) == N or len(Rind) == N:
 
@@ -482,12 +485,16 @@ def contour_svd_mix(factor: int,
         RP0 = YR@P0
         RP1 = YR@P1
 
+        # start = time.time()
         LV, LS, LW = np.linalg.svd(LP0.get(), full_matrices=False)
         Lind = np.where(np.abs(LS) > eps_lim)[0]
 
         RV, RS, RW = np.linalg.svd(RP0.get(), full_matrices=False)
         Rind = np.where(np.abs(RS) > eps_lim)[0]
+        # finish = time.time()
+        # print('time to calculate svd (2): ', finish - start, flush=True)
     
+    # start = time.time()
     if len(Lind) == 0:
         Lind = [0]
     if len(Rind) == 0:
@@ -500,6 +507,8 @@ def contour_svd_mix(factor: int,
     RV = RV[:, Rind]
     RS = np.diag(RS[Rind])
     RW = RW[Rind, :].T.conj()
+    # finish = time.time()
+    # print('time to prepare eig: ', finish - start, flush=True)
 
     return LP1, LV, LS, LW, RP1, RV, RS, RW
 
@@ -929,7 +938,10 @@ def beyn_new_mix(factor: int,
     
     # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
     # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
+    # start = time.time()
     LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    # finish = time.time()
+    # print('time to compute contour_svd_mix: ', finish - start, flush=True)
 
     if LS.size == 0 or RS.size == 0:
         cond = np.nan
@@ -937,9 +949,18 @@ def beyn_new_mix(factor: int,
         gR = None
         return Sigma, gR, cond, min_dEk
 
+    # start = time.time()
     Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    # finish = time.time()
+    # print('time to compute beyn_eig_mix: ', finish - start, flush=True)
+    # start = time.time()
     kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
+    # finish = time.time()
+    # print('time to compute beyn_phi_gpu: ', finish - start, flush=True)
+    # start = time.time()
     Sigma, gR, min_dEk = beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, type)
+    # finish = time.time()
+    # print('time to compute beyn_sigma_gpu: ', finish - start, flush=True)
 
     return Sigma, gR, cond, min_dEk
 
@@ -954,5 +975,8 @@ def beyn_mix(factor: int,
              YL=None,
              YR=None):
     
+    # start = time.time()
     N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, densify = True)
+    # finish = time.time()
+    # print('time to extract_small_matrix_blocks_gpu: ', finish - start, flush=True)
     return beyn_new_mix(factor, matrix_blocks, N00, N01, N10, imag_lim, R, type, YL=YL, YR=YR)
