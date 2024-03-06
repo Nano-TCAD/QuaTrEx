@@ -19,7 +19,7 @@ import cupyx as cpx
 import numpy as np
 import numpy.typing as npt
 from scipy import sparse
-from quatrex.OBC.beyn_new_gpu import beyn_gpu
+from quatrex.OBC.beyn_new_gpu import beyn_mix
 from quatrex.OBC.sancho import open_boundary_conditions
 import typing
 from functools import partial
@@ -36,7 +36,7 @@ def obc_GF_gpu(M,
            validate_dace=False,
            sancho=False):
 
-    beyn_func = beyn_gpu
+    beyn_func = beyn_mix
     if use_dace:
         from quatrex.OBC import beyn_dace
         beyn_func = partial(beyn_dace.beyn, validate=validate_dace)

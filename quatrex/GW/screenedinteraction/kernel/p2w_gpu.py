@@ -16,7 +16,7 @@ from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
                                             initialize_block_sigma, \
                                             initialize_block_sigma_batched
 #from quatrex.utils.matrix_creation_gpu import initialize_block_sigma_batched
-from quatrex.block_tri_solvers import matrix_inversion_w, rgf_W_GPU
+from quatrex.block_tri_solvers import matrix_inversion_w, rgf_W_lumi, rgf_W_GPU
 from quatrex.OBC import obc_w_gpu
 from quatrex.OBC import obc_w_cpu
 import time
@@ -140,6 +140,7 @@ def p2w_pool_mpi_gpu_split(
     # in block format
     wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
     wr_diag_btch, wr_upper_btch, wl_diag_btch, wl_upper_btch, wg_diag_btch, wg_upper_btch = matrix_creation.initialize_block_G_batched(ne, nb_mm, lb_max_mm)
+    
     xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
     xr_diag_btch = np.zeros((nb_mm, ne, lb_max_mm, lb_max_mm), dtype=np.complex128)
     # set number of mkl threads
@@ -212,10 +213,11 @@ def p2w_pool_mpi_gpu_split(
         lg_e[ie] = tuple([np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for _ in range(2)])
         ll_s[ie] = tuple([np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for _ in range(2)])
         ll_e[ie] = tuple([np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for _ in range(2)])
-
-        obc_w_gpu.obc_w_mm_gpu(vh, pg[ie], pl[ie], pr[ie], bmax, bmin, dvh_sd[ie], dvh_ed[ie], dmr_sd[ie], dmr_ed[ie], dlg_sd[ie], \
-                                dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], vh_s[ie], vh_e[ie], \
-                                 mb00[ie], mbNN[ie], nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(obc_w_gpu.obc_w_mm_gpu, repeat(vh), pg, pl, pr, repeat(bmax), repeat(bmin), dvh_sd, dvh_ed, dmr_sd, dmr_ed, dlg_sd, \
+                                dlg_ed, dll_sd, dll_ed, mr_s, mr_e, lg_s, lg_e, ll_s, ll_e, vh_s, vh_e, \
+                                 mb00, mbNN, repeat(nbc), repeat(NCpSC), repeat(block_inv), repeat(use_dace), repeat(validate_dace), repeat(ref_flag))
         
     if compute_mode == 0:
         
@@ -256,9 +258,9 @@ def p2w_pool_mpi_gpu_split(
         #     condl[idx] = res[0]
         #     condr[idx] = res[1]
 
-        for ie in range(ne):
-            obc_w_gpu.obc_w_L_lg(dlg_sd[ie], dlg_ed[ie], dll_sd[ie], dll_ed[ie], mr_s[ie], mr_e[ie], \
-                        lg_s[ie], lg_e[ie], ll_s[ie], ll_e[ie], dxr_sd[ie], dxr_ed[ie])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            executor.map(obc_w_gpu.obc_w_L_lg, dlg_sd, dlg_ed, dll_sd, dll_ed, mr_s, mr_e, \
+                        lg_s, lg_e, ll_s, ll_e, dxr_sd, dxr_ed)
 
     l_defect = np.count_nonzero(np.isnan(condl))
     r_defect = np.count_nonzero(np.isnan(condr))
@@ -364,6 +366,40 @@ def p2w_pool_mpi_gpu_split(
         #time_GF = -time.perf_counter()
         time_GF = -time.perf_counter()
 
+    # energy_batchsize = 4
+    # energy_batch = np.arange(0, ne, energy_batchsize)
+    # for ie in energy_batch:
+    #     vh_repetitions = np.min((energy_batchsize, ne - ie))
+    #     vh_diag_batched = np.repeat(vh_diag_copy[:, np.newaxis, :, :], vh_repetitions, axis = 1)
+    #     vh_diag_batched[0,:, :, :] -= dvh_sd[ie:ie+energy_batchsize, :, :]
+    #     vh_diag_batched[-1,:, :, :] -= dvh_ed[ie:ie+energy_batchsize, :, :]
+    #     rgf_W_GPU.rgf_w_opt_standalone_batched_gpu(vh_diag_batched,
+    #                         vh_upper,
+    #                         vh_lower,
+    #                         lg_blco_diag[:, ie:ie+energy_batchsize, :, :],
+    #                         lg_blco_upper[:, ie:ie+energy_batchsize, :, :],
+    #                         lg_blco_lower[:, ie:ie+energy_batchsize, :, :],
+    #                         ll_blco_diag[:, ie:ie+energy_batchsize, :, :],
+    #                         ll_blco_upper[:, ie:ie+energy_batchsize, :, :],
+    #                         ll_blco_lower[:, ie:ie+energy_batchsize, :, :],
+    #                         mr_blco_diag[:, ie:ie+energy_batchsize, :, :],
+    #                         mr_blco_upper[:, ie:ie+energy_batchsize, :, :],
+    #                         mr_blco_lower[:, ie:ie+energy_batchsize, :, :],
+    #                         bmax,
+    #                         bmin,
+    #                         wg_diag_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         wg_upper_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         wl_diag_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         wl_upper_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         wr_diag_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         wr_upper_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         xr_diag_btch[:, ie:ie+energy_batchsize, :, :],
+    #                         dosw[ie:ie+energy_batchsize, :], new[ie:ie+energy_batchsize, :], npw[ie:ie+energy_batchsize, :],
+    #                         nbc,
+    #                         idx_e[ie:ie+energy_batchsize],
+    #                         factor)
+
+
     energy_batchsize = 4
     energy_batch = np.arange(0, ne, energy_batchsize)
     for ie in energy_batch:
@@ -371,7 +407,7 @@ def p2w_pool_mpi_gpu_split(
         vh_diag_batched = np.repeat(vh_diag_copy[:, np.newaxis, :, :], vh_repetitions, axis = 1)
         vh_diag_batched[0,:, :, :] -= dvh_sd[ie:ie+energy_batchsize, :, :]
         vh_diag_batched[-1,:, :, :] -= dvh_ed[ie:ie+energy_batchsize, :, :]
-        rgf_W_GPU.rgf_w_opt_standalone_batched_gpu(vh_diag_batched,
+        rgf_W_lumi.rgf_w_opt_standalone_batched_gpu(vh_diag_batched,
                             vh_upper,
                             vh_lower,
                             lg_blco_diag[:, ie:ie+energy_batchsize, :, :],
@@ -393,9 +429,7 @@ def p2w_pool_mpi_gpu_split(
                             wr_upper_btch[:, ie:ie+energy_batchsize, :, :],
                             xr_diag_btch[:, ie:ie+energy_batchsize, :, :],
                             dosw[ie:ie+energy_batchsize, :], new[ie:ie+energy_batchsize, :], npw[ie:ie+energy_batchsize, :],
-                            nbc,
-                            idx_e[ie:ie+energy_batchsize],
-                            factor)
+                            nbc)
 
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     #     # Use the map function to apply the inv_matrices function to each pair of matrices in parallel

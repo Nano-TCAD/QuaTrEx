@@ -1193,6 +1193,9 @@ def rgf_w_opt_standalone_batched_gpu(
         slb_c = slice(bmin_mm[idx_ib], bmax_mm[idx_ib] + 1)
         slb_p = slice(bmin_mm[idx_ib - 1], bmax_mm[idx_ib - 1] + 1)
 
+        # if(idx_ib == nb_mm -2):
+        #     print("second last block")
+
         # blocks from previous step
         # avoids a read out operation
         xr_diag_rgf_c = xr_diag_rgf_n
@@ -1270,7 +1273,7 @@ def rgf_w_opt_standalone_batched_gpu(
             xr_upper[idx_ib, :,  :lb_i, :lb_n] = -xr_diag_c @ mr_upper_gpu[idx_ib, :, :lb_i, :lb_n] @ xr_diag_rgf_n
             xr_lower[idx_ib, :,  :lb_n, :lb_i] = -xr_diag_rgf_n @ mr_lower_gpu[idx_ib, :, :lb_n, :lb_i] @ xr_diag_c
             
-            wr_diag_c = xr_lower[idx_ib - 1, :, :lb_i, :lb_n] @ cp.repeat(vh_upper_gpu[idx_ib - 1, cp.newaxis, :lb_p, :lb_i], energy_batchsize, axis=0) + xr_diag_gpu[idx_ib, :lb_i, :lb_i] @ vh_diag_gpu[idx_ib, :, :lb_i, :lb_i] + \
+            wr_diag_c = xr_lower[idx_ib - 1, :, :lb_i, :lb_n] @ cp.repeat(vh_upper_gpu[idx_ib - 1, cp.newaxis, :lb_p, :lb_i], energy_batchsize, axis=0) + xr_diag_gpu[idx_ib, :,  :lb_i, :lb_i] @ vh_diag_gpu[idx_ib, :, :lb_i, :lb_i] + \
                 xr_upper[idx_ib, :lb_i, :lb_n] @ cp.repeat(vh_lower_gpu[idx_ib, cp.newaxis, :lb_n, :lb_i], energy_batchsize, axis=0)
             wr_diag_gpu[idx_ib, :, :lb_i, :lb_i] = wr_diag_c
 

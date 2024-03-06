@@ -176,7 +176,7 @@ def rgf_w_opt_standalone_batched_gpu(
             nml = mr_lower_gpu[ndix]
             nlgd = lg_diag_gpu[ndix]
             nlgu = lg_upper_gpu[ndix]
-            nlgd = lg_lower_gpu[ndix]
+            nlgl = lg_lower_gpu[ndix]
             nlld = ll_diag_gpu[ndix]
             nllu = ll_upper_gpu[ndix]
             nlll = ll_lower_gpu[ndix]
@@ -189,7 +189,7 @@ def rgf_w_opt_standalone_batched_gpu(
             nml.set(mr_lower[nIB])
             nlgd.set(lg_diag[nIB])
             nlgu.set(lg_upper[nIB])
-            nlgd.set(lg_lower[nIB])
+            nlgl.set(lg_lower[nIB])
             nlld.set(ll_diag[nIB])
             nllu.set(ll_upper[nIB])
             nlll.set(ll_lower[nIB])
@@ -208,7 +208,7 @@ def rgf_w_opt_standalone_batched_gpu(
     xr_d_rgf_h = cp.conjugate(xr_d_rgf[:, 0:NN, 0:NN].transpose((0, 2, 1)))
     cp.matmul(xr_d_rgf[:, 0:NN, 0:NN], vhd[:, 0:NN, 0:NN], out=wr_d_rgf[:, 0:NN, 0:NN])
     cp.matmul(xr_d_rgf[:, 0:NN, 0:NN] @ lld[:, 0:NN, 0:NN], xr_d_rgf_h[:, 0:NN, 0:NN], out=wl_d_rgf[:, 0:NN, 0:NN])
-    cp.matmul(xr_d_rgf_h[:, 0:NN, 0:NN] @ lgd[:, 0:NN, 0:NN], xr_d_rgf[:, 0:NN, 0:NN], out=wg_d_rgf[:, 0:NN, 0:NN])
+    cp.matmul(xr_d_rgf[:, 0:NN, 0:NN] @ lgd[:, 0:NN, 0:NN], xr_d_rgf_h[:, 0:NN, 0:NN], out=wg_d_rgf[:, 0:NN, 0:NN])
 
     # Rest of iterations
     for IB in range(nb_mm - 2, -1, -1):
@@ -254,7 +254,7 @@ def rgf_w_opt_standalone_batched_gpu(
                 nml = mr_lower_gpu[ndix]
                 nlgd = lg_diag_gpu[ndix]
                 nlgu = lg_upper_gpu[ndix]
-                nlgd = lg_lower_gpu[ndix]
+                nlgl = lg_lower_gpu[ndix]
                 nlld = ll_diag_gpu[ndix]
                 nllu = ll_upper_gpu[ndix]
                 nlll = ll_lower_gpu[ndix]
@@ -267,7 +267,7 @@ def rgf_w_opt_standalone_batched_gpu(
                 nml.set(mr_lower[nIB])
                 nlgd.set(lg_diag[nIB])
                 nlgu.set(lg_upper[nIB])
-                nlgd.set(lg_lower[nIB])
+                nlgl.set(lg_lower[nIB])
                 nlld.set(ll_diag[nIB])
                 nllu.set(ll_upper[nIB])
                 nlll.set(ll_lower[nIB])
@@ -310,9 +310,9 @@ def rgf_w_opt_standalone_batched_gpu(
         mu_pwl_muh = mu @ pwl_d_rgf[:, 0:NP, 0:NP] @ muh - al_diff
         mu_pxr_vhl = mu_pxr @ cp.repeat(vhl[cp.newaxis, 0:NP, 0:NI], energy_batchsize, axis=0)
 
-        cp.multiply(xr_d_rgf[:, 0:NI, 0:NI] @ (lgd[:, 0:NI, 0:NI] + mu_pwg_muh), xr_d_rgf_h[:, 0:NI, 0:NI], out=wg_d_rgf)
-        cp.multiply(xr_d_rgf[:, 0:NI, 0:NI] @ (lld[:, 0:NI, 0:NI] + mu_pwl_muh), xr_d_rgf_h[:, 0:NI, 0:NI], out=wl_d_rgf)
-        cp.multiply(xr_d_rgf[:, 0:NI, 0:NI], vhd[:, 0:NI, 0:NI] - mu_pxr_vhl, out=wr_d_rgf)
+        cp.matmul(xr_d_rgf[:, 0:NI, 0:NI] @ (lgd[:, 0:NI, 0:NI] + mu_pwg_muh), xr_d_rgf_h[:, 0:NI, 0:NI], out=wg_d_rgf)
+        cp.matmul(xr_d_rgf[:, 0:NI, 0:NI] @ (lld[:, 0:NI, 0:NI] + mu_pwl_muh), xr_d_rgf_h[:, 0:NI, 0:NI], out=wl_d_rgf)
+        cp.matmul(xr_d_rgf[:, 0:NI, 0:NI], vhd[:, 0:NI, 0:NI] - mu_pxr_vhl, out=wr_d_rgf)
 
         if IB == 0:
             computation_stream.synchronize()
@@ -325,7 +325,6 @@ def rgf_w_opt_standalone_batched_gpu(
                 wg_diag_gpu[0].get(out=wg_diag[0])
                 wl_diag_gpu[0].get(out=wl_diag[0])
 
-            dosw_gpu[:, 0] = 1j * cp.trace(wr_d_rgf[:, 0:NI, 0:NI] - wr_d_rgf[:, 0:NI, 0:NI].conjugate().transpose((0,2,1)), axis1=1, axis2=2)
             nEw_gpu[:, 0] = -1j * cp.trace(wl_d_rgf[:, 0:NI, 0:NI], axis1=1, axis2=2)
             nPw_gpu[:, 0] = 1j * cp.trace(wg_d_rgf, axis1=1, axis2=2)
 
@@ -373,26 +372,26 @@ def rgf_w_opt_standalone_batched_gpu(
             npml = mr_lower_gpu[ndix]
             nplgl = lg_lower_gpu[ndix]
             nplll = ll_lower_gpu[ndix]
+            npvhu = vh_upper_gpu[ndix]
+            nvhd = vh_diag_gpu[ndix]
 
             npmu.set(mr_upper[IB])
             npml.set(mr_lower[IB])
+            npvhu.set(vh_upper[IB])
+            nvhd.set(vh_diag[nIB])
             nplgl.set(lg_lower[IB])
             nplll.set(ll_lower[IB])
 
             if nIB < nb_mm - 1:
                 nmu = mr_diag_gpu[ndix] # use diag here because upper is already used.
                 nml = ll_diag_gpu[ndix] # use diag here because lower is already used.
-                npvhu = vh_upper_gpu[ndix]
                 nvhl = vh_lower_gpu[ndix]
-                nvhd = vh_diag_gpu[ndix]
                 nlgu = lg_upper_gpu[ndix]
                 nllu = ll_upper_gpu[ndix]
 
                 nmu.set(mr_upper[nIB])
                 nml.set(mr_lower[nIB])
-                npvhu.set(vh_upper[IB])
                 nvhl.set(vh_lower[nIB])
-                nvhd.set(vh_diag[nIB])
                 nlgu.set(lg_upper[nIB])
                 nllu.set(ll_upper[nIB])
 
@@ -404,8 +403,8 @@ def rgf_w_opt_standalone_batched_gpu(
     pxr_ml = pxr_d_rgf[:, 0:NP, 0:NP] @ ml[:, 0:NP, 0:NI]
     pxr_ml_h = pxr_ml.conjugate().transpose((0, 2, 1))
 
-    cp.multiply(-xr_d_rgf[:, 0:NI, 0:NI] @ mu[:, 0:NI, 0:NP], pxr_d_rgf[:, 0:NP, 0:NP], out=XRu[:, 0:NI, 0:NP])
-    cp.multiply(-pxr_d_rgf[:, 0:NP, 0:NP] @ ml[:, 0:NP, 0:NI], xr_d_rgf[:, 0:NI, 0:NI], out=XRl[:, 0:NP, 0:NI])
+    cp.matmul(-xr_d_rgf[:, 0:NI, 0:NI] @ mu[:, 0:NI, 0:NP], pxr_d_rgf[:, 0:NP, 0:NP], out=XRu[:, 0:NI, 0:NP])
+    cp.matmul(-pxr_d_rgf[:, 0:NP, 0:NP] @ ml[:, 0:NP, 0:NI], xr_d_rgf[:, 0:NI, 0:NI], out=XRl[:, 0:NP, 0:NI])
 
     xrd_vhd = xr_d_rgf[:, 0:NI, 0:NI] @ vhd[:, 0:NI, 0:NI]
     xru_vhl = XRu[:, 0:NI, 0:NP] @ cp.repeat(vhl[cp.newaxis, 0:NP, 0:NI], energy_batchsize, axis=0)
@@ -413,7 +412,7 @@ def rgf_w_opt_standalone_batched_gpu(
     cp.add(xrd_vhd, xru_vhl, out=WR[:, 0:NI, 0:NI])
 
     wrd_mrlt = WR[:, 0:NI, 0:NI] @ ml[:, 0:NP, 0:NI].transpose((0,2,1))
-    cp.multiply(cp.repeat(vhu[cp.newaxis, 0:NI, 0:NP], energy_batchsize, axis=0) - wrd_mrlt[:, 0:NI, 0:NP], pxr_d_rgf[:, 0:NP, 0:NP].transpose((0,2,1)), out=WRu[:, 0:NI, 0:NP])
+    cp.matmul(cp.repeat(vhu[cp.newaxis, 0:NI, 0:NP], energy_batchsize, axis=0) - wrd_mrlt[:, 0:NI, 0:NP], pxr_d_rgf[:, 0:NP, 0:NP].transpose((0,2,1)), out=WRu[:, 0:NI, 0:NP])
 
     pxrh = pxr_d_rgf[:, 0:NP, 0:NP].conjugate().transpose((0, 2, 1))
     xrd_lgu_pxrh = xr_d_rgf[:, 0:NI, 0:NI] @ lgu[:, 0:NI, 0:NP] @ pxrh[:, 0:NP, 0:NP]
@@ -425,13 +424,18 @@ def rgf_w_opt_standalone_batched_gpu(
     wgd_pxr_ml_h = wg_d_rgf[:, 0:NI, 0:NI] @ pxr_ml_h[:, 0:NI, 0:NP]
     wld_pxr_ml_h = wl_d_rgf[:, 0:NI, 0:NI] @ pxr_ml_h[:, 0:NI, 0:NP]
 
-    cp.add(xrd_lgu_pxrh - xrd_mru_pwgd,  wgd_pxr_ml_h,out=WGu[:, 0:NI, 0:NP])
-    cp.add(xrd_llu_pxrh - xrd_mru_pwld,  wld_pxr_ml_h,out=WLu[:, 0:NI, 0:NP])
+    cp.subtract(xrd_lgu_pxrh - xrd_mru_pwgd,  wgd_pxr_ml_h,out=WGu[:, 0:NI, 0:NP])
+    cp.subtract(xrd_llu_pxrh - xrd_mru_pwld,  wld_pxr_ml_h,out=WLu[:, 0:NI, 0:NP])
+
 
     computation_stream.synchronize()
+    dosw_gpu[:, 0] = 1j * cp.trace(WR[:, 0:NI, 0:NI] - WR[:, 0:NI, 0:NI].conjugate().transpose((0,2,1)), axis1=1, axis2=2)
+
+
     computation_event.record(stream = computation_stream)
     with output_stream:
         output_stream.wait_event(event = computation_event)
+        WR.get(out=wr_diag[0])
         WRu.get(out=wr_upper[0])
         WLu.get(out=wl_upper[0])
         WGu.get(out=wg_upper[0])
@@ -474,33 +478,37 @@ def rgf_w_opt_standalone_batched_gpu(
 
         computation_stream.synchronize()
         with input_stream:
-            npmu = mr_upper_gpu[idx]
-            npml = mr_lower_gpu[idx]
-            nplgl = lg_lower_gpu[idx]
-            nplll = ll_lower_gpu[idx]
 
-            npmu.set(mr_upper[IB])
-            npml.set(mr_lower[IB])
-            nplgl.set(lg_lower[IB])
-            nplll.set(ll_lower[IB])
-
-            if nIB < nb_mm - 1:
-                nmu = mr_diag_gpu[ndix] # use diag here because upper is already used.
-                nml = ll_diag_gpu[ndix] # use diag here because lower is already used.
+            if nIB < nb_mm:
+                npmu = mr_upper_gpu[idx]
+                npml = mr_lower_gpu[idx]
+                nplgl = lg_lower_gpu[idx]
+                nplll = ll_lower_gpu[idx]
                 npvhu = vh_upper_gpu[ndix]
-                nvhl = vh_lower_gpu[ndix]
                 nvhd = vh_diag_gpu[ndix]
-                nlgu = lg_upper_gpu[ndix]
-                nllu = ll_upper_gpu[ndix]
 
-                nmu.set(mr_upper[nIB])
-                nml.set(mr_lower[nIB])
+                # NOTE: These are already on the GPU from the previous iteration
+                # npmu.set(mr_upper[IB])
+                # npml.set(mr_lower[IB])
+                npmu[:] = mr_diag_gpu[idx]
+                npml[:] = ll_diag_gpu[idx]
+                nplgl.set(lg_lower[IB])
+                nplll.set(ll_lower[IB])
                 npvhu.set(vh_upper[IB])
-                nvhl.set(vh_lower[nIB])
                 nvhd.set(vh_diag[nIB])
-                nlgu.set(lg_upper[nIB])
-                nllu.set(ll_upper[nIB])
-            #uploads
+
+                if nIB < nb_mm - 1:
+                    nmu = mr_diag_gpu[ndix] # use diag here because upper is already used.
+                    nml = ll_diag_gpu[ndix] # use diag here because lower is already used.
+                    nvhl = vh_lower_gpu[ndix]
+                    nlgu = lg_upper_gpu[ndix]
+                    nllu = ll_upper_gpu[ndix]
+
+                    nmu.set(mr_upper[nIB])
+                    nml.set(mr_lower[nIB])
+                    nvhl.set(vh_lower[nIB])
+                    nlgu.set(lg_upper[nIB])
+                    nllu.set(ll_upper[nIB])
             input_events[ndix].record(stream = input_stream)
 
         computation_stream.wait_event(event = input_events[idx])
@@ -545,17 +553,17 @@ def rgf_w_opt_standalone_batched_gpu(
             pvhu = vh_upper_gpu[idx]
             vhl = vh_lower_gpu[idx]
 
-            nxr_d_rgf = xr_diag_gpu[nIB]
-            nwg_d_rgf = wg_diag_gpu[nIB]
-            nwl_d_rgf = wl_diag_gpu[nIB]
+            nxr_d_rgf = xr_diag_rgf[nIB]
+            nwg_d_rgf = wg_diag_rgf[nIB]
+            nwl_d_rgf = wl_diag_rgf[nIB]
 
             nxr_d_rgf_h = nxr_d_rgf[:, 0:NP, 0:NP].conjugate().transpose((0, 2, 1))
 
             nxrd_ml = nxr_d_rgf[:, 0:NI, 0:NI] @ ml[:, 0:NI, 0:NP]
             nxrd_ml_h = nxrd_ml.conjugate().transpose((0, 2, 1))
 
-            cp.multiply(-XR[:, 0:NI, 0:NI] @ mu[:, 0:NI, 0:NP], nxr_d_rgf[:, 0:NP, 0:NP], out=XRu[:, 0:NI, 0:NP])
-            cp.multiply(-nxr_d_rgf[:, 0:NP, 0:NP] @ ml[:, 0:NP, 0:NI], XR[:, 0:NI, 0:NI], out=XRl[:, 0:NP, 0:NI])
+            cp.matmul(-XR[:, 0:NI, 0:NI] @ mu[:, 0:NI, 0:NP], nxr_d_rgf[:, 0:NP, 0:NP], out=XRu[:, 0:NI, 0:NP])
+            cp.matmul(-nxr_d_rgf[:, 0:NP, 0:NP] @ ml[:, 0:NP, 0:NI], XR[:, 0:NI, 0:NI], out=XRl[:, 0:NP, 0:NI])
 
             pXRl_pvhu = pXRl[:, 0:NI, 0:NP] @ cp.repeat(pvhu[cp.newaxis, 0:NP, 0:NI], energy_batchsize, axis=0)
             XR_vhd = XR[:, 0:NI, 0:NI] @ vhd[:, 0:NI, 0:NI]
@@ -565,7 +573,7 @@ def rgf_w_opt_standalone_batched_gpu(
 
             # WR_E_kk+1 = (V_k+1k.T - WR_E_kk*M_E_k+1k.T) * xR_E_k+1k+1.T
             vhl_t_nxr_d_rgf_t = cp.repeat(vhl[cp.newaxis, 0:NP, 0:NI], energy_batchsize, axis=0).transpose((0, 2, 1)) @ nxr_d_rgf[:, 0:NP, 0:NP].transpose((0, 2, 1))
-            WR_nxrd_t = WR[:, 0:NI, 0:NI] @ nxr_d_rgf[:, 0:NP, 0:NI].transpose((0, 2, 1))
+            WR_nxrd_t = WR[:, 0:NI, 0:NI] @ nxrd_ml[:, 0:NP, 0:NI].transpose((0, 2, 1))
             cp.subtract(vhl_t_nxr_d_rgf_t, WR_nxrd_t, out=WRu[:, 0:NI, 0:NP])
 
             # W^{\lessgtr}_E_kk+1 = XR_E_kk*(L^{\lessgtr}_E_kk+1*xR_E_k+1k+1.H - M_E_kk+1*w^{\lessgtr}_E_k+1k+1) - W^{\lessgtr}_E_kk*M_E_k+1k.H*xxR_E_k+1k+1.H
@@ -588,6 +596,10 @@ def rgf_w_opt_standalone_batched_gpu(
 
         
         else:
+            pvhu = vh_upper_gpu[idx]
+            vhd = vh_diag_gpu[idx]
+            pXRl_pvhu = pXRl[:, 0:NI, 0:NP] @ cp.repeat(pvhu[cp.newaxis, 0:NP, 0:NI], energy_batchsize, axis=0)
+            XR_vhd = XR[:, 0:NI, 0:NI] @ vhd[:, 0:NI, 0:NI]
             cp.add(pXRl_pvhu, XR_vhd, out=WR[:, 0:NI, 0:NI])
             computation_stream.synchronize()
             computation_event.record(stream = computation_stream)
@@ -602,6 +614,8 @@ def rgf_w_opt_standalone_batched_gpu(
         nEw_gpu[:, IB] = -1j * cp.trace(WL[:, 0:NI, 0:NI], axis1=1, axis2=2)
         nPw_gpu[:, IB] = 1j * cp.trace(WG[:, 0:NI, 0:NI], axis1=1, axis2=2)
 
+    
+    computation_stream.synchronize()
     dosw_gpu.get(out=dosw)
     nEw_gpu.get(out=nEw)
     nPw_gpu.get(out=nPw)    

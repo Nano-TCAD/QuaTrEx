@@ -160,7 +160,7 @@ def calc_GF_pool_mpi_split_memopt(
         # executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
         #              repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
         #results = 
-        executor.map(obc_GF_cpu, rgf_M_0,
+        executor.map(obc_GF_gpu, rgf_M_0,
            SigR,
            fL,
            fR,
