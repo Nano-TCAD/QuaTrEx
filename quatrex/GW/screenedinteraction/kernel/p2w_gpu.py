@@ -244,7 +244,7 @@ def p2w_pool_mpi_gpu_split(
     else:
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-            executor.map(obc_w_cpu.obc_w_cpu_beynonly, dxr_sd, dxr_ed,
+            executor.map(obc_w_gpu.obc_w_gpu_beynonly, dxr_sd, dxr_ed,
                                 dvh_sd, dvh_ed,
                                 dmr_sd, dmr_ed,
                                 mr_s, mr_e, vh_s, vh_e, mb00, mbNN,
