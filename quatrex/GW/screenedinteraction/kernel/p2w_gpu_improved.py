@@ -21,6 +21,36 @@ from quatrex.utils.matrix_creation import (
 )
 
 
+def spgemm(A, B, rows: int = 4096):
+    C = None
+    for i in range(0, A.shape[0], rows):
+        A_block = A[i:min(A.shape[0], i+rows)]
+        C_block = A_block @ B
+        if C is None:
+            C = C_block
+        else:
+            C = cpx.scipy.sparse.vstack([C, C_block], format="csr")
+    return C
+
+
+def spgemm_direct(A, B, C, rows: int = 4096):
+    idx = 0
+    for i in range(0, A.shape[0], rows):
+        A_block = A[i:min(A.shape[0], i+rows)]
+        C_block = A_block @ B
+        C[idx : idx + C_block.nnz] = C_block.data
+        idx += C_block.nnz
+
+
+def sp_mm_gpu(pr, pg, pl, vh_cpu, mr, lg, ll, nao):
+    """Matrix multiplication with sparse matrices """
+    vh_dev = cp.sparse.csr_matrix(vh_cpu)
+    vh_ct_dev = vh_dev.T.conj(copy=False)
+    mr[:] = (cp.sparse.identity(nao) - spgemm(vh_dev, cp.sparse.csr_matrix(pr))).data
+    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pg)), vh_ct_dev, lg)
+    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pl)), vh_ct_dev, ll)
+
+
 def calc_W_pool_mpi_split(
     # Hamiltonian object.
     hamiltonian_obj,
@@ -380,21 +410,35 @@ def calc_W_pool_mpi_split(
 
     # TODO: Have someone figure out which are the most memory-efficient
     # calls to spmm on the GPU and implement them.
+        
+    use_gpu = True
+    if use_gpu:
+        nao = vh.shape[0]
+        mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
+        lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+        ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+        for ie in range(ne):
+            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[ie], lg_dev[ie], ll_dev[ie], nao)
+        
+        mr_host = cp.asnumpy(mr_dev)
+        lg_host = cp.asnumpy(lg_dev)
+        ll_host = cp.asnumpy(ll_dev)
 
-    vh_ct = vh.conj().transpose()
-    nao = vh.shape[0]
-    mr = []
-    lg = []
-    ll = []
+    else:
+        vh_ct = vh.conj().transpose()
+        nao = vh.shape[0]
+        mr = []
+        lg = []
+        ll = []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        results = executor.map(
-            rgf_W_GPU.sp_mm_cpu, pr, pg, pl, repeat(vh), repeat(vh_ct), repeat(nao)
-        )
-        for res in results:
-            mr.append(res[0])
-            lg.append(res[1])
-            ll.append(res[2])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            results = executor.map(
+                rgf_W_GPU.sp_mm_cpu, pr, pg, pl, repeat(vh), repeat(vh_ct), repeat(nao)
+            )
+            for res in results:
+                mr.append(res[0])
+                lg.append(res[1])
+                ll.append(res[2])
 
     comm.Barrier()
     if rank == 0:
@@ -416,25 +460,31 @@ def calc_W_pool_mpi_split(
     mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
     mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
 
-    # Canonicalize the sparse matrices.
-    [m.sum_duplicates() for m in mr]
-    [l.sum_duplicates() for l in lg]
-    [l.sum_duplicates() for l in ll]
-    assert all(m.has_canonical_format for m in mr)
-    assert all(l.has_canonical_format for l in lg)
-    assert all(l.has_canonical_format for l in ll)
+    if use_gpu:
+        mr_rgf = mr_host
+        lg_rgf = lg_host
+        ll_rgf = ll_host
+    else:
 
-    # Extract the data from the sparse matrices.
-    # NOTE: Kinda inefficient but ll_rgf can be ragged so this is safer.
-    mr_rgf = np.array([m[rows_m, columns_m] for m in mr])
-    lg_rgf = np.array([l[rows_l, columns_l] for l in lg])
-    ll_rgf = np.array([l[rows_l, columns_l] for l in ll])
+        # Canonicalize the sparse matrices.
+        [m.sum_duplicates() for m in mr]
+        [l.sum_duplicates() for l in lg]
+        [l.sum_duplicates() for l in ll]
+        assert all(m.has_canonical_format for m in mr)
+        assert all(l.has_canonical_format for l in lg)
+        assert all(l.has_canonical_format for l in ll)
+
+        # Extract the data from the sparse matrices.
+        # NOTE: Kinda inefficient but ll_rgf can be ragged so this is safer.
+        mr_rgf = np.array([m[rows_m, columns_m] for m in mr])
+        lg_rgf = np.array([l[rows_l, columns_l] for l in lg])
+        ll_rgf = np.array([l[rows_l, columns_l] for l in ll])
+        # NOTE: For some reason mr_rgf has an unneeded dimension. Remove it.
+        mr_rgf = mr_rgf[:, 0, :]
 
     # Sanity checks.
     assert lg_rgf.shape[1] == rows_l.size
     assert ll_rgf.shape[1] == rows_l.size
-    # NOTE: For some reason mr_rgf has an unneeded dimension. Remove it.
-    mr_rgf = mr_rgf[:, 0, :]
     assert mr_rgf.shape[1] == rows_m.size
 
     vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
