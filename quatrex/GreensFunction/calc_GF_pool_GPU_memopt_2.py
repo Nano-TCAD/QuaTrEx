@@ -17,8 +17,7 @@ from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 
 import quatrex.block_tri_solvers.rgf_GF_GPU_combo as rgf_GF_GPU_combo
-from quatrex.OBC.obc_gf_cpu import obc_GF_cpu
-from quatrex.OBC.obc_gf_gpu import obc_GF_gpu
+from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
 
 from operator import mul
 
@@ -110,10 +109,63 @@ def calc_GF_pool_mpi_split_memopt(
     condr = np.zeros((ne), dtype = np.float64)
 
 
-    rgf_M_0 = generator_rgf_GF(energy, DH)
-    index_e = np.arange(ne)
+    # rgf_M_0 = generator_rgf_GF(energy, DH)
+    # index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
+
+    sl_rgf, sg_rgf, sr_rgf = self_energy_preprocess_2d(sl_h2g, sg_h2g, sr_h2g, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji,  NCpSC, bmin, bmax, False)
+    mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
+    mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
+    mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+
+    hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
+    overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
+    input_stream = cp.cuda.stream.Stream(non_blocking=True)
+
+    M00_left = cp.empty((ne, LBsize, LBsize), dtype = np.complex128)
+    M01_left = cp.empty((ne, LBsize, RBsize), dtype = np.complex128)
+    M10_left = cp.empty((ne, RBsize, LBsize), dtype = np.complex128)
+    M00_right = cp.empty((ne, RBsize, RBsize), dtype = np.complex128)
+    M01_right = cp.empty((ne, RBsize, LBsize), dtype = np.complex128)
+    M10_right = cp.empty((ne, LBsize, RBsize), dtype = np.complex128)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_diag, 0, M00_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_upper, 0, M01_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_lower, 0, M10_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_diag, 1, M00_right)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_upper, 1, M01_right)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_lower, 1, M10_right)
+
+    batch_size = len(energy)
+    block_size = LBsize
+    num_threads = min(1024, block_size)
+    num_thread_blocks = batch_size * block_size
+    energy_dev = cp.asarray(energy)
+    hd, sd = cp.sparse.csr_matrix(hamiltonian_diag[0]), cp.sparse.csr_matrix(overlap_diag[0])
+    hu, su = cp.sparse.csr_matrix(hamiltonian_upper[0]), cp.sparse.csr_matrix(overlap_upper[0])
+    hl, sl = cp.sparse.csr_matrix(hamiltonian_lower[0]), cp.sparse.csr_matrix(overlap_lower[0])
+    block_size = LBsize
+    num_threads = min(1024, block_size)
+    num_thread_blocks = batch_size * block_size
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hd.data, hd.indices, hd.indptr, sd.data, sd.indices, sd.indptr, M00_left, M00_left, batch_size, block_size)
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hu.data, hu.indices, hu.indptr, su.data, su.indices, su.indptr, M01_left, M01_left, batch_size, block_size)
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hl.data, hl.indices, hl.indptr, sl.data, sl.indices, sl.indptr, M10_left, M10_left, batch_size, block_size)
+    hd, sd = cp.sparse.csr_matrix(hamiltonian_diag[-1]), cp.sparse.csr_matrix(overlap_diag[-1])
+    hu, su = cp.sparse.csr_matrix(hamiltonian_upper[-1]), cp.sparse.csr_matrix(overlap_upper[-1])
+    hl, sl = cp.sparse.csr_matrix(hamiltonian_lower[-1]), cp.sparse.csr_matrix(overlap_lower[-1])
+    block_size = RBsize
+    num_threads = min(1024, block_size)
+    num_thread_blocks = batch_size * block_size
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hd.data, hd.indices, hd.indptr, sd.data, sd.indices, sd.indptr, M00_right, M00_right, batch_size, block_size)
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hu.data, hu.indices, hu.indptr, su.data, su.indices, su.indptr, M01_right, M01_right, batch_size, block_size)
+    rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
+        energy_dev, hl.data, hl.indices, hl.indptr, sl.data, sl.indices, sl.indptr, M10_right, M10_right, batch_size, block_size)
+    cp.cuda.Stream.null.synchronize()
 
     # for ie in range(ne):
     #     #SigL[ie] = 1j * np.imag(SigL[ie])
@@ -160,8 +212,7 @@ def calc_GF_pool_mpi_split_memopt(
         # executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
         #              repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
         #results = 
-        executor.map(obc_GF_gpu, rgf_M_0,
-           SigR,
+        executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
            fL,
            fR,
            SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
