@@ -298,9 +298,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     GL_compressed = cp.zeros_like(GL_host)
     GG_compressed = cp.zeros_like(GG_host)
 
-    SR_dev = cp.empty_like(SR_host)
-    SL_dev = cp.empty_like(SL_host)
-    SG_dev = cp.empty_like(SG_host)
+    SR_dev = cp.empty_like(SR_host) if isinstance(SR_host, np.ndarray) else None
+    SL_dev = cp.empty_like(SL_host) if isinstance(SL_host, np.ndarray) else None
+    SG_dev = cp.empty_like(SG_host) if isinstance(SG_host, np.ndarray) else None
     SigRB_dev = [None for _ in range(num_blocks)]
     SigLB_dev = [None for _ in range(num_blocks)]
     SigGB_dev = [None for _ in range(num_blocks)]
@@ -326,9 +326,14 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                 map_lower_dev[i].set(map_lower[i])
         _copy_csr_to_gpu(H_diag_host[IB], H_diag_buffer[idx])
         _copy_csr_to_gpu(S_diag_host[IB], S_diag_buffer[idx])
-        SR_dev.set(SR_host)
-        SL_dev.set(SL_host)
-        SG_dev.set(SG_host)
+        if SR_dev is not None:
+            SR_dev.set(SR_host)
+            SL_dev.set(SL_host)
+            SG_dev.set(SG_host)
+        else:
+            SR_dev = SR_host
+            SL_dev = SL_host
+            SG_dev = SG_host
         input_events[idx].record(stream=input_stream)
 
         if num_blocks > 1:
