@@ -39,6 +39,7 @@ if utils_gpu.gpu_avail():
     try:
         from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt
         from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
+        from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
         from quatrex.GW.polarization.kernel import g2p_gpu
         from quatrex.GW.selfenergy.kernel import gw2s_gpu
     except ImportError:
