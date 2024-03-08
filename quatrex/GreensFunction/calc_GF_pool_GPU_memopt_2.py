@@ -114,10 +114,20 @@ def calc_GF_pool_mpi_split_memopt(
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
-    sl_rgf, sg_rgf, sr_rgf = self_energy_preprocess_2d(sl_h2g, sg_h2g, sr_h2g, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji,  NCpSC, bmin, bmax, False)
+    sl_rgf_dev = cp.asarray(sl_h2g)
+    sg_rgf_dev = cp.asarray(sg_h2g)
+    sr_rgf_dev = cp.asarray(sr_h2g)
+    sl_phn_dev = cp.asarray(sl_phn)
+    sg_phn_dev = cp.asarray(sg_phn)
+    sr_phn_dev = cp.asarray(sr_phn)
+    rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+    # NCpSC, bmin, bmax, False)
     mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
     mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
     mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+    mapping_diag_dev = cp.asarray(mapping_diag)
+    mapping_upper_dev = cp.asarray(mapping_upper)
+    mapping_lower_dev = cp.asarray(mapping_lower)
 
     hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
     overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
@@ -129,21 +139,50 @@ def calc_GF_pool_mpi_split_memopt(
     M00_right = cp.empty((ne, RBsize, RBsize), dtype = np.complex128)
     M01_right = cp.empty((ne, RBsize, LBsize), dtype = np.complex128)
     M10_right = cp.empty((ne, LBsize, RBsize), dtype = np.complex128)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_diag, 0, M00_left)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_upper, 0, M01_left)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_lower, 0, M10_left)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_diag, 1, M00_right)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_upper, 1, M01_right)
-    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf, mapping_lower, 1, M10_right)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_diag_dev, 0, M00_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_upper_dev, 0, M01_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_lower_dev, 0, M10_left)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_diag_dev, nb-1, M00_right)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_upper_dev, nb-2, M01_right)
+    rgf_GF_GPU_combo._get_dense_block_batch(sr_rgf_dev, mapping_lower_dev, nb-2, M10_right)
+
+    csr_matrix = rgf_GF_GPU_combo.csr_matrix
+    hdtype = np.complex128
+    block_size = max(LBsize, RBsize)
+
+    H_diag_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                cp.empty(block_size * block_size, cp.int32),
+                                cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    H_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    H_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_diag_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                cp.empty(block_size * block_size, cp.int32),
+                                cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_upper_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
+    S_lower_buffer = [csr_matrix(cp.empty(block_size * block_size, hdtype),
+                                 cp.empty(block_size * block_size, cp.int32),
+                                 cp.empty(block_size + 1, cp.int32),) for _ in range(2)]
 
     batch_size = len(energy)
     block_size = LBsize
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
     energy_dev = cp.asarray(energy)
-    hd, sd = cp.sparse.csr_matrix(hamiltonian_diag[0]), cp.sparse.csr_matrix(overlap_diag[0])
-    hu, su = cp.sparse.csr_matrix(hamiltonian_upper[0]), cp.sparse.csr_matrix(overlap_upper[0])
-    hl, sl = cp.sparse.csr_matrix(hamiltonian_lower[0]), cp.sparse.csr_matrix(overlap_lower[0])
+    hd, sd = H_diag_buffer[0], S_diag_buffer[0]
+    hu, su = H_upper_buffer[0], S_upper_buffer[0]
+    hl, sl = H_lower_buffer[0], S_lower_buffer[0]
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_diag[0], hd)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_diag[0], sd)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_upper[0], hu)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_upper[0], su)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_lower[0], hl)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_lower[0], sl)
     block_size = LBsize
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
@@ -153,9 +192,15 @@ def calc_GF_pool_mpi_split_memopt(
         energy_dev, hu.data, hu.indices, hu.indptr, su.data, su.indices, su.indptr, M01_left, M01_left, batch_size, block_size)
     rgf_GF_GPU_combo._get_system_matrix[num_thread_blocks, num_threads](
         energy_dev, hl.data, hl.indices, hl.indptr, sl.data, sl.indices, sl.indptr, M10_left, M10_left, batch_size, block_size)
-    hd, sd = cp.sparse.csr_matrix(hamiltonian_diag[-1]), cp.sparse.csr_matrix(overlap_diag[-1])
-    hu, su = cp.sparse.csr_matrix(hamiltonian_upper[-1]), cp.sparse.csr_matrix(overlap_upper[-1])
-    hl, sl = cp.sparse.csr_matrix(hamiltonian_lower[-1]), cp.sparse.csr_matrix(overlap_lower[-1])
+    hd, sd = H_diag_buffer[-1], S_diag_buffer[-1]
+    hu, su = H_upper_buffer[-1], S_upper_buffer[-1]
+    hl, sl = H_lower_buffer[-1], S_lower_buffer[-1]
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_diag[-1], hd)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_diag[-1], sd)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_upper[-1], hu)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_upper[-1], su)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(hamiltonian_lower[-1], hl)
+    rgf_GF_GPU_combo._copy_csr_to_gpu(overlap_lower[-1], sl)
     block_size = RBsize
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
@@ -245,14 +290,14 @@ def calc_GF_pool_mpi_split_memopt(
     if l_defect > 0 or r_defect > 0:
         print("Warning: %d left and %d right boundary conditions are not satisfied." % (l_defect, r_defect))
 
-    sl_rgf, sg_rgf, sr_rgf = self_energy_preprocess_2d(sl_h2g, sg_h2g, sr_h2g, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji,  NCpSC, bmin, bmax, False)
-    mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
-    mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
-    mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+    # sl_rgf, sg_rgf, sr_rgf = self_energy_preprocess_2d(sl_h2g, sg_h2g, sr_h2g, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji,  NCpSC, bmin, bmax, False)
+    # mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
+    # mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
+    # mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
 
-    hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
-    overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
-    input_stream = cp.cuda.stream.Stream(non_blocking=True)
+    # hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
+    # overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
+    # input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
     comm.Barrier()
     if rank == 0:
@@ -274,7 +319,7 @@ def calc_GF_pool_mpi_split_memopt(
                             mapping_diag, mapping_upper, mapping_lower,
                             hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
                             overlap_diag, overlap_upper, overlap_lower,
-                            sr_rgf[ie:ie+energy_batchsize, :], sl_rgf[ie:ie+energy_batchsize, :], sg_rgf[ie:ie+energy_batchsize, :],
+                            sr_rgf_dev[ie:ie+energy_batchsize, :], sl_rgf_dev[ie:ie+energy_batchsize, :], sg_rgf_dev[ie:ie+energy_batchsize, :],
                             SigRBL[ie:ie+energy_batchsize, :, :], SigRBR[ie:ie+energy_batchsize, :, :],
                             SigLBL[ie:ie+energy_batchsize, :, :], SigLBR[ie:ie+energy_batchsize, :, :],
                             SigGBL[ie:ie+energy_batchsize, :, :], SigGBR[ie:ie+energy_batchsize, :, :],
