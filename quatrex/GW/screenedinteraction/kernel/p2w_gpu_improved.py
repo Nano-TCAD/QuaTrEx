@@ -408,9 +408,6 @@ def calc_W_pool_mpi_split(
     # implementation is not efficient. The GPU implementation is not
     # memory efficient.
 
-    # TODO: Have someone figure out which are the most memory-efficient
-    # calls to spmm on the GPU and implement them.
-        
     use_gpu = True
     if use_gpu:
         nao = vh.shape[0]
@@ -443,7 +440,7 @@ def calc_W_pool_mpi_split(
     comm.Barrier()
     if rank == 0:
         time_spmm += time.perf_counter()
-        print("Time for spmm: %.3f s" % time_spmm, flush=True)
+        print("Time for spgemm: %.3f s" % time_spmm, flush=True)
         time_GF_trafo = -time.perf_counter()
 
     # --- Transform L to the (NE, NNZ) format --------------------------
@@ -460,36 +457,27 @@ def calc_W_pool_mpi_split(
     mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
     mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
 
-    if use_gpu:
-        mr_rgf = mr_host
-        lg_rgf = lg_host
-        ll_rgf = ll_host
-    else:
+    vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
+        vh, bmin_mm, bmax_mm + 1
+    )
+    # mr_rgf = np.empty((ne, len(columns_m)), dtype=np.complex128)
+    # lg_rgf = np.empty((ne, len(columns_l)), dtype=np.complex128)
+    # ll_rgf = np.empty((ne, len(columns_l)), dtype=np.complex128)
 
-        # Canonicalize the sparse matrices.
-        [m.sum_duplicates() for m in mr]
-        [l.sum_duplicates() for l in lg]
-        [l.sum_duplicates() for l in ll]
-        assert all(m.has_canonical_format for m in mr)
-        assert all(l.has_canonical_format for l in lg)
-        assert all(l.has_canonical_format for l in ll)
+    # Extract the data from the sparse matrices.
+    # NOTE: Kinda inefficient but ll_rgf can be ragged so this is safer.
+    # def _get_data(x, x_rgf, rows, columns):
+    #     x_rgf[:] = x[rows, columns]
 
-        # Extract the data from the sparse matrices.
-        # NOTE: Kinda inefficient but ll_rgf can be ragged so this is safer.
-        mr_rgf = np.array([m[rows_m, columns_m] for m in mr])
-        lg_rgf = np.array([l[rows_l, columns_l] for l in lg])
-        ll_rgf = np.array([l[rows_l, columns_l] for l in ll])
-        # NOTE: For some reason mr_rgf has an unneeded dimension. Remove it.
-        mr_rgf = mr_rgf[:, 0, :]
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     executor.map(_get_data, mr, mr_rgf, repeat(rows_m), repeat(columns_m))
+    #     executor.map(_get_data, lg, lg_rgf, repeat(rows_l), repeat(columns_l))
+    #     executor.map(_get_data, ll, ll_rgf, repeat(rows_l), repeat(columns_l))
 
     # Sanity checks.
-    assert lg_rgf.shape[1] == rows_l.size
-    assert ll_rgf.shape[1] == rows_l.size
-    assert mr_rgf.shape[1] == rows_m.size
-
-    vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
-        vh, bmin_mm, bmax_mm
-    )
+    # assert lg_rgf.shape[1] == rows_l.size
+    # assert ll_rgf.shape[1] == rows_l.size
+    # assert mr_rgf.shape[1] == rows_m.size
 
     comm.Barrier()
     if rank == 0:
@@ -507,38 +495,38 @@ def calc_W_pool_mpi_split(
 
     for ie in energy_batch:
         rgf_W_GPU_combo.rgf_batched_GPU(
-            energy[ie : ie + energy_batchsize],
-            mapping_diag_mm,
-            mapping_upper_mm,
-            mapping_lower_mm,
-            mapping_diag_m,
-            mapping_upper_m,
-            mapping_lower_m,
-            mapping_diag_l,
-            mapping_upper_l,
-            mapping_lower_l,
-            vh_diag,
-            vh_upper,
-            vh_lower,
-            mr_rgf[ie : ie + energy_batchsize, :],
-            ll_rgf[ie : ie + energy_batchsize, :],
-            lg_rgf[ie : ie + energy_batchsize, :],
-            dvh_sd[ie : ie + energy_batchsize, :, :],
-            dvh_ed[ie : ie + energy_batchsize, :, :],
-            dmr_sd[ie : ie + energy_batchsize, :, :],
-            dmr_ed[ie : ie + energy_batchsize, :, :],
-            dlg_sd[ie : ie + energy_batchsize, :, :],
-            dlg_ed[ie : ie + energy_batchsize, :, :],
-            dll_sd[ie : ie + energy_batchsize, :, :],
-            dll_ed[ie : ie + energy_batchsize, :, :],
-            wr_p2w[ie : ie + energy_batchsize, :],
-            wl_p2w[ie : ie + energy_batchsize, :],
-            wg_p2w[ie : ie + energy_batchsize, :],
-            dosw[ie : ie + energy_batchsize, :],
-            new[ie : ie + energy_batchsize, :],
-            npw[ie : ie + energy_batchsize, :],
-            bmax_mm,
-            bmin_mm,
+            energies=energy[ie : ie + energy_batchsize],
+            map_diag_mm=mapping_diag_mm,
+            map_upper_mm=mapping_upper_mm,
+            map_lower_mm=mapping_lower_mm,
+            map_diag_m=mapping_diag_m,
+            map_upper_m=mapping_upper_m,
+            map_lower_m=mapping_lower_m,
+            map_diag_l=mapping_diag_l,
+            map_upper_l=mapping_upper_l,
+            map_lower_l=mapping_lower_l,
+            vh_diag_host=vh_diag,
+            vh_upper_host=vh_upper,
+            vh_lower_host=vh_lower,
+            mr_host=mr_host[ie : ie + energy_batchsize, :],
+            ll_host=ll_host[ie : ie + energy_batchsize, :],
+            lg_host=lg_host[ie : ie + energy_batchsize, :],
+            dvh_left_host=dvh_sd[ie : ie + energy_batchsize, :, :],
+            dvh_right_host=dvh_ed[ie : ie + energy_batchsize, :, :],
+            dmr_left_host=dmr_sd[ie : ie + energy_batchsize, :, :],
+            dmr_right_host=dmr_ed[ie : ie + energy_batchsize, :, :],
+            dlg_left_host=dlg_sd[ie : ie + energy_batchsize, :, :],
+            dlg_right_host=dlg_ed[ie : ie + energy_batchsize, :, :],
+            dll_left_host=dll_sd[ie : ie + energy_batchsize, :, :],
+            dll_right_host=dll_ed[ie : ie + energy_batchsize, :, :],
+            wr_host=wr_p2w[ie : ie + energy_batchsize, :],
+            wl_host=wl_p2w[ie : ie + energy_batchsize, :],
+            wg_host=wg_p2w[ie : ie + energy_batchsize, :],
+            dosw=dosw[ie : ie + energy_batchsize, :],
+            nEw=new[ie : ie + energy_batchsize, :],
+            nPw=npw[ie : ie + energy_batchsize, :],
+            bmax=bmax_mm,
+            bmin=bmin_mm,
             solve=True,
             input_stream=input_stream,
         )

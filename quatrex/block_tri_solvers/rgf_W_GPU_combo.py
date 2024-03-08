@@ -4,7 +4,6 @@ import numpy as np
 import cupy as cp
 import cupyx as cpx
 import numpy as np
-import scipy.sparse as sp
 
 from quatrex.block_tri_solvers.rgf_GF_GPU_combo import (
     _copy_csr_to_gpu,
@@ -31,6 +30,7 @@ def _get_coulomb_batch(
         ie = bid // block_size
         ir = bid % block_size
 
+        # NOTE: The buffer size here should ideally not be hardcoded.
         buf = cpx.jit.shared_memory(cp.complex128, 416)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
@@ -47,21 +47,6 @@ def _get_coulomb_batch(
 
         for i in range(tid, block_size, num_threads):
             out[ie, ir, i] = buf[i]
-
-
-def _csr_to_dense(
-    data,
-    indices,
-    indptr,
-    out,
-    block_size,
-):
-    out[:] = 0
-    for i in range(block_size - 1):
-        start = int(indptr[i])
-        end = int(indptr[i + 1])
-        for j in range(start, end):
-            out[i, indices[j]] = data[j]
 
 
 def rgf_batched_GPU(
@@ -139,15 +124,11 @@ def rgf_batched_GPU(
     vu_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     vl_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
 
-    vd = cp.empty((block_size, block_size), dtype=dtype)
-    vu = cp.empty((block_size, block_size), dtype=dtype)
-    vl = cp.empty((block_size, block_size), dtype=dtype)
-
     vh_diag_buffer = [
         csr_matrix(
             cp.empty(block_size * block_size, hdtype),
             cp.empty(block_size * block_size, cp.int32),
-            cp.empty(block_size, cp.int32),
+            cp.empty(block_size + 1, cp.int32),
         )
         for _ in range(2)
     ]
@@ -155,7 +136,7 @@ def rgf_batched_GPU(
         csr_matrix(
             cp.empty(block_size * block_size, hdtype),
             cp.empty(block_size * block_size, cp.int32),
-            cp.empty(block_size, cp.int32),
+            cp.empty(block_size + 1, cp.int32),
         )
         for _ in range(2)
     ]
@@ -163,7 +144,7 @@ def rgf_batched_GPU(
         csr_matrix(
             cp.empty(block_size * block_size, hdtype),
             cp.empty(block_size * block_size, cp.int32),
-            cp.empty(block_size, cp.int32),
+            cp.empty(block_size + 1, cp.int32),
         )
         for _ in range(2)
     ]
@@ -210,7 +191,7 @@ def rgf_batched_GPU(
         (1, batch_size, block_size, block_size), dtype=dtype
     )  # Retarded (right)
     XRn1n_gpu = cp.empty(
-        (1, batch_size, block_size, block_size), dtype=dtype
+        (2, batch_size, block_size, block_size), dtype=dtype
     )  # Retarded (right)
     WR_gpu = cp.empty(
         (2, batch_size, block_size, block_size), dtype=dtype
@@ -380,8 +361,6 @@ def rgf_batched_GPU(
                 _get_dense_block_batch(lg_dev, map_lower_l_dev, nIB, nlgl)
 
             else:  # nIB < 0
-                # NOTE: This gets executed when IB = 0 but these buffers
-                # are never accessed during the backwards pass. Why?!?
 
                 nllu = ll_upper_buffer[idx]
                 nlgu = lg_upper_buffer[idx]
@@ -391,12 +370,8 @@ def rgf_batched_GPU(
 
                 _copy_csr_to_gpu(vh_diag_host[IB], vh_diag_buffer[idx])
                 _copy_csr_to_gpu(vh_lower_host[IB], vh_lower_buffer[idx])
-                ...
 
             input_events[nidx].record(stream=input_stream)
-
-        # vhd = vh_diag_buffer[idx]
-        # vhl = vh_lower_buffer[idx]
 
         mrd = mr_diag_buffer[idx]
         mru = mr_upper_buffer[idx]
@@ -418,7 +393,6 @@ def rgf_batched_GPU(
 
         if IB == 0:
             xr = XR_gpu[0]
-            wr = WR_gpu[0]
             wl = WL_gpu[0]
             wg = WG_gpu[0]
 
@@ -476,20 +450,25 @@ def rgf_batched_GPU(
         input_stream.wait_event(event=backward_events[idx])
         if nIB < num_blocks:
 
+            npmru = mr_upper_buffer[nidx]
+            npmrl = mr_lower_buffer[nidx]
+
             nplll = ll_lower_buffer[nidx]
             nplgl = lg_lower_buffer[nidx]
+
+            _get_dense_block_batch(mr_dev, map_upper_m_dev, IB, npmru)
+            _get_dense_block_batch(mr_dev, map_lower_m_dev, IB, npmrl)
 
             _get_dense_block_batch(ll_dev, map_lower_l_dev, IB, nplll)
             _get_dense_block_batch(lg_dev, map_lower_l_dev, IB, nplgl)
 
+            _copy_csr_to_gpu(vh_upper_host[IB], vh_upper_buffer[nidx])
             _copy_csr_to_gpu(vh_diag_host[nIB], vh_diag_buffer[nidx])
-            _copy_csr_to_gpu(vh_upper_host[nIB-1], vh_upper_buffer[nidx])
-            _copy_csr_to_gpu(vh_lower_host[nIB], vh_lower_buffer[nidx])
 
             if nIB < num_blocks - 1:
 
-                nmru = mr_upper_buffer[nidx]
-                nmrl = mr_lower_buffer[nidx]
+                nmru = mr_diag_buffer[nidx]  # NOTE: This is not a mistake.
+                nmrl = ll_diag_buffer[nidx]
                 nllu = ll_upper_buffer[nidx]
                 nlgu = lg_upper_buffer[nidx]
 
@@ -497,6 +476,8 @@ def rgf_batched_GPU(
                 _get_dense_block_batch(mr_dev, map_lower_m_dev, nIB, nmrl)
                 _get_dense_block_batch(ll_dev, map_upper_l_dev, nIB, nllu)
                 _get_dense_block_batch(lg_dev, map_upper_l_dev, nIB, nlgu)
+
+                _copy_csr_to_gpu(vh_lower_host[nIB], vh_lower_buffer[nidx])
 
             input_events[idx].record(stream=input_stream)
 
@@ -511,13 +492,12 @@ def rgf_batched_GPU(
     WL = WL_gpu[IB]
     WG = WG_gpu[IB]
     XRnn1 = XRnn1_gpu[0]
-    XRn1n = XRn1n_gpu[0]
+    XRn1n = XRn1n_gpu[idx]
     WLnn1 = WLnn1_gpu[0]
     WGnn1 = WGnn1_gpu[0]
 
     # NOTE: These were written directly to output in the last iteration of the backward pass
     xr = XR_gpu[IB]
-    wr = WR_gpu[IB]
     wl = WL_gpu[IB]
     wg = WG_gpu[IB]
 
@@ -541,10 +521,13 @@ def rgf_batched_GPU(
     _get_coulomb_batch[num_thread_blocks, num_threads](
         vhd.data, vhd.indices, vhd.indptr, vd_batch, batch_size, block_size
     )
+    computation_stream.synchronize()
+    if dvh is not None:
+        vd_batch -= dvh
+
     _get_coulomb_batch[num_thread_blocks, num_threads](
         vhl.data, vhl.indices, vhl.indptr, vl_batch, batch_size, block_size
     )
-    # computation_stream.synchronize()
 
     xr_h = cp.conjugate(pxr[:, 0:NP, 0:NP].transpose((0, 2, 1)))
     mrl_h = cp.conjugate(mrl[:, 0:NP, 0:NI].transpose((0, 2, 1)))
@@ -572,16 +555,15 @@ def rgf_batched_GPU(
         out=WGnn1[:, 0:NI, 0:NP],
     )
 
-    # TODO: Compute retarded Green's function.
     cp.add(
-        xr[:, 0:NI, 0:NI] @ (vd_batch[:, 0:NI, 0:NI] - dvh[:, 0:NI, 0:NI]),
+        xr[:, 0:NI, 0:NI] @ vd_batch[:, 0:NI, 0:NI],
         XRnn1[:, 0:NI, 0:NP] @ vl_batch[:, 0:NP, 0:NI],
-        out=wr[:, 0:NI, 0:NI],
+        out=WR[:, 0:NI, 0:NI],
     )
 
-    wr_h = cp.conjugate(wr[:, 0:NI, 0:NI].transpose((0, 2, 1)))
+    WR_h = cp.conjugate(WR[:, 0:NI, 0:NI].transpose((0, 2, 1)))
     DOS_gpu[:, 0] = 1j * cp.trace(
-        wr[:, 0:NI, 0:NI] - wr_h[:, 0:NI, 0:NI], axis1=1, axis2=2
+        WR[:, 0:NI, 0:NI] - WR_h[:, 0:NI, 0:NI], axis1=1, axis2=2
     )
     nE_gpu[:, 0] = -1j * cp.trace(wl[:, 0:NI, 0:NI], axis1=1, axis2=2)
     nP_gpu[:, 0] = 1j * cp.trace(wg[:, 0:NI, 0:NI], axis1=1, axis2=2)
@@ -589,15 +571,15 @@ def rgf_batched_GPU(
     backward_events[nidx].record(stream=computation_stream)
 
     computation_stream.synchronize()
-    # _store_compressed(
-    #     map_diag_mm_dev,
-    #     map_upper_mm_dev,
-    #     map_lower_mm_dev,
-    #     WR,
-    #     None,
-    #     IB,
-    #     WR_compressed,
-    # )
+    _store_compressed(
+        map_diag_mm_dev,
+        map_upper_mm_dev,
+        map_lower_mm_dev,
+        WR,
+        None,
+        IB,
+        WR_compressed,
+    )
     _store_compressed(
         map_diag_mm_dev,
         map_upper_mm_dev,
@@ -633,26 +615,26 @@ def rgf_batched_GPU(
             input_stream.wait_event(event=backward_events[idx])
             if nIB < num_blocks:
 
+                npmru = mr_upper_buffer[idx]
+                npmrl = mr_lower_buffer[idx]
+
+                npmru[:] = mr_diag_buffer[idx]
+                npmrl[:] = ll_diag_buffer[idx]
+
                 nplll = ll_lower_buffer[idx]
                 nplgl = lg_lower_buffer[idx]
 
                 _get_dense_block_batch(ll_dev, map_lower_l_dev, IB, nplll)
                 _get_dense_block_batch(lg_dev, map_lower_l_dev, IB, nplgl)
 
-                _copy_csr_to_gpu(vh_diag_host[nIB], vh_diag_buffer[nidx])
-                _copy_csr_to_gpu(vh_upper_host[nIB-1], vh_upper_buffer[nidx])
-                # _copy_csr_to_gpu(vh_lower_host[nIB], vh_lower_buffer[nidx])
+                _copy_csr_to_gpu(vh_upper_host[IB], vh_upper_buffer[nidx])
 
-                # _copy_csr_to_gpu(vh_diag_host[IB], vh_diag_buffer[0])
-                # _copy_csr_to_gpu(vh_upper_host[IB], vh_upper_buffer[0])
-                # _copy_csr_to_gpu(vh_lower_host[IB], vh_lower_buffer[0])
+                _copy_csr_to_gpu(vh_diag_host[nIB], vh_diag_buffer[nidx])
 
                 if nIB < num_blocks - 1:
 
-                    _copy_csr_to_gpu(vh_lower_host[nIB], vh_lower_buffer[nidx])
-
-                    nmru = mr_upper_buffer[nidx]
-                    nmrl = mr_lower_buffer[nidx]
+                    nmru = mr_diag_buffer[nidx]
+                    nmrl = ll_diag_buffer[nidx]
                     nllu = ll_upper_buffer[nidx]
                     nlgu = lg_upper_buffer[nidx]
 
@@ -661,15 +643,18 @@ def rgf_batched_GPU(
                     _get_dense_block_batch(ll_dev, map_upper_l_dev, nIB, nllu)
                     _get_dense_block_batch(lg_dev, map_upper_l_dev, nIB, nlgu)
 
+                    _copy_csr_to_gpu(vh_lower_host[nIB], vh_lower_buffer[nidx])
+
             input_events[idx].record(stream=input_stream)
 
-        pmru = mru
-        pmrl = mrl
+        pmru = mr_upper_buffer[pidx]
+        pmrl = mr_lower_buffer[pidx]
         plll = ll_lower_buffer[pidx]
         plgl = lg_lower_buffer[pidx]
 
         XR = XR_gpu[idx]
         pXR = XR_gpu[pidx]
+        pXRn1n = XRn1n_gpu[pidx]
         WR = WR_gpu[idx]
         WL = WL_gpu[idx]
         pWL = WL_gpu[pidx]
@@ -688,24 +673,23 @@ def rgf_batched_GPU(
 
         computation_stream.wait_event(event=input_events[pidx])
 
-        # _csr_to_dense(vhd.data, vhd.indices, vhd.indptr, vd, block_size)
-        # _csr_to_dense(vhu.data, vhu.indices, vhu.indptr, vu, block_size)
-        # vd_batch = cp.repeat(vd[cp.newaxis, :, :], batch_size, axis=0)
-        # vu_batch = cp.repeat(vu[cp.newaxis, :, :], batch_size, axis=0)
         _get_coulomb_batch[num_thread_blocks, num_threads](
             vhd.data, vhd.indices, vhd.indptr, vd_batch, batch_size, block_size
         )
+
+        if dvh is not None:
+            vd_batch -= dvh
+
         _get_coulomb_batch[num_thread_blocks, num_threads](
             vhu.data, vhu.indices, vhu.indptr, vu_batch, batch_size, block_size
         )
 
-        if nIB < num_blocks:
-            # _csr_to_dense(vhl.data, vhl.indices, vhl.indptr, vl, block_size)
-            # vl_batch = cp.repeat(vl[cp.newaxis, :, :], batch_size, axis=0)
+        if nIB < num_blocks - 1:
             _get_coulomb_batch[num_thread_blocks, num_threads](
                 vhl.data, vhl.indices, vhl.indptr, vl_batch, batch_size, block_size
             )
-        # computation_stream.synchronize()
+
+        computation_stream.synchronize()
 
         pXRh = cp.conjugate(pXR[:, 0:NM, 0:NM].transpose((0, 2, 1)))
         pmrlh = cp.conjugate(pmrl[:, 0:NI, 0:NM].transpose((0, 2, 1)))
@@ -739,29 +723,12 @@ def rgf_batched_GPU(
             out=WG[:, 0:NI, 0:NI],
         )
 
-        if nIB < num_blocks:
-
-            cp.add(
-                XRn1n[:, 0:NI, 0:NP] @ vu_batch[:, 0:NP, 0:NI]
-                + XRnn1[:, 0:NI, 0:NP] @ vl_batch[:, 0:NP, 0:NI],
-                XR[:, 0:NI, 0:NI] @ vd_batch[:, 0:NI, 0:NI],
-                out=WR[:, 0:NI, 0:NI],
-            )
-
-        else:
-
-            cp.add(
-                XRn1n[:, 0:NI, 0:NP] @ vu_batch[:, 0:NP, 0:NI],
-                XR[:, 0:NI, 0:NI] @ vd_batch[:, 0:NI, 0:NI],
-                out=WR[:, 0:NI, 0:NI],
-            )
-
         if IB < num_blocks - 1:
 
             NP = bmax[IB + 1] - bmin[IB + 1] + 1
 
             XRnn1 = XRnn1_gpu[0]
-            XRn1n = XRn1n_gpu[0]
+            XRn1n = XRn1n_gpu[idx]
             WLnn1 = WLnn1_gpu[0]
             WGnn1 = WGnn1_gpu[0]
 
@@ -769,8 +736,8 @@ def rgf_batched_GPU(
             nwl = wL_gpu[nIB]
             nwg = wG_gpu[nIB]
 
-            mru = mr_upper_buffer[idx]
-            mrl = mr_lower_buffer[idx]
+            mru = mr_diag_buffer[idx]  # NOTE: This is not a mistake.
+            mrl = ll_diag_buffer[idx]
             llu = ll_upper_buffer[idx]
             lgu = lg_upper_buffer[idx]
 
@@ -784,7 +751,7 @@ def rgf_batched_GPU(
             )
 
             cp.negative(
-                pxr[:, 0:NP, 0:NP] @ mrl[:, 0:NP, 0:NI] @ XR[:, 0:NI, 0:NI],
+                nxr[:, 0:NP, 0:NP] @ mrl[:, 0:NP, 0:NI] @ XR[:, 0:NI, 0:NI],
                 out=XRn1n[:, 0:NP, 0:NI],
             )
 
@@ -798,18 +765,17 @@ def rgf_batched_GPU(
                 XRhu @ nwg[:, 0:NP, 0:NP] + WG[:, 0:NI, 0:NI] @ mrlhnxrh,
                 out=WGnn1[:, 0:NI, 0:NP],
             )
+
+            cp.add(
+                pXRn1n[:, 0:NI, 0:NP] @ vu_batch[:, 0:NP, 0:NI]
+                + XRnn1[:, 0:NI, 0:NP] @ vl_batch[:, 0:NP, 0:NI],
+                XR[:, 0:NI, 0:NI] @ vd_batch[:, 0:NI, 0:NI],
+                out=WR[:, 0:NI, 0:NI],
+            )
+
             backward_events[idx].record(stream=computation_stream)
 
             computation_stream.synchronize()
-            _store_compressed(
-                map_diag_mm_dev,
-                map_upper_mm_dev,
-                map_lower_mm_dev,
-                WR,
-                None,
-                IB,
-                WR_compressed,
-            )
             _store_compressed(
                 map_diag_mm_dev,
                 map_upper_mm_dev,
@@ -829,8 +795,26 @@ def rgf_batched_GPU(
                 WG_compressed,
             )
 
-            dll = dll_gpu[IB]
-            dlg = dlg_gpu[IB]
+            _store_compressed(
+                map_diag_mm_dev,
+                map_upper_mm_dev,
+                map_lower_mm_dev,
+                WR,
+                None,
+                IB,
+                WR_compressed,
+            )
+
+        else:
+
+            cp.add(
+                pXRn1n[:, 0:NI, 0:NP] @ vu_batch[:, 0:NP, 0:NI],
+                XR[:, 0:NI, 0:NI] @ vd_batch[:, 0:NI, 0:NI],
+                out=WR[:, 0:NI, 0:NI],
+            )
+
+            computation_stream.synchronize()
+            backward_events[idx].record(stream=computation_stream)
 
         DOS_gpu[:, IB] = 1j * cp.trace(
             WR[:, 0:NI, 0:NI] - cp.conjugate(WR[:, 0:NI, 0:NI].transpose(0, 2, 1)),
@@ -839,9 +823,6 @@ def rgf_batched_GPU(
         )
         nE_gpu[:, IB] = -1j * cp.trace(WL[:, 0:NI, 0:NI], axis1=1, axis2=2)
         nP_gpu[:, IB] = 1j * cp.trace(WG[:, 0:NI, 0:NI], axis1=1, axis2=2)
-
-    dll = dll_dev[-1]
-    dlg = dlg_dev[-1]
 
     computation_stream.synchronize()
     # return WG_compressed.get()
@@ -877,6 +858,7 @@ def rgf_batched_GPU(
     )
     WR_compressed.get(out=wr_host)
 
+    computation_stream.synchronize()
     DOS_gpu.get(out=dosw)
     nE_gpu.get(out=nEw)
     nP_gpu.get(out=nPw)

@@ -8,6 +8,7 @@ See the different GW step folders for more explanations.
 import sys
 import numpy as np
 import cupyx as cpx
+import cupy as cp
 import numpy.typing as npt
 import os
 import argparse
@@ -54,7 +55,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "Si_Nanowire/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_sinwNBC1_0V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory0_sinwNBC1_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_CF_SINW_0v.mat")
     solution_path_H = os.path.join(solution_path, "data_H_CF_SINW_0v.mat")
@@ -153,15 +154,18 @@ if __name__ == "__main__":
     # Here we create a new mapping for the m and l matrices. We start by
     # constructing a dummy matrix, which will allow us to determine the
     # sparsity structure a priori.
-    dummy = sparse.coo_array(
-        (np.ones(rows.size, dtype=bool), (rows, columns)),
-        shape=(nao, nao),
-    ).tocsr()
+    from quatrex.GW.screenedinteraction.kernel.p2w_gpu_improved import spgemm, spgemm_direct
 
-    dummy_m = (dummy @ dummy).tocoo()
-    dummy_m.sum_duplicates()
-    assert dummy_m.has_canonical_format
-    rows_m, columns_m = dummy_m.row, dummy_m.col
+    dummy = cp.sparse.csr_matrix(
+        sparse.coo_array(
+            (np.ones(rows.size, dtype=np.float32), (rows, columns)),
+            shape=(nao, nao),
+        )
+    )
+
+    dummy_m = (cp.sparse.identity(nao) - spgemm(dummy, dummy)).tocoo()
+    rows_m = cp.asnumpy(dummy_m.row)
+    columns_m = cp.asnumpy(dummy_m.col)
 
     ij2ji_m: npt.NDArray[np.int32] = change_format.find_idx_transposed(
         rows_m, columns_m
@@ -170,10 +174,9 @@ if __name__ == "__main__":
         rows_m, columns_m, bmax_mm, bmin_mm
     )
 
-    dummy_l = (dummy @ dummy @ dummy).tocoo()
-    dummy_l.sum_duplicates()
-    assert dummy_l.has_canonical_format
-    rows_l, columns_l = dummy_l.row, dummy_l.col
+    dummy_l = spgemm(spgemm(dummy, dummy), dummy.T).tocoo()
+    rows_l = cp.asnumpy(dummy_l.row)
+    columns_l = cp.asnumpy(dummy_l.col)
 
     ij2ji_l: npt.NDArray[np.int32] = change_format.find_idx_transposed(
         rows_l, columns_l
@@ -415,7 +418,7 @@ if __name__ == "__main__":
     ind_ek = -1
     # max number of iterations
 
-    max_iter = 3
+    max_iter = 1
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
