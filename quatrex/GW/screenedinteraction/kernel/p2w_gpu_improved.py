@@ -21,7 +21,7 @@ from quatrex.utils.matrix_creation import (
 )
 
 
-def spgemm(A, B, rows: int = 4096):
+def spgemm(A, B, rows: int = 1024):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -33,7 +33,7 @@ def spgemm(A, B, rows: int = 4096):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 4096):
+def spgemm_direct(A, B, C, rows: int = 1024):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -275,38 +275,38 @@ def calc_W_pool_mpi_split(
         ll_e[ie] = tuple(
             np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
         )
-
-        obc_w_gpu.obc_w_mm_gpu(
-            vh,
-            pg[ie],
-            pl[ie],
-            pr[ie],
-            bmax,
-            bmin,
-            dvh_sd[ie],
-            dvh_ed[ie],
-            dmr_sd[ie],
-            dmr_ed[ie],
-            dlg_sd[ie],
-            dlg_ed[ie],
-            dll_sd[ie],
-            dll_ed[ie],
-            mr_s[ie],
-            mr_e[ie],
-            lg_s[ie],
-            lg_e[ie],
-            ll_s[ie],
-            ll_e[ie],
-            vh_s[ie],
-            vh_e[ie],
-            mb00[ie],
-            mbNN[ie],
-            nbc,
-            NCpSC,
-            block_inv,
-            use_dace,
-            validate_dace,
-            ref_flag,
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(obc_w_gpu.obc_w_mm_gpu,
+            repeat(vh),
+            pg,
+            pl,
+            pr,
+            repeat(bmax),
+            repeat(bmin),
+            dvh_sd,
+            dvh_ed,
+            dmr_sd,
+            dmr_ed,
+            dlg_sd,
+            dlg_ed,
+            dll_sd,
+            dll_ed,
+            mr_s,
+            mr_e,
+            lg_s,
+            lg_e,
+            ll_s,
+            ll_e,
+            vh_s,
+            vh_e,
+            mb00,
+            mbNN,
+            repeat(nbc),
+            repeat(NCpSC),
+            repeat(block_inv),
+            repeat(use_dace),
+            repeat(validate_dace),
+            repeat(ref_flag),
         )
 
     if compute_mode == 0:
@@ -372,20 +372,20 @@ def calc_W_pool_mpi_split(
                 repeat(ref_flag),
             )
 
-        for ie in range(ne):
-            obc_w_gpu.obc_w_L_lg(
-                dlg_sd[ie],
-                dlg_ed[ie],
-                dll_sd[ie],
-                dll_ed[ie],
-                mr_s[ie],
-                mr_e[ie],
-                lg_s[ie],
-                lg_e[ie],
-                ll_s[ie],
-                ll_e[ie],
-                dxr_sd[ie],
-                dxr_ed[ie],
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            executor.map(obc_w_gpu.obc_w_L_lg,
+                dlg_sd,
+                dlg_ed,
+                dll_sd,
+                dll_ed,
+                mr_s,
+                mr_e,
+                lg_s,
+                lg_e,
+                ll_s,
+                ll_e,
+                dxr_sd,
+                dxr_ed,
             )
 
     l_defect = np.count_nonzero(np.isnan(condl))
@@ -424,18 +424,18 @@ def calc_W_pool_mpi_split(
     else:
         vh_ct = vh.conj().transpose()
         nao = vh.shape[0]
-        mr = []
-        lg = []
-        ll = []
+        mr_host = np.empty((ne, len(rows_m)), dtype=np.complex128)
+        lg_host = np.empty((ne, len(rows_l)), dtype=np.complex128)
+        ll_host = np.empty((ne, len(rows_l)), dtype=np.complex128)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
             results = executor.map(
                 rgf_W_GPU.sp_mm_cpu, pr, pg, pl, repeat(vh), repeat(vh_ct), repeat(nao)
             )
-            for res in results:
-                mr.append(res[0])
-                lg.append(res[1])
-                ll.append(res[2])
+            for ie, res in enumerate(results):
+                mr_host[ie] = res[0][rows_m, columns_m]
+                lg_host[ie] = res[1][rows_l, columns_l]
+                ll_host[ie] = res[2][rows_l, columns_l]
 
     comm.Barrier()
     if rank == 0:
