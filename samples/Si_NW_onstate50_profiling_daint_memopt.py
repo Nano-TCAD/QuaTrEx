@@ -48,8 +48,8 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 # if utils_gpu.gpu_avail():
 #     try:
-from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt
-from quatrex.GW.screenedinteraction.kernel import p2w_gpu
+from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
+from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
 from quatrex.GW.polarization.kernel import g2p_gpu
 from quatrex.GW.selfenergy.kernel import gw2s_gpu
     # except ImportError:
@@ -203,6 +203,40 @@ if __name__ == "__main__":
     bmin_mm = bmin[0:nb:nbc]
 
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
+
+    # Here we create a new mapping for the m and l matrices. We start by
+    # constructing a dummy matrix, which will allow us to determine the
+    # sparsity structure a priori.
+    from quatrex.GW.screenedinteraction.kernel.p2w_gpu_improved import spgemm, spgemm_direct
+
+    dummy = cp.sparse.csr_matrix(
+        sparse.coo_array(
+            (np.ones(rows.size, dtype=np.float32), (rows, columns)),
+            shape=(nao, nao),
+        )
+    )
+
+    dummy_m = (cp.sparse.identity(nao) - spgemm(dummy, dummy)).tocoo()
+    rows_m = cp.asnumpy(dummy_m.row)
+    columns_m = cp.asnumpy(dummy_m.col)
+
+    ij2ji_m: npt.NDArray[np.int32] = change_format.find_idx_transposed(
+        rows_m, columns_m
+    )
+    map_diag_m, map_upper_m, map_lower_m = change_format.map_block2sparse_alt(
+        rows_m, columns_m, bmax_mm, bmin_mm
+    )
+
+    dummy_l = spgemm(spgemm(dummy, dummy), dummy.T).tocoo()
+    rows_l = cp.asnumpy(dummy_l.row)
+    columns_l = cp.asnumpy(dummy_l.col)
+
+    ij2ji_l: npt.NDArray[np.int32] = change_format.find_idx_transposed(
+        rows_l, columns_l
+    )
+    map_diag_l, map_upper_l, map_lower_l = change_format.map_block2sparse_alt(
+        rows_l, columns_l, bmax_mm, bmin_mm
+    )
 
     if rank == 0:
         # print size of data
@@ -411,14 +445,14 @@ if __name__ == "__main__":
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
     # Transform the hamiltonian to a block tri-diagonal format
-    if args.type in ("gpu"):
-        nb = hamiltonian_obj.Bmin.shape[0]
-        lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
-        ne_loc = energy_loc.shape[0]
-        blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
-        blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
-        blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
-        change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
+    # if args.type in ("gpu"):
+    #     nb = hamiltonian_obj.Bmin.shape[0]
+    #     lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+    #     ne_loc = energy_loc.shape[0]
+    #     blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
+    #     blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+    #     blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+    #     change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
 
     # initialize Green's function------------------------------------------------
     gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
@@ -426,9 +460,9 @@ if __name__ == "__main__":
     gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
-    wg_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
-    wl_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
-    #wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
+    wg_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
+    wl_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
+    wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.5
@@ -504,15 +538,15 @@ if __name__ == "__main__":
         # initialize observables----------------------------------------------------
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        dosw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        dosw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
         # occupied screening/unoccupied screening
-        nEw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
-        nPw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        nEw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
+        nPw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # current per energy
         ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
@@ -594,7 +628,7 @@ if __name__ == "__main__":
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         elif args.type in ("gpu"):
-            calc_GF_pool_GPU_memopt.calc_GF_pool_mpi_split_memopt(
+            calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -834,12 +868,64 @@ if __name__ == "__main__":
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
             elif args.type in ("gpu"):
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
-                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
-                map_upper_mm, map_lower_mm, rows, columns, ij2ji,
-                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
-                mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
+                # wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
+                # hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
+                # map_upper_mm, map_lower_mm, rows, columns, ij2ji,
+                # dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                # nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
+                # mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
+                p2w_gpu_improved.calc_W_pool_mpi_split(
+                hamiltonian_obj,
+                # Energy vector.
+                energy_loc,
+                # Polarization.
+                pg_p2w_vec,
+                pl_p2w_vec,
+                pr_p2w_vec,
+                # Coulomb matrix.
+                vh,
+                # Output Green's functions.
+                wg_p2w,
+                wl_p2w,
+                wr_p2w,
+                # Sparse-to-dense Mappings.
+                map_diag_mm,
+                map_upper_mm,
+                map_lower_mm,
+                map_diag_m,
+                map_upper_m,
+                map_lower_m,
+                map_diag_l,
+                map_upper_l,
+                map_lower_l,
+                # M and L indices.
+                rows_m,
+                columns_m,
+                rows_l,
+                columns_l,
+                # M and L transposition indeices.
+                ij2ji_m,
+                ij2ji_l,
+                # Output observables.
+                dosw[disp[1, rank] : disp[1, rank] + count[1, rank]],
+                nEw[disp[1, rank] : disp[1, rank] + count[1, rank]],
+                nPw[disp[1, rank] : disp[1, rank] + count[1, rank]],
+                Idx_e_loc,
+                # Some factor, idk.
+                factor_w_loc,
+                # MPI communicator info.
+                comm,
+                rank,
+                size,
+                # Number of connected blocks.
+                nbc,
+                # Options.
+                homogenize=False,
+                NCpSC=NCpSC,
+                mkl_threads=w_mkl_threads,
+                worker_num=w_worker_threads,
+                compute_mode = 1
+            )
             
             if args.bsr and args.validate_bsr:
                 assert np.allclose(wg_diag, wg_diag_bsr)
@@ -862,43 +948,43 @@ if __name__ == "__main__":
             print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
             pre_comm2_time = -time.perf_counter()
 
-        memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
-        memory_mask[ind_zeros] = False
+        # memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
+        # memory_mask[ind_zeros] = False
 
-        # transform from block format to 2D format-----------------------------------
-        # lower diagonal blocks from physics identity
-        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        #wr_lower = wr_upper.transpose((0,1,3,2))
-        # if iter_num == 0:
-        #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wg_diag, wg_upper,
-        #                                                     wg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wl_diag, wl_upper,
-        #                                                     wl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wr_diag, wr_upper,
-        #                                                     wr_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        # else:
-        # add new contribution to the Screened interaction
-        wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wg_diag, wg_upper,
-                                                        wg_lower, no, count[1,rank],
-                                                        energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
-        wg_p2w[ind_zeros, :] = 0.0 + 0.0j
-        wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-                                                        map_lower_mm, wl_diag, wl_upper,
-                                                        wl_lower, no, count[1,rank],
-                                                        energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
-        wl_p2w[ind_zeros, :] = 0.0 + 0.0j
-        # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                 map_lower_mm, wr_diag, wr_upper,
-        #                                                 wr_lower, no, count[1,rank],
-        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
+        # # transform from block format to 2D format-----------------------------------
+        # # lower diagonal blocks from physics identity
+        # wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
+        # wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
+        # #wr_lower = wr_upper.transpose((0,1,3,2))
+        # # if iter_num == 0:
+        # #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        # #                                                     map_lower_mm, wg_diag, wg_upper,
+        # #                                                     wg_lower, no, count[1,rank],
+        # #                                                     energy_contiguous=False)
+        # #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        # #                                                     map_lower_mm, wl_diag, wl_upper,
+        # #                                                     wl_lower, no, count[1,rank],
+        # #                                                     energy_contiguous=False)
+        # #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        # #                                                     map_lower_mm, wr_diag, wr_upper,
+        # #                                                     wr_lower, no, count[1,rank],
+        # #                                                     energy_contiguous=False)
+        # # else:
+        # # add new contribution to the Screened interaction
+        # wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                 map_lower_mm, wg_diag, wg_upper,
+        #                                                 wg_lower, no, count[1,rank],
+        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
+        # wg_p2w[ind_zeros, :] = 0.0 + 0.0j
+        # wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                 map_lower_mm, wl_diag, wl_upper,
+        #                                                 wl_lower, no, count[1,rank],
+        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
+        # wl_p2w[ind_zeros, :] = 0.0 + 0.0j
+        # # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        # #                                                 map_lower_mm, wr_diag, wr_upper,
+        # #                                                 wr_lower, no, count[1,rank],
+        # #                                                 energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
 
 
         # distribute screened interaction according to gw2s step--------------------
