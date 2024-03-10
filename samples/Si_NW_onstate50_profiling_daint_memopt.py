@@ -9,6 +9,7 @@ print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
 import sys
 import numpy as np
+import cupy as cp
 import cupyx as cpx
 import numpy.typing as npt
 import os
@@ -945,7 +946,7 @@ if __name__ == "__main__":
         if rank == 0:
             p2w_time += time.perf_counter()
             print(f"    P2W time: {p2w_time:.3f} s", flush=True)
-            print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
+            #print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
             pre_comm2_time = -time.perf_counter()
 
         # memory_mask = np.ones(energy_loc.shape[0], dtype=bool)

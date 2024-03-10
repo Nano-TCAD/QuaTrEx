@@ -407,19 +407,22 @@ def calc_W_pool_mpi_split(
     # NOTE: This is what currently kills the performance. The CPU
     # implementation is not efficient. The GPU implementation is not
     # memory efficient.
+    mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
+    lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
+    ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
 
     use_gpu = True
     if use_gpu:
         nao = vh.shape[0]
-        mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
-        lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
-        ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+        mr_dev = cp.empty((len(rows_m),), dtype=np.complex128)
+        lg_dev = cp.empty((len(rows_l),), dtype=np.complex128)
+        ll_dev = cp.empty((len(rows_l),), dtype=np.complex128)
         for ie in range(ne):
-            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[ie], lg_dev[ie], ll_dev[ie], nao)
+            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev, lg_dev, ll_dev, nao)
         
-        mr_host = cp.asnumpy(mr_dev)
-        lg_host = cp.asnumpy(lg_dev)
-        ll_host = cp.asnumpy(ll_dev)
+            mr_host[ie, :] = cp.asnumpy(mr_dev)
+            lg_host[ie, :] = cp.asnumpy(lg_dev)
+            ll_host[ie, :] = cp.asnumpy(ll_dev)
 
     else:
         vh_ct = vh.conj().transpose()
@@ -490,7 +493,7 @@ def calc_W_pool_mpi_split(
 
     input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    energy_batchsize = 4
+    energy_batchsize = 7
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     for ie in energy_batch:
