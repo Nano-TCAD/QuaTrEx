@@ -351,7 +351,7 @@ def calc_W_pool_mpi_split(
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
             # results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
             executor.map(
-                obc_w_cpu.obc_w_cpu_beynonly,
+                obc_w_gpu.obc_w_gpu_beynonly,
                 dxr_sd,
                 dxr_ed,
                 dvh_sd,
@@ -407,6 +407,7 @@ def calc_W_pool_mpi_split(
     # NOTE: This is what currently kills the performance. The CPU
     # implementation is not efficient. The GPU implementation is not
     # memory efficient.
+        
     mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
     lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
     ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
@@ -414,15 +415,30 @@ def calc_W_pool_mpi_split(
     use_gpu = True
     if use_gpu:
         nao = vh.shape[0]
-        mr_dev = cp.empty((len(rows_m),), dtype=np.complex128)
-        lg_dev = cp.empty((len(rows_l),), dtype=np.complex128)
-        ll_dev = cp.empty((len(rows_l),), dtype=np.complex128)
+
         for ie in range(ne):
-            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev, lg_dev, ll_dev, nao)
+            mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
+            lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+            ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
         
-            mr_host[ie, :] = cp.asnumpy(mr_dev)
-            lg_host[ie, :] = cp.asnumpy(lg_dev)
-            ll_host[ie, :] = cp.asnumpy(ll_dev)
+            mr_host[ie, :] = cp.asnumpy(mr_dev[0])
+            lg_host[ie, :] = cp.asnumpy(lg_dev[0])
+            ll_host[ie, :] = cp.asnumpy(ll_dev[0])
+        
+    # use_gpu = True
+    # if use_gpu:
+    #     nao = vh.shape[0]
+    #     mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
+    #     lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+    #     ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+
+    #     for ie in range(ne):
+    #         sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[ie], lg_dev[ie], ll_dev[ie], nao)
+
+    #     mr_host = cp.asnumpy(mr_dev)
+    #     lg_host = cp.asnumpy(lg_dev)
+    #     ll_host = cp.asnumpy(ll_dev)
 
     else:
         vh_ct = vh.conj().transpose()
