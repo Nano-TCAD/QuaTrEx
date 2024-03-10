@@ -37,7 +37,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
-        from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt
+        from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
         from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
         from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
         from quatrex.GW.polarization.kernel import g2p_gpu
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "Si_Nanowire/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory0_sinwNBC1_0V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_sinwNBC1_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_CF_SINW_0v.mat")
     solution_path_H = os.path.join(solution_path, "data_H_CF_SINW_0v.mat")
@@ -419,7 +419,7 @@ if __name__ == "__main__":
     ind_ek = -1
     # max number of iterations
 
-    max_iter = 1
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -519,7 +519,7 @@ if __name__ == "__main__":
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         elif args.type in ("gpu"):
-            calc_GF_pool_GPU_memopt.calc_GF_pool_mpi_split_memopt(
+            calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -750,6 +750,7 @@ if __name__ == "__main__":
                 NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads,
+                compute_mode = 1
             )
 
         # transform from block format to 2D format-----------------------------------
