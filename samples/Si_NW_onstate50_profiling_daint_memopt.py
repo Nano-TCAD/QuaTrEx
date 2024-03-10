@@ -150,7 +150,7 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-40, 35, 2080, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-40, 35, 8320, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 2.0
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
@@ -463,7 +463,7 @@ if __name__ == "__main__":
     # initialize Screened interaction-------------------------------------------
     wg_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
     wl_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
-    wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
+    wr_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.5
@@ -471,7 +471,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 5
+    max_iter = 15
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -525,7 +525,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_27_SC_eps5/'
     for iter_num in range(max_iter):
 
         comm.Barrier()

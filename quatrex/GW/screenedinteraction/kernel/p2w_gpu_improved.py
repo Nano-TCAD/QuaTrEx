@@ -21,7 +21,7 @@ from quatrex.utils.matrix_creation import (
 )
 
 
-def spgemm(A, B, rows: int = 1024):
+def spgemm(A, B, rows: int = 256):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -33,7 +33,7 @@ def spgemm(A, B, rows: int = 1024):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 1024):
+def spgemm_direct(A, B, C, rows: int = 256):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -653,14 +653,98 @@ def calc_W_pool_mpi_split(
     # Find indices of elements satisfying the conditions
     ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
 
+    # if not((np.sum(np.isnan(F1)) == 0) and (np.sum(np.isinf(F1)) == 0)):
+    #     print("encountered invalid value in F1", flush = True)
+    # if not((np.sum(np.isnan(F2)) == 0) and (np.sum(np.isinf(F2))==0)):
+    #     print("encountered invalid value in F2", flush = True)
+    # if not((np.sum(np.isnan(dDOSm)) == 0) and (np.sum(np.isinf(dDOSm)) == 0)):
+    #     print("encountered invalid value in dDOSm", flush = True)
+    # if not((np.sum(np.isnan(dDOSp)) == 0) and (np.sum(np.isinf(dDOSp)) == 0)):
+    #     print("encountered invalid value in dDOSp", flush = True)
+
+    # if np.sum(np.isnan(dosw)) == 0:
+    #     ind_zeros_nan_dosw = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_nan_dosw = np.argwhere(np.isnan(dosw))[0]
+    #     print("encountered nan is dosw", flush = True)
+
+    # ind_zeros = np.concatenate((ind_zeros_nan_dosw, ind_zeros))
+
+    # if np.sum(np.isinf(dosw)) == 0:
+    #     ind_zeros_inf_dosw = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_inf_dosw = np.argwhere(np.isinf(dosw))[0]
+    #     print("encountered inf is dosw", flush = True)
+
+    # ind_zeros = np.concatenate((ind_zeros_inf_dosw, ind_zeros))
+
+    # if np.sum(np.isnan(new)) == 0:
+    #     ind_zeros_nan_new = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_nan_new = np.argwhere(np.isnan(new))[0]
+    #     print("encountered nan in new", flush = True)
+    
+    # ind_zeros = np.concatenate((ind_zeros_nan_new, ind_zeros))
+
+    # if np.sum(np.isinf(new)) == 0:
+    #     ind_zeros_inf_new = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_inf_new = np.argwhere(np.isinf(new))[0]
+    #     print("encountered inf is new", flush = True)
+
+    # ind_zeros = np.concatenate((ind_zeros_inf_new, ind_zeros))
+
+    # if np.sum(np.isnan(npw)) == 0:
+    #     ind_zeros_nan_npw = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_nan_npw = np.argwhere(np.isnan(npw))[0]
+    #     print("encountered nan in npw", flush = True)
+    
+    # ind_zeros = np.concatenate((ind_zeros_nan_npw, ind_zeros))
+
+    # if np.sum(np.isinf(npw)) == 0:
+    #     ind_zeros_inf_npw = np.array([], dtype = int)
+    # else:
+    #     ind_zeros_inf_npw = np.argwhere(np.isinf(npw))[0]
+    #     print("encountered inf is npw", flush = True)
+
+    # ind_zeros = np.concatenate((ind_zeros_inf_npw, ind_zeros))
+
     if idx_e[0] == 0:
         ind_zeros = np.concatenate(([0], ind_zeros))
+
 
     # Remove the identified peaks and errors
     for index in ind_zeros:
         wr_p2w[index, :] = 0
         wl_p2w[index, :] = 0
         wg_p2w[index, :] = 0
+
+    if np.sum(np.isnan(wr_p2w)) == 0:
+        ind_zeros_w = np.array([], dtype = int)
+    else:
+        print("There are still nans inside wr", flush = True)
+        ind_zeros_w = np.argwhere(np.isnan(wr_p2w)).T[0]
+        ind_unique = np.unique(ind_zeros_w)
+        wr_p2w[ind_unique, :] = 0.0
+
+    if np.sum(np.isnan(wl_p2w)) == 0:
+        ind_zeros_w = np.array([], dtype = int)
+    else:
+        print("There are still nans inside wl", flush = True)
+        ind_zeros_w = np.argwhere(np.isnan(wl_p2w)).T[0]
+        ind_unique = np.unique(ind_zeros_w)
+        wl_p2w[ind_unique, :] = 0.0
+
+    if np.sum(np.isnan(wg_p2w)) == 0:
+        ind_zeros_w = np.array([], dtype = int)
+    else:
+        print("There are still nans inside wg", flush = True)
+        ind_zeros_w = np.argwhere(np.isnan(wg_p2w)).T[0]
+        ind_unique = np.unique(ind_zeros_w)
+        wg_p2w[ind_unique, :] = 0.0
+
+    assert((np.sum(np.isnan(wr_p2w)) + np.sum(np.isnan(wl_p2w)) + np.sum(np.isnan(wg_p2w))) == 0)
 
     comm.Barrier()
     if rank == 0:
