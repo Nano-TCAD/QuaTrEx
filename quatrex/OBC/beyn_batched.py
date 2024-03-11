@@ -5,7 +5,8 @@ import time
 
 from .beyn_new_gpu import extract_small_matrix_blocks_gpu
 from .beyn_new_gpu import ci_batched_gpu_internal
-from .beyn_new_gpu import beyn_phi_gpu, beyn_sigma_gpu
+from .contour_integral import contour_integral_batched_squared_gpu as ci_batched_squared_gpu_internal
+from .beyn_new_gpu import beyn_phi_gpu, beyn_sigma_gpu, beyn_phi_batched_gpu
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -85,11 +86,11 @@ def beyn_new_batched_gpu(factor: int,
             Rind = [0]
 
         LV = LV[:, Lind]
-        LS = np.diag(LS[Lind])
+        LS = LS[Lind]
         LW = LW[Lind, :].T.conj()
 
         RV = RV[:, Rind]
-        RS = np.diag(RS[Rind])
+        RS = RS[Rind]
         RW = RW[Rind, :].T.conj()
 
         with copy_stream:
@@ -97,8 +98,8 @@ def beyn_new_batched_gpu(factor: int,
             RP1_h = cp.asnumpy(RP1)
         copy_stream.synchronize()
 
-        Llambda, Lu = np.linalg.eig(LV.T.conj() @ LP1_h @ LW @ np.linalg.inv(LS))
-        Rlambda, Ru = np.linalg.eig(np.linalg.inv(RS) @ RV.T.conj() @ RP1_h @ RW)
+        Llambda, Lu = np.linalg.eig(LV.T.conj() @ LP1_h @ LW @ np.diag(1 / LS))
+        Rlambda, Ru = np.linalg.eig(np.diag(1 / RS) @ RV.T.conj() @ RP1_h @ RW)
 
         return True, (LV, Lu, Llambda, RW, Ru, Rlambda)
 
@@ -126,7 +127,7 @@ def beyn_new_batched_gpu(factor: int,
         # finish_i = time.time()
         # print(f"Time for {i}th contour (1): {finish_i - start_i}", flush=True)
 
-        idata.append((P0C1, P0C2))
+        idata.append((P0C1, P1C1))
         futures.append(executor.submit(_svd, LP0, RP0, LP1, RP1))
     
     # finish = time.time()
@@ -140,7 +141,7 @@ def beyn_new_batched_gpu(factor: int,
         # finish_i = time.time()
         # print(f"Time for {i}th svd-eig (1): {finish_i - start_i}", flush=True)
         if success:
-            start_i = time.time()
+            # start_i = time.time()
             LV, Lu, Llambda, RW, Ru, Rlambda = data
             LV = cp.asarray(LV)
             Lu = cp.asarray(Lu)
@@ -154,8 +155,8 @@ def beyn_new_batched_gpu(factor: int,
             # finish_i = time.time()
             # print(f"Time for {i}th phi/sigma: {finish_i - start_i}", flush=True)
         else:
-            start_i = time.time()
-            P0C1, P0C2 = idata[i]
+            # start_i = time.time()
+            P0C1, P1C1 = idata[i]
             P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 10.0 / R, -1.0, side)
 
             P0 = P0C1 + P0C3
@@ -262,49 +263,62 @@ def beyn_new_batched_gpu_2(factor: int,
             Rind = [0]
 
         LV = LV[:, Lind]
-        LS = np.diag(LS[Lind])
+        LS = LS[Lind]
         LW = LW[Lind, :].T.conj()
 
         RV = RV[:, Rind]
-        RS = np.diag(RS[Rind])
+        RS = RS[Rind]
         RW = RW[Rind, :].T.conj()
+        # RW = RW[Rind, :]
 
-        # with copy_stream:
         LP1_h = cp.asnumpy(LP1)
         RP1_h = cp.asnumpy(RP1)
-        # copy_stream.synchronize()
 
-        Llambda, Lu = np.linalg.eig(LV.T.conj() @ LP1_h @ LW @ np.linalg.inv(LS))
-        Rlambda, Ru = np.linalg.eig(np.linalg.inv(RS) @ RV.T.conj() @ RP1_h @ RW)
+        Llambda, Lu = np.linalg.eig(LV.T.conj() @ LP1_h @ LW @ np.diag(1 / LS))
+        Rlambda, Ru = np.linalg.eig(np.diag(1 / RS) @ RV.T.conj() @ RP1_h @ RW)
+        # Rlambda, Ru = np.linalg.eig(np.diag(1 / RS) @ RV.T.conj() @ RP1_h @ RW.T.conj())
 
         return True, (LV, Lu, Llambda, RW, Ru, Rlambda)
 
     # start = time.time()
 
-    futures = []
+    # futures = []
     idata = []
     svd_data = []
-    for i in range(batch_size):
+    # for i in range(batch_size):
 
-        # start_i = time.time()
+    #     # start_i = time.time()
 
-        P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 3.0, 1.0, side)
-        P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 1.0 / R, -1.0, side)
+    #     P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 3.0, 1.0, side)
+    #     P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 1.0 / R, -1.0, side)
 
-        P0 = P0C1 + P0C2
-        P1 = P1C1 + P1C2
+    #     P0 = P0C1 + P0C2
+    #     P1 = P1C1 + P1C2
 
-        LP0 = P0@YL[i]
-        LP1 = P1@YL[i]
+    #     LP0 = P0@YL[i]
+    #     LP1 = P1@YL[i]
 
-        RP0 = YR[i]@P0
-        RP1 = YR[i]@P1
+    #     RP0 = YR[i]@P0
+    #     RP1 = YR[i]@P1
 
-        # finish_i = time.time()
-        # print(f"Time for {i}th contour (1): {finish_i - start_i}", flush=True)
+    #     # finish_i = time.time()
+    #     # print(f"Time for {i}th contour (1): {finish_i - start_i}", flush=True)
 
-        idata.append((P0C1, P0C2))
-        svd_data.append((LP0, RP0, LP1, RP1))
+    #     idata.append((P0C1, P0C2))
+    #     svd_data.append((LP0, RP0, LP1, RP1))
+    
+    P0C1_all, P1C1_all = ci_batched_squared_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2_all, P1C2_all = ci_batched_squared_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0_all = P0C1_all + P0C2_all
+    P1_all = P1C1_all + P1C2_all
+
+    LP0_all = P0_all@YL
+    LP1_all = P1_all@YL
+
+    RP0_all = YR@P0_all
+    RP1_all = YR@P1_all
+
     
     # finish = time.time()
     # print(f"Time for all contours (1): {finish - start}", flush=True)
@@ -313,7 +327,11 @@ def beyn_new_batched_gpu_2(factor: int,
     futures = []
     # start = time.time()
     for i in range(batch_size):
-        LP0, RP0, LP1, RP1 = svd_data[i]
+        P0C1, P1C1 = P0C1_all[i], P1C1_all[i]
+        LP0, RP0, LP1, RP1 = LP0_all[i], RP0_all[i], LP1_all[i], RP1_all[i]
+        idata.append((P0C1, P1C1))
+        svd_data.append((LP0, RP0, LP1, RP1))
+        # LP0, RP0, LP1, RP1 = svd_data[i]
         futures.append(executor.submit(_svd, LP0, RP0, LP1, RP1))
     # finish = time.time()
     # print(f"Time for submitting (1): {finish - start}", flush=True)
@@ -324,7 +342,7 @@ def beyn_new_batched_gpu_2(factor: int,
     for i, f in enumerate(futures):
         # start_i = time.time()
         success, data = f.result()
-        finish_i = time.time()
+        # finish_i = time.time()
         # print(f"Time for {i}th svd-eig (1): {finish_i - start_i}", flush=True)
         if success:
             phi_data[i] = data
@@ -335,7 +353,7 @@ def beyn_new_batched_gpu_2(factor: int,
     for i in range(batch_size):
         if phi_data[i] is None:
             # start_i = time.time()
-            P0C1, P0C2 = idata[i]
+            P0C1, P1C1 = idata[i]
             P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks[i], 10.0 / R, -1.0, side)
 
             P0 = P0C1 + P0C3
@@ -384,7 +402,8 @@ def beyn_new_batched_gpu_2(factor: int,
         RW = cp.asarray(RW)
         Ru = cp.asarray(Ru)
         Rlambda = cp.asarray(Rlambda)
-        kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, side)
+    kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, side)
+    for i in range(batch_size):
         Sigma[i], gR[i], min_dEk[i] = beyn_sigma_gpu(kL, kR, phiL, phiR, M00[i], M01[i], M10[i], imag_lim, 2, side)
         cond[i] = 0
     #     finish_i = time.time()

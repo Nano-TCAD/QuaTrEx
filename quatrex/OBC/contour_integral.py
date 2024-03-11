@@ -67,6 +67,33 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
                     m_idx = l * b_size * b_size + j * b_size + k
                     T[t_idx] += matrix_blocks[m_idx] * z_i ** (l - factor)
     
+    @cpx.jit.rawkernel()
+    def contour_batched(T, matrix_blocks, z, factor, batch_size, z_size, b_size, isL):
+
+        idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+        if idx < batch_size * z_size * b_size * b_size:
+
+            ie = idx // (z_size * b_size * b_size)
+            ijk = idx % (z_size * b_size * b_size)
+            i = ijk // (b_size * b_size)
+            jk = ijk % (b_size * b_size)
+            j = jk // b_size
+            k = jk % b_size
+            # t_idx = i * b_size * b_size + j * b_size + k
+            t_idx = idx
+            m_idx_0 = ie * (2 * factor + 1) * b_size * b_size
+
+            z_i = z[i]
+
+            if isL:
+                for l in range(2 * factor + 1):
+                    m_idx = m_idx_0 + l * b_size * b_size + j * b_size + k
+                    T[t_idx] += matrix_blocks[m_idx] * z_i ** (factor - l)
+            else:
+                for l in range(2 * factor + 1):
+                    m_idx = m_idx_0 + l * b_size * b_size + j * b_size + k
+                    T[t_idx] += matrix_blocks[m_idx] * z_i ** (l - factor)
+    
 
 except (ImportError, ModuleNotFoundError):
     pass
@@ -229,5 +256,49 @@ def contour_integral_batched_gpu(N: int,  # Reduced block size, i.e., N = block_
 
     P0 = cp.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
     P1 = cp.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
+
+    return P0, P1
+
+
+def contour_integral_batched_squared_gpu(N: int,  # Reduced block size, i.e., N = block_size // factor
+                                         factor: int,  # Block size reduction factor
+                                         matrix_blocks: np.ndarray,  # Reduced matrix blocks
+                                         R: float,  # Radius parameter (?)
+                                         csign: int,  # Sign parameter (?)
+                                         side: str,  # Left or right side {'L', 'R'}
+                                         ):
+
+    batch_size = matrix_blocks.shape[0]
+    
+    theta_min = 0
+    theta_max = 2 * np.pi
+    NT = 51
+
+    theta = cp.linspace(theta_min, theta_max, NT)
+    dtheta = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
+
+    c = 0
+    r = np.power(R, 1.0 / factor)
+
+    z = c + r * cp.exp(1j * theta)
+    dz_dtheta = (csign * 1j * r) * cp.exp(1j * theta)
+
+    T = cp.zeros((batch_size, len(z), N, N), dtype=np.complex128)
+
+    num_threads = 512
+    num_blocks = (batch_size * len(z) * N * N + num_threads - 1) // num_threads
+    contour_batched[num_blocks, num_threads](T.reshape(-1),
+                                     matrix_blocks.reshape(-1),
+                                     z,
+                                     factor,
+                                     batch_size,
+                                     len(z),
+                                     N,
+                                     np.bool_(side=='L'))
+
+    iT = cp.linalg.inv(T)
+
+    P0 = cp.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(1, len(z), 1, 1), axis=1)
+    P1 = cp.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(1, len(z), 1, 1), axis=1)
 
     return P0, P1
