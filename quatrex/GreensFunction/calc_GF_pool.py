@@ -340,6 +340,7 @@ def calc_GF_pool_mpi(
         SigG[ie] += SigG_ephn[ie]
         SigR[ie] += SigR_ephn[ie]
 
+        # Could this cause problems with symmetry of G^L and G^R?
         if homogenize:
             (SigR00, SigR01, SigR10, _) = extract_small_matrix_blocks(SigR[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                                                       SigR[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],

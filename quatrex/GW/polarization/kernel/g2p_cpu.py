@@ -395,7 +395,7 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
     gl_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
     gr_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
     gl_transposed_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
-    
+
     for i in range(nkpts):
         gg_ts = fft.fft(gg[:, i*ne:(i+1)*ne], n=ne2, axis=1)
         gl_ts = fft.fft(gl[:, i*ne:(i+1)*ne], n=ne2, axis=1)
@@ -421,13 +421,15 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
             # Need to extract the correct energies that correspond to the right k-point.
             # energy kpoint indices.
             eki = ki * ne2
+            ekj = kj * ne2
             # Find other k-index
             mi = np.array(np.where(ind_mat == ki))
             mj = np.array(np.where(ind_mat == kj))
-            md = tuple(mi-mj)
-            eki_j = int(ind_mat[md]) * ne2 - gl_transposed_t.shape[1] - 1
-            pg_t[:, eki:eki+ne2] += gg_t[:, eki:eki+ne2] * gl_transposed_t[:, eki_j+ne2:eki_j:-1]
-            pr_t[:, eki:eki+ne2] += gr_t[:, eki:eki+ne2] * gl_transposed_t[:, eki_j+ne2:eki_j:-1] + gl_t[:, eki:eki+ne2] * np.conjugate(gr_t[:, eki:eki+ne2])
+            md = tuple(mj-mi)
+            ekj_i = int(ind_mat[md]) * ne2
+            ekj_i_rev = ekj_i - gl_transposed_t.shape[1] - 1
+            pg_t[:, eki:eki+ne2] += gg_t[:, ekj:ekj+ne2] * gl_transposed_t[:, ekj_i_rev+ne2:ekj_i_rev:-1]
+            pr_t[:, eki:eki+ne2] += gr_t[:, ekj:ekj+ne2] * gl_transposed_t[:, ekj_i_rev+ne2:ekj_i_rev:-1] + gl_t[:, ekj:ekj+ne2] * np.conjugate(gr_t[:, ekj_i:ekj_i+ne2])
 
     # ifft, cutoff and multiply with pre factor
     pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
