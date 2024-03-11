@@ -20,6 +20,8 @@ from quatrex.utils.matrix_creation import (
     homogenize_matrix_Rnosym,
 )
 
+from quatrex.GW.screenedinteraction.polarization_preprocess import polarization_preprocess_2d
+
 
 def spgemm(A, B, rows: int = 256):
     C = None
@@ -42,13 +44,19 @@ def spgemm_direct(A, B, C, rows: int = 256):
         idx += C_block.nnz
 
 
-def sp_mm_gpu(pr, pg, pl, vh_cpu, mr, lg, ll, nao):
+def sp_mm_gpu(pr_rgf, pg_rgf, pl_rgf, rows, columns, vh_cpu, mr, lg, ll, nao):
     """Matrix multiplication with sparse matrices """
     vh_dev = cp.sparse.csr_matrix(vh_cpu)
     vh_ct_dev = vh_dev.T.conj(copy=False)
-    mr[:] = (cp.sparse.identity(nao) - spgemm(vh_dev, cp.sparse.csr_matrix(pr))).data
-    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pg)), vh_ct_dev, lg)
-    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pl)), vh_ct_dev, ll)
+    pr_dev = cp.asarray(pr_rgf)
+    pg_dev = cp.asarray(pg_rgf)
+    pl_dev = cp.asarray(pl_rgf)
+    #mr[:] = (cp.sparse.identity(nao) - spgemm(vh_dev, cp.sparse.csr_matrix(pr))).data
+    mr[:] = (cp.sparse.identity(nao) - spgemm(vh_dev, cp.sparse.csr_matrix((pr_dev, (rows, columns)), shape = (nao, nao)))).data
+    #spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pg)), vh_ct_dev, lg)
+    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix((pg_dev, (rows, columns)), shape = (nao, nao))), vh_ct_dev, lg)
+    #spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pl)), vh_ct_dev, ll)
+    spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix((pl_dev, (rows, columns)), shape = (nao, nao))), vh_ct_dev, ll)
 
 
 def calc_W_pool_mpi_split(
@@ -60,6 +68,10 @@ def calc_W_pool_mpi_split(
     pg,
     pl,
     pr,
+    # polarization 2D format
+    pg_p2w,
+    pl_p2w,
+    pr_p2w,
     # Coulomb matrix.
     vh,
     # Output Green's functions.
@@ -76,6 +88,11 @@ def calc_W_pool_mpi_split(
     map_diag_l,
     map_upper_l,
     map_lower_l,
+    # P indices
+    rows,
+    columns,
+    # P transposition
+    ij2ji,
     # M and L indices.
     rows_m,
     columns_m,
@@ -412,6 +429,10 @@ def calc_W_pool_mpi_split(
     lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
     ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
 
+    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows, columns, ij2ji, NCpSC, bmin, bmax, homogenize)
+    rows_dev = cp.asarray(rows)
+    columns_dev = cp.asarray(columns)
+
     use_gpu = True
     if use_gpu:
         nao = vh.shape[0]
@@ -420,7 +441,8 @@ def calc_W_pool_mpi_split(
             mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
             lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
             ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-            sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
+            #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
+            sp_mm_gpu(pr_rgf[ie], pg_rgf[ie], pl_rgf[ie], rows_dev, columns_dev, vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
         
             mr_host[ie, :] = cp.asnumpy(mr_dev[0])
             lg_host[ie, :] = cp.asnumpy(lg_dev[0])

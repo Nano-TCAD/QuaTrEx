@@ -708,6 +708,10 @@ if __name__ == "__main__":
                 pg_p2w_vec,
                 pl_p2w_vec,
                 pr_p2w_vec,
+                # polarization 2D format.
+                pg_p2w,
+                pl_p2w,
+                pr_p2w,
                 # Coulomb matrix.
                 vh,
                 # Output Green's functions.
@@ -724,6 +728,11 @@ if __name__ == "__main__":
                 map_diag_l,
                 map_upper_l,
                 map_lower_l,
+                # P indices
+                rows,
+                columns,
+                # P transposition indices.
+                ij2ji,
                 # M and L indices.
                 rows_m,
                 columns_m,
