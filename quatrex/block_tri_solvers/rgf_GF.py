@@ -474,7 +474,7 @@ def rgf_GF(M: sparse.csr_matrix,
     if not np.isnan(condL):
         M[:LBsize, :LBsize] -= SigRBL
         GammaL = 1j * (SigRBL - SigRBL.conj().T)
-        SigLBL = 1j * fL * GammaL
+        SigLBL = - 1j * fL * GammaL
         # is this correct? Shouldn't it be 1-fL?
         SigGBL = 1j * (1 - fL) * GammaL
         SigL[:LBsize, :LBsize] += SigLBL
@@ -502,8 +502,8 @@ def rgf_GF(M: sparse.csr_matrix,
     if not np.isnan(condR):
         M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
         GammaR = 1j * (SigRBR - SigRBR.conj().T)
-        SigLBR = 1j * fR * GammaR
-        # Is this correct? Shouldn't it be 1-fR?
+        SigLBR = - 1j * fR * GammaR
+        # Is this correct? Shouldn't it be 1-fR? No!
         SigGBR = 1j * (1 - fR) * GammaR
         SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
         SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
@@ -553,14 +553,9 @@ def rgf_GF(M: sparse.csr_matrix,
                                                @ gR[IB+1, 0:NP, 0:NP]
                                                @ M_d)
 
-            AL = M_r \
-                @ gR[IB+1, 0:NP, 0:NP] \
-                @ SigL_l
+            AL = M_r @ gR[IB+1, 0:NP, 0:NP] @ SigL_l
 
-            SigLB[IB, 0:NI, 0:NI] = M_r \
-                @ gL[IB+1, 0:NP, 0:NP] \
-                @ M_r.T.conj() \
-                - (AL - AL.T.conj())
+            SigLB[IB, 0:NI, 0:NI] = M_r @ gL[IB+1, 0:NP, 0:NP] @ M_r.T.conj() - (AL - AL.T.conj())
 
             # gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
             #                     @ (SigL_c \
@@ -570,15 +565,10 @@ def rgf_GF(M: sparse.csr_matrix,
             #                     - (AL - AL.T.conj()))  \
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
 
-            gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                @ (SigL_c
-                   + SigLB[IB, 0:NI, 0:NI])  \
-                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AL
+            gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] @ (SigL_c + SigLB[IB, 0:NI, 0:NI]) @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AL
 
             # What is this?
-            AG = M_r \
-                @ gR[IB+1, 0:NP, 0:NP] \
-                @ SigG_l     # Handling off-diagonal sigma elements? Prob. need to check
+            AG = M_r @ gR[IB+1, 0:NP, 0:NP] @ SigG_l  # Handling off-diagonal sigma elements? Prob. need to check
 
             # gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
             #                     @ (SigG_c \
@@ -587,15 +577,9 @@ def rgf_GF(M: sparse.csr_matrix,
             #                     @ M_r.T.conj() \
             #                     - (AG - AG.T.conj())) \
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG.
-            SigGB[IB, 0:NI, 0:NI] = M_r \
-                @ gG[IB+1, 0:NP, 0:NP] \
-                @ M_r.T.conj() \
-                - (AG - AG.T.conj())
+            SigGB[IB, 0:NI, 0:NI] = M_r @ gG[IB+1, 0:NP, 0:NP] @ M_r.T.conj() - (AG - AG.T.conj())
 
-            gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                @ (SigG_c
-                   + SigGB[IB, 0:NI, 0:NI]) \
-                @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AG.
+            gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] @ (SigG_c + SigGB[IB, 0:NI, 0:NI]) @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AG.
 
         # Second step of iteration
         GR[0, :NI, :NI] = gR[0, :NI, :NI]
@@ -617,6 +601,25 @@ def rgf_GF(M: sparse.csr_matrix,
         idE[0] = np.real(np.trace(
             SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
 
+        # try:
+        #     assert np.allclose(GR[0, :NI, :NI] - GR[0, :NI, :NI].T.conj(), GG[0, :NI, :NI] - GL[0, :NI, :NI], rtol=1e-2)
+        # except AssertionError:
+        #     print("First assertion failed", flush=True)
+        try:
+            assert np.allclose(GL[IB, :NI, :NI], -GL[IB, :NI, :NI].T.conj(), rtol=1e-2)
+        except AssertionError:
+            print(f"Enforcing symmetry for GL, IB = {IB}", flush=True)
+            # GL[IB, :NI, :NI] = (GL[IB, :NI, :NI] - GL[IB, :NI, :NI].T.conj())/2
+        try:
+            assert np.allclose(GG[IB, :NI, :NI], -GG[IB, :NI, :NI].T.conj(), rtol=1e-2)
+        except AssertionError:
+            print(f"Enforcing symmetry for GG, IB = {IB}", flush=True)
+            # GG[IB, :NI, :NI] = (GG[IB, :NI, :NI] - GG[IB, :NI, :NI].T.conj())/2
+        # try:
+        #     assert np.allclose(GR[IB, :NI, :NI] - GR[IB, :NI, :NI].T.conj(), GG[IB, :NI, :NI] - GL[IB, :NI, :NI], rtol=1e-2)
+        # except AssertionError:
+        #     print("Second assertion failed", flush=True)
+
         for IB in range(1, NB):
 
             NM = Bmax[IB - 1] - Bmin[IB - 1] + 1
@@ -627,8 +630,7 @@ def rgf_GF(M: sparse.csr_matrix,
                     Bmin[IB]:Bmax[IB] + 1].toarray()
 
             # # Extracting off-diagonal Hamiltonian block (left)
-            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]
-                :Bmax[IB - 1] + 1].toarray()
+            M_l = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB - 1]:Bmax[IB - 1] + 1].toarray()
 
             # Extracting off-diagonal lesser Self-energy block (left)
             SigL_l = SigL[Bmin[IB]:Bmax[IB] + 1,
@@ -683,12 +685,31 @@ def rgf_GF(M: sparse.csr_matrix,
                 @ M_l.T.conj() \
                 @ gR[IB, 0:NI, 0:NI].T.conj() \
                 - (AG - AG.T.conj()) + (BG - BG.T.conj())
+            
+            # try:
+            #     assert np.allclose(GR[0, :NI, :NI] - GR[0, :NI, :NI].T.conj(), GG[0, :NI, :NI] - GL[0, :NI, :NI], rtol=1e-2)
+            # except AssertionError:
+            #     print("First assertion failed", flush=True)
+            try:
+                assert np.allclose(GL[IB, :NI, :NI], -GL[IB, :NI, :NI].T.conj(), rtol=1e-2)
+            except AssertionError:
+                print(f"Enforcing symmetry for GL, IB = {IB}", flush=True)
+                np.save("GL.npy", GL[IB, :NI, :NI])
+                # GL[IB, :NI, :NI] = (GL[IB, :NI, :NI] - GL[IB, :NI, :NI].T.conj())/2
+            try:
+                assert np.allclose(GG[IB, :NI, :NI], -GG[IB, :NI, :NI].T.conj(), rtol=1e-2)
+            except AssertionError:
+                print(f"Enforcing symmetry for GG, IB = {IB}", flush=True)
+                # GG[IB, :NI, :NI] = (GG[IB, :NI, :NI] - GG[IB, :NI, :NI].T.conj())/2
+            # try:
+            #     assert np.allclose(GR[IB, :NI, :NI] - GR[IB, :NI, :NI].T.conj(), GG[IB, :NI, :NI] - GL[IB, :NI, :NI], rtol=1e-2)
+            # except AssertionError:
+            #     print("Second assertion failed", flush=True)
 
             if IB < NB - 1:  # Off-diagonal are only interesting for IdE!
 
                 # # Extracting off-diagonal Hamiltonian block (right)
-                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]
-                    :Bmax[IB + 1] + 1].toarray()
+                M_r = M[Bmin[IB]:Bmax[IB] + 1, Bmin[IB + 1]:Bmax[IB + 1] + 1].toarray()
 
                 # # Extracting off-diagonal Hamiltonian block (lower)
                 M_d = M[Bmin[IB + 1]:Bmax[IB + 1] + 1,
@@ -728,6 +749,7 @@ def rgf_GF(M: sparse.csr_matrix,
                     @ gR[IB+1, 0:NP, 0:NP].T.conj()
                 idE[IB] = np.real(np.trace(
                     SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))
+
         for IB in range(NB):
 
             NI = Bmax[IB] - Bmin[IB] + 1
