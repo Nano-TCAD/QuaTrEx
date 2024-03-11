@@ -576,6 +576,55 @@ def beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type):
 
     return kL, kR, phiL, phiR
 
+
+def beyn_phi_batched_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type):
+
+    batch_size = len(LV)
+    N = LV[0].shape[0]
+
+    for i in range(batch_size):
+        # print(Llambda[i].shape, Rlambda[i].shape)
+        print(LV[i].shape, Lu[i].shape, RW[i].shape, Ru[i].shape)
+    # print(Llambda.shape, Rlambda.shape)
+
+    phiL = LV @ Lu
+    # phiR = cp.linalg.solve(Ru, RW.transpose(0, 1, 2).conj())
+    phiR = cp.linalg.solve(Ru, RW)
+
+    if type == 'L':
+        kL = 1j * cp.log(Llambda)
+        kR = 1j * cp.log(Rlambda)
+    else:
+        kL = -1j * cp.log(Llambda)
+        kR = -1j * cp.log(Rlambda)
+    
+    kL_all = cp.abs(cp.imag(kL))
+    kR_all = cp.abs(cp.imag(kR))
+    for i in range(batch_size):
+        ind_sort_kL = cp.argsort(kL_all[i])
+        kL[i] = kL[i][ind_sort_kL]
+        phiL[i] = phiL[i][:, ind_sort_kL]
+
+        ind_sort_kR = cp.argsort(kR_all[i])
+        kR[i] = kR[i][ind_sort_kR]
+        phiR[i] = phiR[i][ind_sort_kR, :]
+
+    phiL_vec = cp.zeros((batch_size, factor * N, len(kL)), dtype=phiL.dtype)
+    phiR_vec = cp.zeros((batch_size, len(kR), factor * N), dtype=phiR.dtype)
+
+    for i in range(factor):
+        phiL_vec[i * N:(i + 1) * N, :] = phiL @ cp.diag(cp.exp(i * 1j * kL))
+        phiR_vec[:, i * N:(i + 1) * N] = cp.diag(cp.exp(-i * 1j * kR)) @ phiR
+    
+    phiL = phiL_vec / (cp.ones((factor * N, 1)) @ cp.sqrt(np.sum(np.abs(phiL_vec) ** 2, axis=0, keepdims=True)))
+    phiR = phiR_vec / (cp.sqrt(cp.sum(cp.abs(phiR_vec) ** 2, axis=1, keepdims=True)) @ cp.ones((1, factor * N)))
+
+    kL = factor * kL
+    kR = factor * kR
+
+    return kL, kR, phiL, phiR
+
+
 def beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, type):
 
     if type == 'L':
