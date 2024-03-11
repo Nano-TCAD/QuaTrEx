@@ -137,12 +137,11 @@ if __name__ == "__main__":
         comm.Barrier()
 
     # create hamiltonian object
-    Vappl = 0.0  # 0.2  # Applied voltage
+    Vappl = 0.2  # 0.2  # Applied voltage
     # Number of kpoints in x-, y-, and z-directions
     num_kpoints = np.array([1, 5, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-20, 15, 1024, endpoint=True,
-                         dtype=float)  # Energy Vector
+    energy = np.linspace(-20, 15, 512, endpoint=True, dtype=float)  # Energy Vector
     EPHN = np.array([0.0]) # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
@@ -412,7 +411,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     
     # max number of iterations
-    max_iter = 10
+    max_iter = 50
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -504,6 +503,13 @@ if __name__ == "__main__":
         sr_h2g_vec = change_format.sparse2vecsparse_v2(
             sr_h2g, rows, columns, nao)
 
+        # with open(scratch_path2 + f'sg_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(sg_h2g_vec, f)
+        # with open(scratch_path2 + f'sl_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(sl_h2g_vec, f)
+        # with open(scratch_path2 + f'sr_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(sr_h2g_vec, f)
+
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
         sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
@@ -576,7 +582,7 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=True,
+                homogenize=False,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
                 block_inv=args.block_inv,
@@ -644,6 +650,15 @@ if __name__ == "__main__":
         # gl_diag = (gl_diag - gl_diag.conjugate().transpose((0, 1, 3, 2)))/2
         # assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
         # assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
+        try:
+            assert np.allclose(gg_diag, -gg_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
+            assert np.allclose(gl_diag, -gl_diag.conjugate().transpose((0, 1, 3, 2)), rtol=1e-3)
+        except AssertionError:
+            #np.save(scratch_path2 + 'gg_diag.npy', gg_diag)
+            #np.save(scratch_path2 + 'gl_diag.npy', gl_diag) 
+            print("Assertion Error: Diagonal blocks do not satisfy the physics identity", flush=True)
+        #     gg_diag = (gg_diag - gg_diag.conjugate().transpose((0, 1, 3, 2)))/2
+        #     gl_diag = (gl_diag - gl_diag.conjugate().transpose((0, 1, 3, 2)))/2
 
         if iter_num == 0:
             gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
@@ -685,6 +700,14 @@ if __name__ == "__main__":
         #                 dtype=np.complex128, order="C")
 
         comm.Barrier()
+
+        # flattened format.
+        # with open(scratch_path2 + f'gg_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(gg_h2g, f)
+        # with open(scratch_path2 + f'gl_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(gl_h2g, f)
+        # with open(scratch_path2 + f'gr_h2g_{iter_num}.pkl', 'wb') as f:
+        #     pickle.dump(gr_h2g, f)
 
         if rank == 0:
             pre_comm0_time += time.perf_counter()
@@ -816,6 +839,12 @@ if __name__ == "__main__":
                 pl_p2w, rows, columns, nao)
             pr_p2w_vec = change_format.sparse2vecsparse_v2(
                 pr_p2w, rows, columns, nao)
+            # with open(scratch_path2 + f'pg_p2w_{iter_num}.pkl', 'wb') as f:
+            #     pickle.dump(pg_p2w_vec, f)
+            # with open(scratch_path2 + f'pl_p2w_{iter_num}.pkl', 'wb') as f:
+            #     pickle.dump(pl_p2w_vec, f)
+            # with open(scratch_path2 + f'pr_p2w_{iter_num}.pkl', 'wb') as f:
+            #     pickle.dump(pr_p2w_vec, f)
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
                 # k-points are supported here
@@ -835,7 +864,7 @@ if __name__ == "__main__":
                     rank,
                     size,
                     nbc,
-                    homogenize=True,
+                    homogenize=False,
                     NCpSC=1,
                     mkl_threads=w_mkl_threads,
                     worker_num=w_worker_threads,
@@ -1068,16 +1097,18 @@ if __name__ == "__main__":
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now.
-        # sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-        #                                                                      gl_diag_band,
-        #                                                                      gg_diag_band,
-        #                                                                      sg_phn,
-        #                                                                      sl_phn,
-        #                                                                      sr_phn,
-        #                                                                      EPHN,
-        #                                                                      DPHN,
-        #                                                                      temp,
-        #                                                                      mem_s)
+        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+                                                                            gl_diag_band,
+                                                                            gg_diag_band,
+                                                                            sg_phn,
+                                                                            sl_phn,
+                                                                            sr_phn,
+                                                                            EPHN,
+                                                                            DPHN,
+                                                                            temp,
+                                                                            mem_s)
+        
+        # This code should be commented? Yes?
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
         #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
