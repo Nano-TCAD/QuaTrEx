@@ -11,7 +11,31 @@ import numpy.typing as npt
 import matplotlib.pylab as plt
 import pickle
 
-from quatrex.utils.read_utils import read_file_to_float_ndarray
+
+# Quick fix
+# from quatrex.utils.read_utils import read_file_to_float_ndarray
+def read_file_to_float_ndarray(file, delimiter):
+    """
+    Reads a file and returns a numpy array with the content.
+
+    Parameters
+    ----------
+    file : str
+        Path to the file.
+    delimiter : str
+        Delimiter used in the file.
+
+    Returns
+    -------
+    ndarray
+        Numpy array with the content of the file.
+    """
+    with open(file, 'r') as f:
+        data = f.read()
+    data = data.split('\n')
+    data = [d.split(delimiter) for d in data if len(d) > 0]
+    data = np.array(data, dtype=float)
+    return data
 
 
 def find_block_sizes(matrix: sparse.spmatrix) -> tuple[npt.NDArray, npt.NDArray]:
@@ -35,7 +59,7 @@ def find_block_sizes(matrix: sparse.spmatrix) -> tuple[npt.NDArray, npt.NDArray]
     Bmin : ndarray
         List of indices for the start of each block
     Bmax : ndarray
-        List of indices for the end of each block. Stupid, I know
+        List of indices for the end of each block. Not really necessary?
     """
     size = matrix.shape[0]
     # row and column indices of nonzero elements
@@ -136,7 +160,7 @@ class Matrices:
                     sim_folder + '/Vatom.dat', ",")
                 self.Vpot = self.get_atomic_potential()
             # Adds the potential to the Hamiltonian
-            self.add_potential()
+            # self.add_potential()
 
             # Set kpoints (MP grid)
             self.kp = self.k_points(Nk)
@@ -334,6 +358,8 @@ class Matrices:
         """
         This function adds the linear potential drop to the Hamiltonian.
 
+        I don't think this works unless the Overlap matrix is diagonal...
+        
         Returns
         -------
         None.
