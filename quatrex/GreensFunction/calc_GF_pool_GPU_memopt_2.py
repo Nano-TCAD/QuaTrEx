@@ -18,6 +18,7 @@ from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess
 
 import quatrex.block_tri_solvers.rgf_GF_GPU_combo as rgf_GF_GPU_combo
 from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
+from quatrex.OBC.beyn_batched import beyn_batched_gpu_3 as beyn_gpu
 
 from operator import mul
 
@@ -75,8 +76,8 @@ def calc_GF_pool_mpi_split_memopt(
     UT = kB * Temp / q
 
     vfermi = np.vectorize(fermi_function)
-    fL = vfermi(energy, Efl, UT)
-    fR = vfermi(energy, Efr, UT)
+    fL = cp.asarray(vfermi(energy, Efl, UT)).reshape(len(energy), 1, 1)
+    fR = cp.asarray(vfermi(energy, Efr, UT)).reshape(len(energy), 1, 1)
 
     # initialize the Green's function in block format with zero
     # number of energy points
@@ -253,30 +254,29 @@ def calc_GF_pool_mpi_split_memopt(
         print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
         time_OBC = -time.perf_counter()
                 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        # executor.map(self_energy_preprocess, SigL, SigG, SigR, SigL_ephn, SigG_ephn, SigR_ephn,
-        #              repeat(NCpSC), repeat(bmin), repeat(bmax), repeat(homogenize))
-        #results = 
-        executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
-           fL,
-           fR,
-           SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
-           repeat(bmin),
-           repeat(bmax),
-           repeat(NCpSC))
-        #for idx, res in enumerate(results):
-        #    condl[idx] = res[0]
-        #    condr[idx] = res[1]
-        
-    # for ie in range(ne):
-    #     condl[ie], condr[ie] = obc_GF_gpu(next(rgf_M_0),
-    #         SigR[ie],
-    #         fL[ie],
-    #         fR[ie],
-    #         SigRBL[ie], SigRBR[ie], SigLBL[ie], SigLBR[ie], SigGBL[ie], SigGBR[ie],
-    #         bmin,
-    #         bmax,
-    #         NCpSC)
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
+    #        fL,
+    #        fR,
+    #        SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
+    #        repeat(bmin),
+    #        repeat(bmax),
+    #        repeat(NCpSC))
+    
+    imag_lim = 5e-4
+    R = 1000
+    SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    assert not any(np.isnan(cond) for cond in condL)
+    GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
+    (1j * fL * GammaL).get(out=SigLBL)
+    (1j * (fL - 1) * GammaL).get(out=SigGBL)
+    SigRBL_gpu.get(out=SigRBL)
+    SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    assert not any(np.isnan(cond) for cond in condR)
+    GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
+    (1j * fR * GammaR).get(out=SigLBR)
+    (1j * (fR - 1) * GammaR).get(out=SigGBR)
+    SigRBR_gpu.get(out=SigRBR)
     
     comm.Barrier()
     if rank == 0:
