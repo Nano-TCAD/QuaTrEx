@@ -535,7 +535,7 @@ def contour_svd_mix_2(factor: int,
     if YR is None:
         YR = cp.random.rand(NM, N)
 
-    P0C1, P1C1, P0C2, P1C2, P0C3, P1C3 = ci_batched_combo_gpu_internal(N, factor, matrix_blocks, [3.0, 1.0 / R, 10.0 / R], [1.0, -1.0, -1.0], side)
+    P0C1, P0C2, P0C3, P1C1, P1C2, P1C3 = ci_batched_combo_gpu_internal(N, factor, matrix_blocks, [3.0, 1.0 / R, 10.0 / R], [1.0, -1.0, -1.0], side)
 
     P0 = P0C1 + P0C2
     LP0 = P0@YL
@@ -738,6 +738,33 @@ def beyn_sigma_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, t
         min_dEk = 1e8
     finish = time.time()
     # print('time to calculate min_dEk: ', finish - start)
+    
+    return Sigma, gR, min_dEk
+
+
+def beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iteration, side):
+
+    batch_size = len(M00)
+    if side == 'L':
+        first, second, rfactor, ifactor = M01, M10, 1.0, -1j
+    else:
+        first, second, rfactor, ifactor = M10, M01, -1.0, 1j
+    
+    T = cp.empty_like(M00)
+    min_dEk = np.zeros(batch_size, dtype=np.float64)
+    for i in range(batch_size):
+        ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
+        T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
+        ind = np.where(abs(dEk_dk))
+        if len(ind[0]) > 0:
+            min_dEk[i] = np.min(abs(dEk_dk[ind]))
+        else:
+            min_dEk[i] = 1e8
+
+    gR = cp.linalg.inv(M00 + second @ T)
+    for _ in range(ref_iteration):
+        gR = cp.linalg.inv(M00 - second @ gR @ first)
+    Sigma = second @ gR @ first
     
     return Sigma, gR, min_dEk
 
