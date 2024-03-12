@@ -9,8 +9,6 @@ print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
 import sys
 import numpy as np
-import cupy as cp
-import cupyx as cpx
 import numpy.typing as npt
 import os
 import argparse
@@ -49,8 +47,8 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 # if utils_gpu.gpu_avail():
 #     try:
-from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
-from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
+from quatrex.GreensFunction import calc_GF_pool_GPU
+from quatrex.GW.screenedinteraction.kernel import p2w_gpu
 from quatrex.GW.polarization.kernel import g2p_gpu
 from quatrex.GW.selfenergy.kernel import gw2s_gpu
     # except ImportError:
@@ -74,7 +72,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire/")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire_nobias_lm6_generation/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -149,8 +147,8 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 4])
     NCpSC = 4
-    Vappl = 0.6
-    energy = np.linspace(-40, 35, 8320, endpoint = True, dtype = float) # Energy Vector
+    Vappl = 0.0
+    energy = np.linspace(-40, 35, 8000, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -161,7 +159,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 13, rank = rank, layer_matrix = '/Layer_Matrix.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix109.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -200,44 +198,15 @@ if __name__ == "__main__":
     nb = hamiltonian_obj.Bmin.shape[0]
     #nbc = 2
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
+
+    if rank == 0:
+        print(f"NBC: {nbc}", flush = True)
+
+    #exit(0)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
-
-    # Here we create a new mapping for the m and l matrices. We start by
-    # constructing a dummy matrix, which will allow us to determine the
-    # sparsity structure a priori.
-    from quatrex.GW.screenedinteraction.kernel.p2w_gpu_improved import spgemm, spgemm_direct
-
-    dummy = cp.sparse.csr_matrix(
-        sparse.coo_array(
-            (np.ones(rows.size, dtype=np.float32), (rows, columns)),
-            shape=(nao, nao),
-        )
-    )
-
-    dummy_m = (cp.sparse.identity(nao) - spgemm(dummy, dummy)).tocoo()
-    rows_m = cp.asnumpy(dummy_m.row)
-    columns_m = cp.asnumpy(dummy_m.col)
-
-    ij2ji_m: npt.NDArray[np.int32] = change_format.find_idx_transposed(
-        rows_m, columns_m
-    )
-    map_diag_m, map_upper_m, map_lower_m = change_format.map_block2sparse_alt(
-        rows_m, columns_m, bmax_mm, bmin_mm
-    )
-
-    dummy_l = spgemm(spgemm(dummy, dummy), dummy.T).tocoo()
-    rows_l = cp.asnumpy(dummy_l.row)
-    columns_l = cp.asnumpy(dummy_l.col)
-
-    ij2ji_l: npt.NDArray[np.int32] = change_format.find_idx_transposed(
-        rows_l, columns_l
-    )
-    map_diag_l, map_upper_l, map_lower_l = change_format.map_block2sparse_alt(
-        rows_l, columns_l, bmax_mm, bmin_mm
-    )
 
     if rank == 0:
         # print size of data
@@ -256,15 +225,15 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -2.0362
+    energy_fl = -3.40
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 3.0
     # DFT Conduction Band Minimum
-    ECmin = -2.0662
+    ECmin = -2.0761
 
     # Phyiscal Constants -----------
 
@@ -446,24 +415,24 @@ if __name__ == "__main__":
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
     # Transform the hamiltonian to a block tri-diagonal format
-    # if args.type in ("gpu"):
-    #     nb = hamiltonian_obj.Bmin.shape[0]
-    #     lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
-    #     ne_loc = energy_loc.shape[0]
-    #     blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
-    #     blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
-    #     blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
-    #     change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
+    if args.type in ("gpu"):
+        nb = hamiltonian_obj.Bmin.shape[0]
+        lb = np.max(hamiltonian_obj.Bmax - hamiltonian_obj.Bmin + 1)
+        ne_loc = energy_loc.shape[0]
+        blocked_hamiltonian_diag = np.zeros((nb, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_upper = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        blocked_hamiltonian_lower = np.zeros((nb-1, ne_loc, lb, lb), dtype=np.complex128)
+        change_format.sparse2block_energyhamgen_no_map(hamiltonian_obj.Hamiltonian['H_4'], hamiltonian_obj.Overlap['H_4'], blocked_hamiltonian_diag, blocked_hamiltonian_upper, blocked_hamiltonian_lower, bmax, bmin, energy_loc)
 
     # initialize Green's function------------------------------------------------
-    gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    gl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    #gr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
-    wg_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
-    wl_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
-    wr_p2w = cpx.zeros_pinned((count[1,rank], no), dtype=np.complex128)
+    wg_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
+    wl_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
+    #wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.5
@@ -471,7 +440,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 250
+    max_iter = 100
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -492,8 +461,8 @@ if __name__ == "__main__":
                     dtype=np.complex128, order="C")
     pl_p2w = np.empty((count[1, rank], data_shape[0]),
                     dtype=np.complex128, order="C")
-    pr_p2w = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
+    # pr_p2w = np.empty((count[1, rank], data_shape[0]),
+    #                 dtype=np.complex128, order="C")
     # GW2S
     wg_gw2s = np.empty((count[0, rank], data_shape[1]),
                     dtype=np.complex128, order="C")
@@ -525,12 +494,8 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_27_SC_eps5/'
-    #folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_109_LM_eps5_flat/'
     for iter_num in range(max_iter):
-
-        if((iter_num % 10 == 0) and iter_num > 0):
-            cp.get_default_memory_pool().free_all_blocks()
 
         comm.Barrier()
 
@@ -542,19 +507,19 @@ if __name__ == "__main__":
 
         # initialize observables----------------------------------------------------
         # density of states
-        dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        dosw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
+        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        dosw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # occupied states/unoccupied states
-        nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+        nE = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        nP = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
         # occupied screening/unoccupied screening
-        nEw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
-        nPw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
+        nEw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        nPw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # current per energy
-        ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+        ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
         
 
@@ -633,8 +598,11 @@ if __name__ == "__main__":
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         elif args.type in ("gpu"):
-            calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool_GPU.calc_GF_pool_mpi_split(
                 hamiltonian_obj,
+                blocked_hamiltonian_diag,
+                blocked_hamiltonian_upper,
+                blocked_hamiltonian_lower,
                 energy_loc,
                 sr_h2g_vec,
                 sl_h2g_vec,
@@ -648,9 +616,6 @@ if __name__ == "__main__":
                 sr_phn,
                 sl_phn,
                 sg_phn,
-                gr_h2g,
-                gl_h2g,
-                gg_h2g,
                 map_diag,
                 map_upper,
                 map_lower,
@@ -668,11 +633,11 @@ if __name__ == "__main__":
                 comm,
                 rank,
                 size,
-                homogenize=False,
+                homogenize=True,
+                return_sigma_boundary=False,
                 NCpSC=NCpSC,
-                mkl_threads=gf_mkl_threads,
+                mkl_threads=gf_mkl_threads_gpu,
                 worker_num=gf_worker_threads)
-
         
         comm.Barrier()
 
@@ -682,37 +647,37 @@ if __name__ == "__main__":
             pre_comm0_time = -time.perf_counter()
             
 
-        # # lower diagonal blocks from physics identity
-        # gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
-        # gl_lower = -gl_upper.conjugate().transpose((0,1,3,2))
-        # #gr_lower = gr_upper.transpose((0,1,3,2))
-        # if iter_num == 0:
-        #     gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gg_diag, gg_upper,
-        #                                                     gg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     gl_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gl_diag, gl_upper,
-        #                                                     gl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     # gr_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #     #                                                 map_lower, gr_diag, gr_upper,
-        #     #                                                 gr_lower, no, count[1,rank],
-        #     #                                                 energy_contiguous=False)
-        # else:   
-        #     # add new contribution to the Green's function
-        #     gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gg_diag, gg_upper,
-        #                                                     gg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False) + mem_g * gg_h2g
-        #     gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gl_diag, gl_upper,
-        #                                                     gl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False) + mem_g * gl_h2g
-        #     # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #     #                                                 map_lower, gr_diag, gr_upper,
-        #     #                                                 gr_lower, no, count[1,rank],
-        #     #                                                 energy_contiguous=False) + mem_g * gr_h2g 
+        # lower diagonal blocks from physics identity
+        gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
+        gl_lower = -gl_upper.conjugate().transpose((0,1,3,2))
+        #gr_lower = gr_upper.transpose((0,1,3,2))
+        if iter_num == 0:
+            gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+                                                            map_lower, gg_diag, gg_upper,
+                                                            gg_lower, no, count[1,rank],
+                                                            energy_contiguous=False)
+            gl_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+                                                            map_lower, gl_diag, gl_upper,
+                                                            gl_lower, no, count[1,rank],
+                                                            energy_contiguous=False)
+            # gr_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
+            #                                                 map_lower, gr_diag, gr_upper,
+            #                                                 gr_lower, no, count[1,rank],
+            #                                                 energy_contiguous=False)
+        else:   
+            # add new contribution to the Green's function
+            gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+                                                            map_lower, gg_diag, gg_upper,
+                                                            gg_lower, no, count[1,rank],
+                                                            energy_contiguous=False) + mem_g * gg_h2g
+            gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+                                                            map_lower, gl_diag, gl_upper,
+                                                            gl_lower, no, count[1,rank],
+                                                            energy_contiguous=False) + mem_g * gl_h2g
+            # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
+            #                                                 map_lower, gr_diag, gr_upper,
+            #                                                 gr_lower, no, count[1,rank],
+            #                                                 energy_contiguous=False) + mem_g * gr_h2g 
 
 
         # calculate the transposed
@@ -790,7 +755,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        #alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose)
+        #alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -873,73 +838,12 @@ if __name__ == "__main__":
                                                                                                     use_dace=args.dace,
                                                                                                     validate_dace=args.validate_dace)
             elif args.type in ("gpu"):
-                # wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
-                # hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
-                # map_upper_mm, map_lower_mm, rows, columns, ij2ji,
-                # dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                # nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
-                # mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
-                p2w_gpu_improved.calc_W_pool_mpi_split(
-                hamiltonian_obj,
-                # Energy vector.
-                energy_loc,
-                # Polarization.
-                pg_p2w_vec,
-                pl_p2w_vec,
-                pr_p2w_vec,
-                # polarization 2D format.
-                pg_p2w,
-                pl_p2w,
-                pr_p2w,
-                # Coulomb matrix.
-                vh,
-                # Output Green's functions.
-                wg_p2w,
-                wl_p2w,
-                wr_p2w,
-                # Sparse-to-dense Mappings.
-                map_diag_mm,
-                map_upper_mm,
-                map_lower_mm,
-                map_diag_m,
-                map_upper_m,
-                map_lower_m,
-                map_diag_l,
-                map_upper_l,
-                map_lower_l,
-                # P indices
-                rows, 
-                columns,
-                # P transposition indices.
-                ij2ji,                
-                # M and L indices.
-                rows_m,
-                columns_m,
-                rows_l,
-                columns_l,
-                # M and L transposition indeices.
-                ij2ji_m,
-                ij2ji_l,
-                # Output observables.
-                dosw[disp[1, rank] : disp[1, rank] + count[1, rank]],
-                nEw[disp[1, rank] : disp[1, rank] + count[1, rank]],
-                nPw[disp[1, rank] : disp[1, rank] + count[1, rank]],
-                Idx_e_loc,
-                # Some factor, idk.
-                factor_w_loc,
-                # MPI communicator info.
-                comm,
-                rank,
-                size,
-                # Number of connected blocks.
-                nbc,
-                # Options.
-                homogenize=False,
-                NCpSC=NCpSC,
-                mkl_threads=w_mkl_threads,
-                worker_num=w_worker_threads,
-                compute_mode = 1
-            )
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
+                hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
+                map_upper_mm, map_lower_mm, rows, columns, ij2ji,
+                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=True, NCpSC=NCpSC,
+                mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
             
             if args.bsr and args.validate_bsr:
                 assert np.allclose(wg_diag, wg_diag_bsr)
@@ -959,46 +863,46 @@ if __name__ == "__main__":
         if rank == 0:
             p2w_time += time.perf_counter()
             print(f"    P2W time: {p2w_time:.3f} s", flush=True)
-            #print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
+            print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
             pre_comm2_time = -time.perf_counter()
 
-        # memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
-        # memory_mask[ind_zeros] = False
+        memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
+        memory_mask[ind_zeros] = False
 
-        # # transform from block format to 2D format-----------------------------------
-        # # lower diagonal blocks from physics identity
-        # wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        # wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        # #wr_lower = wr_upper.transpose((0,1,3,2))
-        # # if iter_num == 0:
-        # #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wg_diag, wg_upper,
-        # #                                                     wg_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wl_diag, wl_upper,
-        # #                                                     wl_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wr_diag, wr_upper,
-        # #                                                     wr_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # # else:
-        # # add new contribution to the Screened interaction
-        # wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                 map_lower_mm, wg_diag, wg_upper,
-        #                                                 wg_lower, no, count[1,rank],
-        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
-        # wg_p2w[ind_zeros, :] = 0.0 + 0.0j
-        # wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                 map_lower_mm, wl_diag, wl_upper,
-        #                                                 wl_lower, no, count[1,rank],
-        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
-        # wl_p2w[ind_zeros, :] = 0.0 + 0.0j
-        # # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                 map_lower_mm, wr_diag, wr_upper,
-        # #                                                 wr_lower, no, count[1,rank],
-        # #                                                 energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
+        # transform from block format to 2D format-----------------------------------
+        # lower diagonal blocks from physics identity
+        wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
+        wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
+        #wr_lower = wr_upper.transpose((0,1,3,2))
+        # if iter_num == 0:
+        #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wg_diag, wg_upper,
+        #                                                     wg_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wl_diag, wl_upper,
+        #                                                     wl_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                     map_lower_mm, wr_diag, wr_upper,
+        #                                                     wr_lower, no, count[1,rank],
+        #                                                     energy_contiguous=False)
+        # else:
+        # add new contribution to the Screened interaction
+        wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wg_diag, wg_upper,
+                                                        wg_lower, no, count[1,rank],
+                                                        energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
+        wg_p2w[ind_zeros, :] = 0.0 + 0.0j
+        wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+                                                        map_lower_mm, wl_diag, wl_upper,
+                                                        wl_lower, no, count[1,rank],
+                                                        energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
+        wl_p2w[ind_zeros, :] = 0.0 + 0.0j
+        # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
+        #                                                 map_lower_mm, wr_diag, wr_upper,
+        #                                                 wr_lower, no, count[1,rank],
+        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
 
 
         # distribute screened interaction according to gw2s step--------------------

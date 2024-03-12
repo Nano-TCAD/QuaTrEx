@@ -541,6 +541,63 @@ def p2w_pool_mpi_gpu_split(
     # Find indices of elements satisfying the conditions
     ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
 
+    if not((np.sum(np.isnan(F1)) == 0) and (np.sum(np.isinf(F1)) == 0)):
+        print("encountered invalid value in F1", flush = True)
+    if not((np.sum(np.isnan(F2)) == 0) and (np.sum(np.isinf(F2))==0)):
+        print("encountered invalid value in F2", flush = True)
+    if not((np.sum(np.isnan(dDOSm)) == 0) and (np.sum(np.isinf(dDOSm)) == 0)):
+        print("encountered invalid value in dDOSm", flush = True)
+    if not((np.sum(np.isnan(dDOSp)) == 0) and (np.sum(np.isinf(dDOSp)) == 0)):
+        print("encountered invalid value in dDOSp", flush = True)
+
+    if np.sum(np.isnan(dosw)) == 0:
+        ind_zeros_nan_dosw = np.array([], dtype = int)
+    else:
+        ind_zeros_nan_dosw = np.unique(np.argwhere(np.isnan(dosw)).T[0])
+        print("encountered nan is dosw", flush = True)
+
+    ind_zeros = np.concatenate((ind_zeros_nan_dosw, ind_zeros))
+
+    if np.sum(np.isinf(dosw)) == 0:
+        ind_zeros_inf_dosw = np.array([], dtype = int)
+    else:
+        ind_zeros_inf_dosw = np.unique(np.argwhere(np.isinf(dosw)).T[0])
+        print("encountered inf is dosw", flush = True)
+
+    ind_zeros = np.concatenate((ind_zeros_inf_dosw, ind_zeros))
+
+    if np.sum(np.isnan(new)) == 0:
+        ind_zeros_nan_new = np.array([], dtype = int)
+    else:
+        ind_zeros_nan_new = np.unique(np.argwhere(np.isnan(new)).T[0])
+        print("encountered nan in new", flush = True)
+    
+    ind_zeros = np.concatenate((ind_zeros_nan_new, ind_zeros))
+
+    if np.sum(np.isinf(new)) == 0:
+        ind_zeros_inf_new = np.array([], dtype = int)
+    else:
+        ind_zeros_inf_new = np.unique(np.argwhere(np.isinf(new)).T[0])
+        print("encountered inf is new", flush = True)
+
+    ind_zeros = np.concatenate((ind_zeros_inf_new, ind_zeros))
+
+    if np.sum(np.isnan(npw)) == 0:
+        ind_zeros_nan_npw = np.array([], dtype = int)
+    else:
+        ind_zeros_nan_npw = np.unique(np.argwhere(np.isnan(npw)).T[0])
+        print("encountered nan in npw", flush = True)
+    
+    ind_zeros = np.concatenate((ind_zeros_nan_npw, ind_zeros))
+
+    if np.sum(np.isinf(npw)) == 0:
+        ind_zeros_inf_npw = np.array([], dtype = int)
+    else:
+        ind_zeros_inf_npw = np.unique(np.argwhere(np.isinf(npw)).T[0])
+        print("encountered inf is npw", flush = True)
+
+    ind_zeros = np.concatenate((ind_zeros_inf_npw, ind_zeros))
+
     if idx_e[0] == 0:
         ind_zeros = np.concatenate(([0], ind_zeros))
 
