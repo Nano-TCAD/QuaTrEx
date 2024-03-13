@@ -181,12 +181,26 @@ def calc_W_pool_mpi_split(
     condr = np.zeros((ne), dtype=np.float64)
 
     # Dense buffers for the OBC matmul.
-    mr_s = np.ndarray((ne,), dtype=object)
-    mr_e = np.ndarray((ne,), dtype=object)
-    lg_s = np.ndarray((ne,), dtype=object)
-    lg_e = np.ndarray((ne,), dtype=object)
-    ll_s = np.ndarray((ne,), dtype=object)
-    ll_e = np.ndarray((ne,), dtype=object)
+    # mr_s = np.ndarray((ne,), dtype=object)
+    # mr_e = np.ndarray((ne,), dtype=object)
+    # lg_s = np.ndarray((ne,), dtype=object)
+    # lg_e = np.ndarray((ne,), dtype=object)
+    # ll_s = np.ndarray((ne,), dtype=object)
+    # ll_e = np.ndarray((ne,), dtype=object)
+    mr_s0 = cpx.empty_like_pinned(dmr_sd)
+    mr_s1 = cpx.empty_like_pinned(dmr_sd)
+    mr_s2 = cpx.empty_like_pinned(dmr_sd)
+    mr_e0 = cpx.empty_like_pinned(dmr_ed)
+    mr_e1 = cpx.empty_like_pinned(dmr_ed)
+    mr_e2 = cpx.empty_like_pinned(dmr_ed)
+    lg_s0 = cpx.empty_like_pinned(dlg_sd)
+    lg_s1 = cpx.empty_like_pinned(dlg_sd)
+    lg_e0 = cpx.empty_like_pinned(dlg_ed)
+    lg_e1 = cpx.empty_like_pinned(dlg_ed)
+    ll_s0 = cpx.empty_like_pinned(dll_sd)
+    ll_s1 = cpx.empty_like_pinned(dll_sd)
+    ll_e0 = cpx.empty_like_pinned(dll_ed)
+    ll_e1 = cpx.empty_like_pinned(dll_ed)
     vh_s = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
     vh_e = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
     mb00 = np.ndarray(
@@ -207,6 +221,43 @@ def calc_W_pool_mpi_split(
         ),
         dtype=np.complex128,
     )
+
+    # dvh_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dvh_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dmr_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dmr_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dlg_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dlg_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dll_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dll_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+
+    # # Dense buffers for the OBC matmul.
+    # mr_s_ref = np.ndarray((ne,), dtype=object)
+    # mr_e_ref = np.ndarray((ne,), dtype=object)
+    # lg_s_ref = np.ndarray((ne,), dtype=object)
+    # lg_e_ref = np.ndarray((ne,), dtype=object)
+    # ll_s_ref = np.ndarray((ne,), dtype=object)
+    # ll_e_ref = np.ndarray((ne,), dtype=object)
+    # vh_s_ref = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # vh_e_ref = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # mb00_ref = np.ndarray(
+    #     (
+    #         ne,
+    #         2 * nbc * NCpSC + 1,
+    #         lb_start_mm // (nbc * NCpSC),
+    #         lb_start_mm // (nbc * NCpSC),
+    #     ),
+    #     dtype=np.complex128,
+    # )
+    # mbNN_ref = np.ndarray(
+    #     (
+    #         ne,
+    #         2 * nbc * NCpSC + 1,
+    #         lb_start_mm // (nbc * NCpSC),
+    #         lb_start_mm // (nbc * NCpSC),
+    #     ),
+    #     dtype=np.complex128,
+    # )
 
     # for ie in range(ne):
     #     # Anti-Hermitian symmetrizing of PL and PG
@@ -274,25 +325,44 @@ def calc_W_pool_mpi_split(
     #     #     condl[idx] = res[0]
     #     #     condr[idx] = res[1]
 
-    for ie in range(ne):
-        mr_s[ie] = tuple(
-            np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
-        )
-        mr_e[ie] = tuple(
-            np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(3)
-        )
-        lg_s[ie] = tuple(
-            np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-        )
-        lg_e[ie] = tuple(
-            np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-        )
-        ll_s[ie] = tuple(
-            np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-        )
-        ll_e[ie] = tuple(
-            np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-        )
+    # for ie in range(ne):
+    #     mr_s[ie] = tuple(
+    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
+    #     )
+    #     mr_e[ie] = tuple(
+    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(3)
+    #     )
+    #     lg_s[ie] = tuple(
+    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
+    #     )
+    #     lg_e[ie] = tuple(
+    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
+    #     )
+    #     ll_s[ie] = tuple(
+    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
+    #     )
+    #     ll_e[ie] = tuple(
+    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
+    #     )
+
+        # mr_s_ref[ie] = tuple(
+        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
+        # )
+        # mr_e_ref[ie] = tuple(
+        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(3)
+        # )
+        # lg_s_ref[ie] = tuple(
+        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
+        # )
+        # lg_e_ref[ie] = tuple(
+        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
+        # )
+        # ll_s_ref[ie] = tuple(
+        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
+        # )
+        # ll_e_ref[ie] = tuple(
+        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
+        # )
 
     mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
     lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
@@ -309,6 +379,33 @@ def calc_W_pool_mpi_split(
     mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
     lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
     ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+
+    # slice block start diagonal and slice block start off diagonal
+    slb_sd = slice(0, lb_start)
+    slb_so = slice(lb_start, 2 * lb_start)
+    # slice block end diagonal and slice block end off diagonal
+    slb_ed = slice(nao - lb_end, nao)
+    slb_eo = slice(nao - 2 * lb_end, nao - lb_end)
+
+    vh_s1 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    vh_s2 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pg_s1 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pg_s2 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pl_s1 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pl_s2 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pr_s1 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pr_s2 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+    pr_s3 = cp.empty((ne, lb_start, lb_start), dtype=np.complex128)
+
+    vh_e1 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    vh_e2 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pg_e1 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pg_e2 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pl_e1 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pl_e2 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pr_e1 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pr_e2 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
+    pr_e3 = cp.empty((ne, lb_end, lb_end), dtype=np.complex128)
 
     for ie in range(ne):
          
@@ -329,20 +426,114 @@ def calc_W_pool_mpi_split(
         lg_host[ie, :] = cp.asnumpy(lg_dev[0])
         ll_host[ie, :] = cp.asnumpy(ll_dev[0])
 
-        obc_w_gpu.obc_w_mm_gpu_2(vh_dev,
-                                 pg_dev, pl_dev, pr_dev,
-                                 bmax, bmin,
-                                 dvh_sd[ie], dvh_ed[ie],
-                                 dmr_sd[ie], dmr_ed[ie],
-                                 dlg_sd[ie], dlg_ed[ie],
-                                 dll_sd[ie], dll_ed[ie],
-                                 mr_s[ie], mr_e[ie],
-                                 lg_s[ie], lg_e[ie],
-                                 ll_s[ie], ll_e[ie],
-                                 vh_s[ie], vh_e[ie],
-                                 mb00[ie], mbNN[ie],
-                                 rows_dev, columns_dev,
-                                 nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
+        # vh_s1[ie] = cp.ascontiguousarray(vh_dev[slb_sd, slb_sd].toarray(order="C"))
+        # vh_s2[ie] = cp.ascontiguousarray(vh_dev[slb_sd, slb_so].toarray(order="C"))
+        # pg_s1[ie] = cp.ascontiguousarray(pg_dev[slb_sd, slb_sd].toarray(order="C"))
+        # pg_s2[ie] = cp.ascontiguousarray(pg_dev[slb_sd, slb_so].toarray(order="C"))
+        # pl_s1[ie] = cp.ascontiguousarray(pl_dev[slb_sd, slb_sd].toarray(order="C"))
+        # pl_s2[ie] = cp.ascontiguousarray(pl_dev[slb_sd, slb_so].toarray(order="C"))
+        # pr_s1[ie] = cp.ascontiguousarray(pr_dev[slb_sd, slb_sd].toarray(order="C"))
+        # pr_s2[ie] = cp.ascontiguousarray(pr_dev[slb_sd, slb_so].toarray(order="C"))
+        # pr_s3[ie] = cp.ascontiguousarray(pr_dev[slb_so, slb_sd].toarray(order="C"))
+
+        # vh_e1[ie] = cp.ascontiguousarray(vh_dev[slb_ed, slb_ed].toarray(order="C"))
+        # vh_e2[ie] = cp.ascontiguousarray(vh_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
+        # pg_e1[ie] = cp.ascontiguousarray(pg_dev[slb_ed, slb_ed].toarray(order="C"))
+        # pg_e2[ie] = cp.ascontiguousarray(-pg_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
+        # pl_e1[ie] = cp.ascontiguousarray(pl_dev[slb_ed, slb_ed].toarray(order="C"))
+        # pl_e2[ie] = cp.ascontiguousarray(-pl_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
+        # pr_e1[ie] = cp.ascontiguousarray(pr_dev[slb_ed, slb_ed].toarray(order="C"))
+        # pr_e2[ie] = cp.ascontiguousarray(pr_dev[slb_eo, slb_ed].toarray(order="C"))
+        # pr_e3[ie] = cp.ascontiguousarray(pr_dev[slb_ed, slb_eo].toarray(order="C"))
+
+        vh_s1[ie] = vh_dev[slb_sd, slb_sd].toarray()
+        vh_s2[ie] = vh_dev[slb_sd, slb_so].toarray()
+        pg_s1[ie] = pg_dev[slb_sd, slb_sd].toarray()
+        pg_s2[ie] = pg_dev[slb_sd, slb_so].toarray()
+        pl_s1[ie] = pl_dev[slb_sd, slb_sd].toarray()
+        pl_s2[ie] = pl_dev[slb_sd, slb_so].toarray()
+        pr_s1[ie] = pr_dev[slb_sd, slb_sd].toarray()
+        pr_s2[ie] = pr_dev[slb_sd, slb_so].toarray()
+        pr_s3[ie] = pr_dev[slb_so, slb_sd].toarray()
+
+        vh_e1[ie] = vh_dev[slb_ed, slb_ed].toarray()
+        vh_e2[ie] = vh_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
+        pg_e1[ie] = pg_dev[slb_ed, slb_ed].toarray()
+        pg_e2[ie] = -pg_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
+        pl_e1[ie] = pl_dev[slb_ed, slb_ed].toarray()
+        pl_e2[ie] = -pl_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
+        pr_e1[ie] = pr_dev[slb_ed, slb_ed].toarray()
+        pr_e2[ie] = pr_dev[slb_eo, slb_ed].toarray()
+        pr_e3[ie] = pr_dev[slb_ed, slb_eo].toarray()
+
+        # obc_w_gpu.obc_w_mm_gpu_2(vh_dev,
+        #                          pg_dev, pl_dev, pr_dev,
+        #                          bmax, bmin,
+        #                          dvh_sd_ref[ie], dvh_ed_ref[ie],
+        #                          dmr_sd_ref[ie], dmr_ed_ref[ie],
+        #                          dlg_sd_ref[ie], dlg_ed_ref[ie],
+        #                          dll_sd_ref[ie], dll_ed_ref[ie],
+        #                          mr_s_ref[ie], mr_e_ref[ie],
+        #                          lg_s_ref[ie], lg_e_ref[ie],
+        #                          ll_s_ref[ie], ll_e_ref[ie],
+        #                          vh_s_ref[ie], vh_e_ref[ie],
+        #                          mb00_ref[ie], mbNN_ref[ie],
+        #                          rows_dev, columns_dev,
+        #                          nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
+
+    obc_w_gpu.obc_w_mm_batched_gpu(vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3,
+                                   vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3,
+                                   dmr_sd, dmr_ed, dlg_sd, dlg_ed, dll_sd, dll_ed,
+                                #    mr_s, mr_e, lg_s, lg_e, ll_s, ll_e,
+                                   mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
+                                   vh_s, vh_e, mb00, mbNN, nbc, NCpSC)
+    
+    def _norm(val, ref):
+        return np.linalg.norm(val - ref) / np.linalg.norm(ref)
+    
+    # print("dmr_sd", _norm(dmr_sd, dmr_sd_ref))
+    # print("dmr_ed", _norm(dmr_ed, dmr_ed_ref))
+    # print("dlg_sd", _norm(dlg_sd, dlg_sd_ref))
+    # print("dlg_ed", _norm(dlg_ed, dlg_ed_ref))
+    # print("dll_sd", _norm(dll_sd, dll_sd_ref))
+    # print("dll_ed", _norm(dll_ed, dll_ed_ref))
+    # print("vh_s", _norm(vh_s, vh_s_ref))
+    # print("vh_e", _norm(vh_e, vh_e_ref))
+    # print("mb00", _norm(mb00, mb00_ref))
+    # print("mbNN", _norm(mbNN, mbNN_ref))
+
+    # for ie in range(ne):
+    #     print("mr_s[0]", _norm(mr_s[ie][0], mr_s_ref[ie][0]))
+    #     print("mr_s[1]", _norm(mr_s[ie][1], mr_s_ref[ie][1]))
+    #     print("mr_s[2]", _norm(mr_s[ie][2], mr_s_ref[ie][2]))
+    #     print("mr_e[0]", _norm(mr_e[ie][0], mr_e_ref[ie][0]))
+    #     print("mr_e[1]", _norm(mr_e[ie][1], mr_e_ref[ie][1]))
+    #     print("mr_e[2]", _norm(mr_e[ie][2], mr_e_ref[ie][2]))
+    #     print("lg_s[0]", _norm(lg_s[ie][0], lg_s_ref[ie][0]))
+    #     print("lg_s[1]", _norm(lg_s[ie][1], lg_s_ref[ie][1]))
+    #     print("lg_e[0]", _norm(lg_e[ie][0], lg_e_ref[ie][0]))
+    #     print("lg_e[1]", _norm(lg_e[ie][1], lg_e_ref[ie][1]))
+    #     print("ll_s[0]", _norm(ll_s[ie][0], ll_s_ref[ie][0]))
+    #     print("ll_s[1]", _norm(ll_s[ie][1], ll_s_ref[ie][1]))
+    #     print("ll_e[0]", _norm(ll_e[ie][0], ll_e_ref[ie][0]))
+    #     print("ll_e[1]", _norm(ll_e[ie][1], ll_e_ref[ie][1]))
+
+    # dmr_sd = dmr_sd_ref
+    # dmr_ed = dmr_ed_ref
+    # dlg_sd = dlg_sd_ref
+    # dlg_ed = dlg_ed_ref
+    # dll_sd = dll_sd_ref
+    # dll_ed = dll_ed_ref
+    # mr_s = mr_s_ref
+    # mr_e = mr_e_ref
+    # lg_s = lg_s_ref
+    # lg_e = lg_e_ref
+    # ll_s = ll_s_ref
+    # ll_e = ll_e_ref
+    # vh_s = vh_s_ref
+    # vh_e = vh_e_ref
+    # mb00 = mb00_ref
+    # mbNN = mbNN_ref
 
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     #     executor.map(obc_w_gpu.obc_w_mm_gpu_2,
@@ -446,26 +637,32 @@ def calc_W_pool_mpi_split(
         imag_lim = 1e-4
         R = 1e4
         matrix_blocks_left = cp.asarray(mb00)
-        M00_left = cp.empty((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-        M01_left = cp.empty_like(M00_left)
-        M10_left = cp.empty_like(M00_left)
-        for ie in range(ne):
-            M00_left[ie].set(mr_s[ie][0])
-            M01_left[ie].set(mr_s[ie][1])
-            M10_left[ie].set(mr_s[ie][2])
+        # M00_left = cp.empty((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+        # M01_left = cp.empty_like(M00_left)
+        # M10_left = cp.empty_like(M00_left)
+        # for ie in range(ne):
+        #     M00_left[ie].set(mr_s[ie][0])
+        #     M01_left[ie].set(mr_s[ie][1])
+        #     M10_left[ie].set(mr_s[ie][2])
+        M00_left = cp.asarray(mr_s0)
+        M01_left = cp.asarray(mr_s1)
+        M10_left = cp.asarray(mr_s2)
         dmr, dxr_sd_gpu, condL, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
         assert not any(np.isnan(cond) for cond in condL)
         dxr_sd_gpu.get(out=dxr_sd)
         dmr_sd -= dmr.get()
         (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s)).get(out=dvh_sd)
         matrix_blocks_right = cp.asarray(mbNN)
-        M00_right = cp.empty((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-        M01_right = cp.empty_like(M00_right)
-        M10_right = cp.empty_like(M00_right)
-        for ie in range(ne):
-            M00_right[ie].set(mr_e[ie][0])
-            M01_right[ie].set(mr_e[ie][1])
-            M10_right[ie].set(mr_e[ie][2])
+        # M00_right = cp.empty((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+        # M01_right = cp.empty_like(M00_right)
+        # M10_right = cp.empty_like(M00_right)
+        # for ie in range(ne):
+        #     M00_right[ie].set(mr_e[ie][0])
+        #     M01_right[ie].set(mr_e[ie][1])
+        #     M10_right[ie].set(mr_e[ie][2])
+        M00_right = cp.asarray(mr_e0)
+        M01_right = cp.asarray(mr_e1)
+        M10_right = cp.asarray(mr_e2)
         dmr, dxr_ed_gpu, condR, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
         assert not any(np.isnan(cond) for cond in condR)
         dxr_ed_gpu.get(out=dxr_ed)
@@ -473,18 +670,34 @@ def calc_W_pool_mpi_split(
         (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
 
 
+        # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        #     executor.map(obc_w_gpu.obc_w_L_lg,
+        #         dlg_sd,
+        #         dlg_ed,
+        #         dll_sd,
+        #         dll_ed,
+        #         mr_s,
+        #         mr_e,
+        #         lg_s,
+        #         lg_e,
+        #         ll_s,
+        #         ll_e,
+        #         dxr_sd,
+        #         dxr_ed,
+        #     )
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-            executor.map(obc_w_gpu.obc_w_L_lg,
+            executor.map(obc_w_gpu.obc_w_L_lg_2,
                 dlg_sd,
                 dlg_ed,
                 dll_sd,
                 dll_ed,
-                mr_s,
-                mr_e,
-                lg_s,
-                lg_e,
-                ll_s,
-                ll_e,
+                mr_s0, mr_s1, mr_s2,
+                mr_e0, mr_e1, mr_e2,
+                lg_s0, lg_s1,
+                lg_e0, lg_e1,
+                ll_s0, ll_s1,
+                ll_e0, ll_e1,
                 dxr_sd,
                 dxr_ed,
             )

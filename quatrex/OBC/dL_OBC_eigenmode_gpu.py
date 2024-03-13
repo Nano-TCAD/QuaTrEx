@@ -8,6 +8,7 @@ import numpy as np
 import typing
 
 from quatrex.OBC.beyn_new_gpu import extract_small_matrix_blocks_gpu
+from quatrex.OBC.beyn_batched import extract_small_matrix_blocks_batched_gpu
 
 def get_mm_obc_dense(
     vh_1: cp.ndarray, vh_2: cp.ndarray, pg_1: cp.ndarray, pg_2: cp.ndarray, pl_1: cp.ndarray, pl_2: cp.ndarray,
@@ -601,3 +602,492 @@ def get_dl_obc_alt(xr_d: cp.ndarray, lg_d: cp.ndarray, lg_o: cp.ndarray, ll_d: c
     return dlg_d, dll_d
 
 
+def get_mm_obc_dense_batched(
+    vh_1: cp.ndarray, vh_2: cp.ndarray, pg_1: cp.ndarray, pg_2: cp.ndarray, pl_1: cp.ndarray, pl_2: cp.ndarray,
+    pr_1: cp.ndarray, pr_2: cp.ndarray, pr_3: cp.ndarray, nbc: int, NCpSC: int, side: str = "L"
+) -> typing.Tuple[typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+                  typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray], typing.Tuple[
+                      cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray, cp.ndarray], typing.Tuple[cp.ndarray,
+                                                                                                  cp.ndarray]]:
+    """
+    Calculates the different correction terms for the scattering OBCs for the screened interaction calculations.
+    In this version the blocks are not stacked, but the matrices are multiplied directly and inserted afterwards.
+
+    Args:
+        vh_1 (cp.ndarray): Diagonal block of effective interaction
+        vh_2 (cp.ndarray): Off diagonal block of effective interaction
+        pg_1 (cp.ndarray): Diagonal block of greater polarization
+        pg_2 (cp.ndarray): Off diagonal block of greater polarization
+        pl_1 (cp.ndarray): Diagonal block of lesser polarization
+        pl_2 (cp.ndarray): Off diagonal block of lesser polarization
+        pr_1 (cp.ndarray): Diagonal block of retarded polarization
+        pr_2 (cp.ndarray): Off diagonal block of retarded polarization
+        nbc (int): How block size changes after matrix multiplication
+
+    Returns:
+        typing.Tuple[
+            typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray],
+            typing.Tuple[cp.ndarray, cp.ndarray]
+            ]: mr_d/u/l, lg_d/u/l, ll_d/u/l, dg_lu/ul, dl_lu/ul, vh_u/l
+    """
+    # block size
+    lb = vh_1.shape[1]
+    # block size after mm
+    lb_mm = nbc * lb
+    # define the right blocks
+    (vh_d1, vh_u1, vh_l1, _) = extract_small_matrix_blocks_batched_gpu(vh_1, vh_2,
+                                                            vh_2.conjugate().transpose(0, 2, 1),
+                                                            NCpSC, side)  
+    # else:
+    #     vh_d1 = vh_1
+    #     vh_u1 = vh_2
+    #     vh_l1 = vh_u1.conjugate().transpose()
+    # pg_d1 = pg_1
+    # pg_u1 = pg_2
+    # pg_l1 = -pg_u1.conjugate().transpose()
+    (pg_d1, pg_u1, pg_l1, _) = extract_small_matrix_blocks_batched_gpu(pg_1, pg_2,
+                                                            -pg_2.conjugate().transpose(0, 2, 1),
+                                                            NCpSC, side)
+
+
+    # if side == "L":
+    (pl_d1, pl_u1, pl_l1, _) = extract_small_matrix_blocks_batched_gpu(pl_1, pl_2,
+                                                            -pl_2.conjugate().transpose(0, 2, 1),
+                                                            NCpSC, side)
+    # else: 
+    #     pl_d1 = pl_1
+    #     pl_u1 = pl_2
+    #     pl_l1 = -pl_u1.conjugate().transpose()
+
+    # if side == "L":
+    (pr_d1, pr_u1, pr_l1, _) = extract_small_matrix_blocks_batched_gpu(pr_1, pr_2, pr_3, NCpSC, side)
+    # else:
+
+    # output matrices
+    batch_size = vh_1.shape[0]
+    # mr_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # mr_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # mr_l2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # lg_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # lg_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # lg_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # ll_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # ll_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # ll_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dmr_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dmr_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dlg_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dlg_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dll_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # dll_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # vh_u = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    # vh_l = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    if nbc == 1:
+        # fill output matrices
+        # M^{r}\left(E\right)
+        # mr_d2[:] = -vh_d1 @ pr_d1 - vh_u1 @ pr_l1 - vh_l1 @ pr_u1
+        # mr_u2[:] = -vh_d1 @ pr_u1 - vh_u1 @ pr_d1
+        # mr_l2[:] = -vh_d1 @ pr_l1 - vh_l1 @ pr_d1
+
+        # # from L^{\lessgtr}\left(E\right)
+        # lg_d2[:, :] = (vh_l1 @ pg_d1 @ vh_u1 + vh_l1 @ pg_u1 @ vh_d1 + vh_d1 @ pg_l1 @ vh_u1 + vh_d1 @ pg_d1 @ vh_d1 +
+        #                vh_d1 @ pg_u1 @ vh_l1 + vh_u1 @ pg_l1 @ vh_d1 + vh_u1 @ pg_d1 @ vh_l1)
+        # lg_u2[:, :] = (vh_l1 @ pg_u1 @ vh_u1 + vh_d1 @ pg_d1 @ vh_u1 + vh_d1 @ pg_u1 @ vh_d1 + vh_u1 @ pg_l1 @ vh_u1 +
+        #                vh_u1 @ pg_d1 @ vh_d1)
+        # ll_d2[:, :] = (vh_l1 @ pl_d1 @ vh_u1 + vh_l1 @ pl_u1 @ vh_d1 + vh_d1 @ pl_l1 @ vh_u1 + vh_d1 @ pl_d1 @ vh_d1 +
+        #                vh_d1 @ pl_u1 @ vh_l1 + vh_u1 @ pl_l1 @ vh_d1 + vh_u1 @ pl_d1 @ vh_l1)
+        # ll_u2[:, :] = (vh_l1 @ pl_u1 @ vh_u1 + vh_d1 @ pl_d1 @ vh_u1 + vh_d1 @ pl_u1 @ vh_d1 + vh_u1 @ pl_l1 @ vh_u1 +
+        #                vh_u1 @ pl_d1 @ vh_d1)
+        # dmr_lu[:, :] = -vh_l1 @ pr_u1
+        # dmr_ul[:, :] = -vh_u1 @ pr_l1
+        # dlg_lu[:, :] = vh_l1 @ pg_d1 @ vh_u1 + vh_l1 @ pg_u1 @ vh_d1 + vh_d1 @ pg_l1 @ vh_u1
+        # dll_lu[:, :] = vh_l1 @ pl_d1 @ vh_u1 + vh_l1 @ pl_u1 @ vh_d1 + vh_d1 @ pl_l1 @ vh_u1
+        # dlg_ul[:, :] = vh_u1 @ pg_d1 @ vh_l1 + vh_u1 @ pg_l1 @ vh_d1 + vh_d1 @ pg_u1 @ vh_l1
+        # dll_ul[:, :] = vh_u1 @ pl_d1 @ vh_l1 + vh_u1 @ pl_l1 @ vh_d1 + vh_d1 @ pl_u1 @ vh_l1
+        # vh_u[:, :] = vh_u1
+        # vh_l[:, :] = vh_l1
+
+        mr_d2 = -vh_d1 @ pr_d1 - vh_u1 @ pr_l1 - vh_l1 @ pr_u1
+        mr_u2 = -vh_d1 @ pr_u1 - vh_u1 @ pr_d1
+        mr_l2 = -vh_d1 @ pr_l1 - vh_l1 @ pr_d1
+
+        # from L^{\lessgtr}\left(E\right)
+        lg_d2 = (vh_l1 @ pg_d1 @ vh_u1 + vh_l1 @ pg_u1 @ vh_d1 + vh_d1 @ pg_l1 @ vh_u1 + vh_d1 @ pg_d1 @ vh_d1 +
+                       vh_d1 @ pg_u1 @ vh_l1 + vh_u1 @ pg_l1 @ vh_d1 + vh_u1 @ pg_d1 @ vh_l1)
+        lg_u2 = (vh_l1 @ pg_u1 @ vh_u1 + vh_d1 @ pg_d1 @ vh_u1 + vh_d1 @ pg_u1 @ vh_d1 + vh_u1 @ pg_l1 @ vh_u1 +
+                       vh_u1 @ pg_d1 @ vh_d1)
+        ll_d2 = (vh_l1 @ pl_d1 @ vh_u1 + vh_l1 @ pl_u1 @ vh_d1 + vh_d1 @ pl_l1 @ vh_u1 + vh_d1 @ pl_d1 @ vh_d1 +
+                       vh_d1 @ pl_u1 @ vh_l1 + vh_u1 @ pl_l1 @ vh_d1 + vh_u1 @ pl_d1 @ vh_l1)
+        ll_u2 = (vh_l1 @ pl_u1 @ vh_u1 + vh_d1 @ pl_d1 @ vh_u1 + vh_d1 @ pl_u1 @ vh_d1 + vh_u1 @ pl_l1 @ vh_u1 +
+                       vh_u1 @ pl_d1 @ vh_d1)
+        dmr_lu = -vh_l1 @ pr_u1
+        dmr_ul = -vh_u1 @ pr_l1
+        dlg_lu = vh_l1 @ pg_d1 @ vh_u1 + vh_l1 @ pg_u1 @ vh_d1 + vh_d1 @ pg_l1 @ vh_u1
+        dll_lu = vh_l1 @ pl_d1 @ vh_u1 + vh_l1 @ pl_u1 @ vh_d1 + vh_d1 @ pl_l1 @ vh_u1
+        dlg_ul = vh_u1 @ pg_d1 @ vh_l1 + vh_u1 @ pg_l1 @ vh_d1 + vh_d1 @ pg_u1 @ vh_l1
+        dll_ul = vh_u1 @ pl_d1 @ vh_l1 + vh_u1 @ pl_l1 @ vh_d1 + vh_d1 @ pl_u1 @ vh_l1
+        vh_u = vh_u1
+        vh_l = vh_l1
+    elif nbc == 2:
+        # compute multiplications
+        vhpr_d1d1 = -vh_d1 @ pr_d1
+        vhpr_d1u1 = -vh_d1 @ pr_u1
+        vhpr_d1l1 = -vh_d1 @ pr_l1
+        vhpr_u1d1 = -vh_u1 @ pr_d1
+        vhpr_u1u1 = -vh_u1 @ pr_u1
+        vhpr_u1l1 = -vh_u1 @ pr_l1
+        vhpr_l1d1 = -vh_l1 @ pr_d1
+        vhpr_l1u1 = -vh_l1 @ pr_u1
+        vhpr_l1l1 = -vh_l1 @ pr_l1
+
+        vhpg_d1d1 = vh_d1 @ pg_d1
+        vhpg_d1u1 = vh_d1 @ pg_u1
+        vhpg_d1l1 = vh_d1 @ pg_l1
+        vhpg_u1d1 = vh_u1 @ pg_d1
+        vhpg_u1u1 = vh_u1 @ pg_u1
+        vhpg_u1l1 = vh_u1 @ pg_l1
+        vhpg_l1d1 = vh_l1 @ pg_d1
+        vhpg_l1u1 = vh_l1 @ pg_u1
+        vhpg_l1l1 = vh_l1 @ pg_l1
+        vhpgvh_d1d1d1 = vhpg_d1d1 @ vh_d1
+        vhpgvh_d1d1u1 = vhpg_d1d1 @ vh_u1
+        vhpgvh_d1d1l1 = vhpg_d1d1 @ vh_l1
+        vhpgvh_d1u1d1 = vhpg_d1u1 @ vh_d1
+        vhpgvh_d1u1u1 = vhpg_d1u1 @ vh_u1
+        vhpgvh_d1u1l1 = vhpg_d1u1 @ vh_l1
+        vhpgvh_d1l1d1 = vhpg_d1l1 @ vh_d1
+        vhpgvh_d1l1u1 = vhpg_d1l1 @ vh_u1
+        vhpgvh_u1d1d1 = vhpg_u1d1 @ vh_d1
+        vhpgvh_u1d1u1 = vhpg_u1d1 @ vh_u1
+        vhpgvh_u1d1l1 = vhpg_u1d1 @ vh_l1
+        vhpgvh_u1u1d1 = vhpg_u1u1 @ vh_d1
+        vhpgvh_u1u1u1 = vhpg_u1u1 @ vh_u1
+        vhpgvh_u1u1l1 = vhpg_u1u1 @ vh_l1
+        vhpgvh_u1l1d1 = vhpg_u1l1 @ vh_d1
+        vhpgvh_u1l1u1 = vhpg_u1l1 @ vh_u1
+        vhpgvh_u1l1l1 = vhpg_u1l1 @ vh_l1
+        vhpgvh_l1d1d1 = vhpg_l1d1 @ vh_d1
+        vhpgvh_l1d1u1 = vhpg_l1d1 @ vh_u1
+        vhpgvh_l1u1d1 = vhpg_l1u1 @ vh_d1
+        vhpgvh_l1u1u1 = vhpg_l1u1 @ vh_u1
+        vhpgvh_l1u1l1 = vhpg_l1u1 @ vh_l1
+        vhpgvh_l1l1u1 = vhpg_l1l1 @ vh_u1
+        vhpl_d1d1 = vh_d1 @ pl_d1
+        vhpl_d1u1 = vh_d1 @ pl_u1
+        vhpl_d1l1 = vh_d1 @ pl_l1
+        vhpl_u1d1 = vh_u1 @ pl_d1
+        vhpl_u1u1 = vh_u1 @ pl_u1
+        vhpl_u1l1 = vh_u1 @ pl_l1
+        vhpl_l1d1 = vh_l1 @ pl_d1
+        vhpl_l1u1 = vh_l1 @ pl_u1
+        vhpl_l1l1 = vh_l1 @ pl_l1
+        vhplvh_d1d1d1 = vhpl_d1d1 @ vh_d1
+        vhplvh_d1d1u1 = vhpl_d1d1 @ vh_u1
+        vhplvh_d1d1l1 = vhpl_d1d1 @ vh_l1
+        vhplvh_d1u1d1 = vhpl_d1u1 @ vh_d1
+        vhplvh_d1u1u1 = vhpl_d1u1 @ vh_u1
+        vhplvh_d1u1l1 = vhpl_d1u1 @ vh_l1
+        vhplvh_d1l1d1 = vhpl_d1l1 @ vh_d1
+        vhplvh_d1l1u1 = vhpl_d1l1 @ vh_u1
+        vhplvh_u1d1d1 = vhpl_u1d1 @ vh_d1
+        vhplvh_u1d1u1 = vhpl_u1d1 @ vh_u1
+        vhplvh_u1d1l1 = vhpl_u1d1 @ vh_l1
+        vhplvh_u1u1d1 = vhpl_u1u1 @ vh_d1
+        vhplvh_u1u1u1 = vhpl_u1u1 @ vh_u1
+        vhplvh_u1u1l1 = vhpl_u1u1 @ vh_l1
+        vhplvh_u1l1d1 = vhpl_u1l1 @ vh_d1
+        vhplvh_u1l1u1 = vhpl_u1l1 @ vh_u1
+        vhplvh_u1l1l1 = vhpl_u1l1 @ vh_l1
+        vhplvh_l1d1d1 = vhpl_l1d1 @ vh_d1
+        vhplvh_l1d1u1 = vhpl_l1d1 @ vh_u1
+        vhplvh_l1u1d1 = vhpl_l1u1 @ vh_d1
+        vhplvh_l1u1u1 = vhpl_l1u1 @ vh_u1
+        vhplvh_l1u1l1 = vhpl_l1u1 @ vh_l1
+        vhplvh_l1l1u1 = vhpl_l1l1 @ vh_u1
+
+        # fill output matrices
+        # M^{r}\left(E\right)
+        mr_d2[batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_u1l1 + vhpr_l1u1
+        mr_d2[batch_size, :lb, lb:] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[batch_size, lb:, :lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[batch_size, lb:, lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+
+        mr_u2[batch_size, :lb, :lb] = vhpr_u1u1
+        mr_u2[batch_size, lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_u2[batch_size, lb:, lb:] = vhpr_u1u1
+
+        mr_l2[batch_size, :lb, :lb] = vhpr_l1l1
+        mr_l2[batch_size, :lb, lb:] = vhpr_d1l1 + vhpr_l1d1
+        mr_l2[batch_size, lb:, lb:] = vhpr_l1l1
+
+        # L^{\lessgtr}\left(E\right)
+        lg_d2[batch_size, :lb, :
+              lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
+        lg_d2[batch_size, :lb, lb:] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
+        lg_d2[batch_size, lb:, :lb] = vhpgvh_l1l1u1 + vhpgvh_u1l1l1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1
+        lg_d2[batch_size,
+            lb:,
+            lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
+
+        lg_u2[batch_size, :lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_u2[batch_size, :lb, lb:] = vhpgvh_u1u1u1
+        lg_u2[batch_size, lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
+        lg_u2[batch_size, lb:, lb:] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+
+        ll_d2[batch_size, :lb, :
+              lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1 + vhplvh_d1d1d1 + vhplvh_u1l1d1 + vhplvh_d1u1l1 + vhplvh_u1d1l1
+        ll_d2[batch_size, :lb, lb:] = vhplvh_l1u1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_u1l1u1 + vhplvh_d1u1d1 + vhplvh_u1d1d1
+        ll_d2[batch_size, lb:, :lb] = vhplvh_l1l1u1 + vhplvh_u1l1l1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_d1l1d1 + vhplvh_l1d1d1
+        ll_d2[batch_size,
+            lb:,
+            lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_d1l1u1 + vhplvh_l1d1u1
+
+        ll_u2[batch_size, :lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_u2[batch_size, :lb, lb:] = vhplvh_u1u1u1
+        ll_u2[batch_size, lb:, :lb] = vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_u1l1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_l1u1u1
+        ll_u2[batch_size, lb:, lb:] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
+
+        dmr_lu[batch_size, :lb, :lb] = vhpr_l1u1
+        dmr_ul[batch_size, lb:, lb:] = vhpr_u1l1
+
+        dlg_lu[batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
+        dlg_lu[batch_size, :lb, lb:] = vhpgvh_l1u1u1
+        dlg_lu[batch_size, lb:, :lb] = vhpgvh_l1l1u1
+
+        dlg_ul[batch_size, :lb, lb:] = vhpgvh_u1u1l1
+        dlg_ul[batch_size, lb:, :lb] = vhpgvh_u1l1l1
+        dlg_ul[batch_size, lb:, lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
+
+        dll_lu[batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
+        dll_lu[batch_size, :lb, lb:] = vhplvh_l1u1u1
+        dll_lu[batch_size, lb:, :lb] = vhplvh_l1l1u1
+
+        dll_ul[batch_size, :lb, lb:] = vhplvh_u1u1l1
+        dll_ul[batch_size, lb:, :lb] = vhplvh_u1l1l1
+        dll_ul[batch_size, lb:, lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
+
+        vh_u[batch_size, lb:, :lb] = vh_u1
+        vh_l[batch_size, :lb, lb:] = vh_l1
+    elif nbc == 3:
+        # compute multiplications
+        vhpr_d1d1 = -vh_d1 @ pr_d1
+        vhpr_d1u1 = -vh_d1 @ pr_u1
+        vhpr_d1l1 = -vh_d1 @ pr_l1
+        vhpr_u1d1 = -vh_u1 @ pr_d1
+        vhpr_u1u1 = -vh_u1 @ pr_u1
+        vhpr_u1l1 = -vh_u1 @ pr_l1
+        vhpr_l1d1 = -vh_l1 @ pr_d1
+        vhpr_l1u1 = -vh_l1 @ pr_u1
+        vhpr_l1l1 = -vh_l1 @ pr_l1
+
+        vhpg_d1d1 = vh_d1 @ pg_d1
+        vhpg_d1u1 = vh_d1 @ pg_u1
+        vhpg_d1l1 = vh_d1 @ pg_l1
+        vhpg_u1d1 = vh_u1 @ pg_d1
+        vhpg_u1u1 = vh_u1 @ pg_u1
+        vhpg_u1l1 = vh_u1 @ pg_l1
+        vhpg_l1d1 = vh_l1 @ pg_d1
+        vhpg_l1u1 = vh_l1 @ pg_u1
+        vhpg_l1l1 = vh_l1 @ pg_l1
+        # vhpgvh_d1d1d1 = vhpl_d1d1 @ vh_d1
+        # vhpgvh_d1d1u1 = vhpl_d1d1 @ vh_u1
+        # vhpgvh_d1d1l1 = vhpl_d1d1 @ vh_l1
+        # vhpgvh_d1u1d1 = vhpl_d1u1 @ vh_d1
+        # vhpgvh_d1u1u1 = vhpl_d1u1 @ vh_u1
+        # vhpgvh_d1u1l1 = vhpl_d1u1 @ vh_l1
+        # vhpgvh_d1l1d1 = vhpl_d1l1 @ vh_d1
+        # vhpgvh_d1l1u1 = vhpl_d1l1 @ vh_u1
+        # vhpgvh_d1l1l1 = vhpl_d1l1 @ vh_l1
+        # vhpgvh_u1d1d1 = vhpl_u1d1 @ vh_d1
+        # vhpgvh_u1d1u1 = vhpl_u1d1 @ vh_u1
+        # vhpgvh_u1d1l1 = vhpl_u1d1 @ vh_l1
+        # vhpgvh_u1u1d1 = vhpl_u1u1 @ vh_d1
+        # vhpgvh_u1u1u1 = vhpl_u1u1 @ vh_u1
+        # vhpgvh_u1u1l1 = vhpl_u1u1 @ vh_l1
+        # vhpgvh_u1l1d1 = vhpl_u1l1 @ vh_d1
+        # vhpgvh_u1l1u1 = vhpl_u1l1 @ vh_u1
+        # vhpgvh_u1l1l1 = vhpl_u1l1 @ vh_l1
+        # vhpgvh_l1d1d1 = vhpl_l1d1 @ vh_d1
+        # vhpgvh_l1d1u1 = vhpl_l1d1 @ vh_u1
+        # vhpgvh_l1d1l1 = vhpl_l1d1 @ vh_l1
+        # vhpgvh_l1u1d1 = vhpl_l1u1 @ vh_d1
+        # vhpgvh_l1u1u1 = vhpl_l1u1 @ vh_u1
+        # vhpgvh_l1u1l1 = vhpl_l1u1 @ vh_l1
+        # vhpgvh_l1l1d1 = vhpl_l1l1 @ vh_d1
+        # vhpgvh_l1l1u1 = vhpl_l1l1 @ vh_u1
+        # Replacing above block with below block
+        vhpgvh_d1d1d1 = vhpg_d1d1 @ vh_d1
+        vhpgvh_d1d1u1 = vhpg_d1d1 @ vh_u1
+        vhpgvh_d1d1l1 = vhpg_d1d1 @ vh_l1
+        vhpgvh_d1u1d1 = vhpg_d1u1 @ vh_d1
+        vhpgvh_d1u1u1 = vhpg_d1u1 @ vh_u1
+        vhpgvh_d1u1l1 = vhpg_d1u1 @ vh_l1
+        vhpgvh_d1l1d1 = vhpg_d1l1 @ vh_d1
+        vhpgvh_d1l1u1 = vhpg_d1l1 @ vh_u1
+        vhpgvh_u1d1d1 = vhpg_u1d1 @ vh_d1
+        vhpgvh_u1d1u1 = vhpg_u1d1 @ vh_u1
+        vhpgvh_u1d1l1 = vhpg_u1d1 @ vh_l1
+        vhpgvh_u1u1d1 = vhpg_u1u1 @ vh_d1
+        vhpgvh_u1u1u1 = vhpg_u1u1 @ vh_u1
+        vhpgvh_u1u1l1 = vhpg_u1u1 @ vh_l1
+        vhpgvh_u1l1d1 = vhpg_u1l1 @ vh_d1
+        vhpgvh_u1l1u1 = vhpg_u1l1 @ vh_u1
+        vhpgvh_u1l1l1 = vhpg_u1l1 @ vh_l1
+        vhpgvh_l1d1d1 = vhpg_l1d1 @ vh_d1
+        vhpgvh_l1d1u1 = vhpg_l1d1 @ vh_u1
+        vhpgvh_l1u1d1 = vhpg_l1u1 @ vh_d1
+        vhpgvh_l1u1u1 = vhpg_l1u1 @ vh_u1
+        vhpgvh_l1u1l1 = vhpg_l1u1 @ vh_l1
+        vhpgvh_l1l1u1 = vhpg_l1l1 @ vh_u1
+        vhpgvh_l1l1d1 = vhpg_l1l1 @ vh_d1
+        vhpgvh_d1l1l1 = vhpg_d1l1 @ vh_l1
+        vhpgvh_l1d1l1 = vhpg_l1d1 @ vh_l1
+        vhpl_d1d1 = vh_d1 @ pl_d1
+        vhpl_d1u1 = vh_d1 @ pl_u1
+        vhpl_d1l1 = vh_d1 @ pl_l1
+        vhpl_u1d1 = vh_u1 @ pl_d1
+        vhpl_u1u1 = vh_u1 @ pl_u1
+        vhpl_u1l1 = vh_u1 @ pl_l1
+        vhpl_l1d1 = vh_l1 @ pl_d1
+        vhpl_l1u1 = vh_l1 @ pl_u1
+        vhpl_l1l1 = vh_l1 @ pl_l1
+        vhplvh_d1d1d1 = vhpl_d1d1 @ vh_d1
+        vhplvh_d1d1u1 = vhpl_d1d1 @ vh_u1
+        vhplvh_d1d1l1 = vhpl_d1d1 @ vh_l1
+        vhplvh_d1u1d1 = vhpl_d1u1 @ vh_d1
+        vhplvh_d1u1u1 = vhpl_d1u1 @ vh_u1
+        vhplvh_d1u1l1 = vhpl_d1u1 @ vh_l1
+        vhplvh_d1l1d1 = vhpl_d1l1 @ vh_d1
+        vhplvh_d1l1u1 = vhpl_d1l1 @ vh_u1
+        vhplvh_d1l1l1 = vhpl_d1l1 @ vh_l1
+        vhplvh_u1d1d1 = vhpl_u1d1 @ vh_d1
+        vhplvh_u1d1u1 = vhpl_u1d1 @ vh_u1
+        vhplvh_u1d1l1 = vhpl_u1d1 @ vh_l1
+        vhplvh_u1u1d1 = vhpl_u1u1 @ vh_d1
+        vhplvh_u1u1u1 = vhpl_u1u1 @ vh_u1
+        vhplvh_u1u1l1 = vhpl_u1u1 @ vh_l1
+        vhplvh_u1l1d1 = vhpl_u1l1 @ vh_d1
+        vhplvh_u1l1u1 = vhpl_u1l1 @ vh_u1
+        vhplvh_u1l1l1 = vhpl_u1l1 @ vh_l1
+        vhplvh_l1d1d1 = vhpl_l1d1 @ vh_d1
+        vhplvh_l1d1u1 = vhpl_l1d1 @ vh_u1
+        vhplvh_l1d1l1 = vhpl_l1d1 @ vh_l1
+        vhplvh_l1u1d1 = vhpl_l1u1 @ vh_d1
+        vhplvh_l1u1u1 = vhpl_l1u1 @ vh_u1
+        vhplvh_l1u1l1 = vhpl_l1u1 @ vh_l1
+        vhplvh_l1l1d1 = vhpl_l1l1 @ vh_d1
+        vhplvh_l1l1u1 = vhpl_l1l1 @ vh_u1
+
+        # fill output matrices
+        # M^{r}\left(E\right)
+        mr_d2[batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[batch_size, :lb, lb:2 * lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[batch_size, :lb, 2 * lb:] = vhpr_u1u1
+        mr_d2[batch_size, lb:2 * lb, :lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[batch_size, lb:2 * lb, lb:2 * lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[batch_size, lb:2 * lb, 2 * lb:] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[batch_size, 2 * lb:, :lb] = vhpr_l1l1
+        mr_d2[batch_size, 2 * lb:, lb:2 * lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[batch_size, 2 * lb:, 2 * lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+
+        mr_u2[batch_size, lb:2 * lb, :lb] = vhpr_u1u1
+        mr_u2[batch_size, 2 * lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_u2[batch_size, 2 * lb:, lb:2 * lb] = vhpr_u1u1
+
+        mr_l2[batch_size, :lb, lb:2 * lb] = vhpr_l1l1
+        mr_l2[batch_size, :lb, 2 * lb:] = vhpr_d1l1 + vhpr_l1d1
+        mr_l2[batch_size, lb:2 * lb, 2 * lb:] = vhpr_l1l1
+
+        lg_d2[batch_size, :lb, :
+              lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
+        lg_d2[batch_size, :lb,
+              lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
+        lg_d2[batch_size, :lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_d2[batch_size, lb:2 *
+              lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
+        lg_d2[batch_size,
+            lb:2 * lb, lb:2 *
+            lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_u1l1d1
+        lg_d2[batch_size, lb:2 * lb,
+              2 * lb:] = vhpgvh_u1u1l1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1 + vhpgvh_u1l1u1
+        lg_d2[batch_size, 2 * lb:, :lb] = vhpgvh_l1l1d1 + vhpgvh_d1l1l1 + vhpgvh_l1d1l1
+        lg_d2[batch_size, 2 * lb:,
+              lb:2 * lb] = vhpgvh_l1l1u1 + vhpgvh_u1l1l1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1
+        lg_d2[batch_size,
+            2 * lb:, 2 *
+            lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
+
+        lg_u2[batch_size, :lb, :lb] = vhpgvh_u1u1u1
+        lg_u2[batch_size, lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_u2[batch_size, lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
+        lg_u2[batch_size, 2 *
+              lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
+        lg_u2[batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[batch_size, 2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
+
+        ll_d2[batch_size, :lb, :
+              lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1 + vhplvh_d1d1d1 + vhplvh_u1l1d1 + vhplvh_d1u1l1 + vhplvh_u1d1l1
+        ll_d2[batch_size, :lb,
+              lb:2 * lb] = vhplvh_l1u1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_u1l1u1 + vhplvh_d1u1d1 + vhplvh_u1d1d1
+        ll_d2[batch_size, :lb, 2 * lb:] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_d2[batch_size, lb:2 *
+              lb, :lb] = vhplvh_l1l1u1 + vhplvh_d1l1d1 + vhplvh_l1d1d1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_u1l1l1
+        ll_d2[batch_size,
+            lb:2 * lb, lb:2 *
+            lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_u1l1d1
+        ll_d2[batch_size, lb:2 * lb,
+              2 * lb:] = vhplvh_u1u1l1 + vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_d1d1u1 + vhplvh_l1u1u1 + vhplvh_u1l1u1
+        ll_d2[batch_size, 2 * lb:, :lb] = vhplvh_l1l1d1 + vhplvh_d1l1l1 + vhplvh_l1d1l1
+        ll_d2[batch_size, 2 * lb:,
+              lb:2 * lb] = vhplvh_l1l1u1 + vhplvh_u1l1l1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_d1l1d1 + vhplvh_l1d1d1
+        ll_d2[batch_size,
+            2 * lb:, 2 *
+            lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_d1l1u1 + vhplvh_l1d1u1
+
+        ll_u2[batch_size, :lb, :lb] = vhplvh_u1u1u1
+        ll_u2[batch_size, lb:2 * lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_u2[batch_size, lb:2 * lb, lb:2 * lb] = vhplvh_u1u1u1
+        ll_u2[batch_size, 2 *
+              lb:, :lb] = vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_u1l1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_l1u1u1
+        ll_u2[batch_size, 2 * lb:, lb:2 * lb] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
+        ll_u2[batch_size, 2 * lb:, 2 * lb:] = vhplvh_u1u1u1
+
+        dmr_lu[batch_size, :lb, :lb] = vhpr_l1u1
+
+        dmr_ul[batch_size, 2 * lb:, 2 * lb:] = vhpr_u1l1
+
+        dlg_lu[batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
+        dlg_lu[batch_size, :lb, lb:2 * lb] = vhpgvh_l1u1u1
+        dlg_lu[batch_size, lb:2 * lb, :lb] = vhpgvh_l1l1u1
+
+        dlg_ul[batch_size, lb:2 * lb, 2 * lb:] = vhpgvh_u1u1l1
+        dlg_ul[batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_u1l1l1
+        dlg_ul[batch_size, 2 * lb:, 2 * lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
+
+        dll_lu[batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
+        dll_lu[batch_size, :lb, lb:2 * lb] = vhplvh_l1u1u1
+        dll_lu[batch_size, lb:2 * lb, :lb] = vhplvh_l1l1u1
+
+        dll_ul[batch_size, lb:2 * lb, 2 * lb:] = vhplvh_u1u1l1
+        dll_ul[batch_size, 2 * lb:, lb:2 * lb] = vhplvh_u1l1l1
+        dll_ul[batch_size, 2 * lb:, 2 * lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
+
+        vh_u[batch_size, 2 * lb:, :lb] = vh_u1 # change
+
+        vh_l[batch_size, :lb, 2 * lb:] = vh_l1 # change
+
+
+    # lg_l2[:] = -lg_u2.transpose(0, 2, 1).conjugate()
+    # ll_l2[:] = -ll_u2.transpose(0, 2, 1).conjugate()
+    lg_l2 = -lg_u2.transpose(0, 2, 1).conjugate()
+    ll_l2 = -ll_u2.transpose(0, 2, 1).conjugate()
+    mr_d2 = mr_d2 + cp.repeat(cp.identity(lb_mm, dtype=cp.complex128)[cp.newaxis, :, :] * (1 + 1j * 1e-10), batch_size, axis=0)
+    (mr_d2, mr_u2, mr_l2, matrix_blocks ) = extract_small_matrix_blocks_batched_gpu(mr_d2, mr_u2, mr_l2, NCpSC*nbc, side)
+
+    return ((mr_d2, mr_u2, mr_l2), (lg_d2, lg_u2, lg_l2), (ll_d2, ll_u2, ll_l2), (dmr_lu, dmr_ul), (dlg_lu, dlg_ul),
+            (dll_lu, dll_ul), (vh_u, vh_l), matrix_blocks)
