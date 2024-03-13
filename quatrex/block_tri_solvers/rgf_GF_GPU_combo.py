@@ -220,9 +220,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
 
-    map_diag_dev = [cp.empty_like(m) for m in map_diag]
-    map_upper_dev = [cp.empty_like(m) for m in map_upper]
-    map_lower_dev = [cp.empty_like(m) for m in map_lower]
+    map_diag_dev = [cp.empty_like(m) if isinstance(m, np.ndarray) else None for m in map_diag]
+    map_upper_dev = [cp.empty_like(m) if isinstance(m, np.ndarray) else None for m in map_upper]
+    map_lower_dev = [cp.empty_like(m) if isinstance(m, np.ndarray) else None for m in map_lower]
 
     md = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     mu = cp.empty((batch_size, block_size, block_size), dtype=dtype)
@@ -319,11 +319,18 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
 
     with input_stream:
 
-        for i in range(num_blocks):
-            map_diag_dev[i].set(map_diag[i])
-            if i < num_blocks - 1:
-                map_upper_dev[i].set(map_upper[i])
-                map_lower_dev[i].set(map_lower[i])
+        if map_diag_dev[0] is not None:
+            for i in range(num_blocks):
+                map_diag_dev[i].set(map_diag[i])
+                if i < num_blocks - 1:
+                    map_upper_dev[i].set(map_upper[i])
+                    map_lower_dev[i].set(map_lower[i])
+        else:
+            for i in range(num_blocks - 1):
+                map_diag_dev[i] = map_diag[i]
+                map_upper_dev[i] = map_upper[i]
+                map_lower_dev[i] = map_lower[i]
+            map_diag_dev[-1] = map_diag[-1]
         _copy_csr_to_gpu(H_diag_host[IB], H_diag_buffer[idx])
         _copy_csr_to_gpu(S_diag_host[IB], S_diag_buffer[idx])
         if SR_dev is not None:

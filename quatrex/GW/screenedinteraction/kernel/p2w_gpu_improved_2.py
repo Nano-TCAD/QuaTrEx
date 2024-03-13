@@ -45,10 +45,9 @@ def spgemm_direct(A, B, C, rows: int = 256):
         idx += C_block.nnz
 
 
-def sp_mm_gpu(pr_rgf, pg_rgf, pl_rgf, rows, columns, vh_cpu, mr, lg, ll, nao):
+def sp_mm_gpu(pr_rgf, pg_rgf, pl_rgf, rows, columns, vh_dev, mr, lg, ll, nao):
     """Matrix multiplication with sparse matrices """
     # vh_dev = cp.sparse.csr_matrix(vh_cpu)
-    vh_dev = vh_cpu
     vh_ct_dev = vh_dev.T.conj(copy=False)
     pr_dev = cp.asarray(pr_rgf)
     pg_dev = cp.asarray(pg_rgf)
@@ -275,29 +274,6 @@ def calc_W_pool_mpi_split(
     #     #     condl[idx] = res[0]
     #     #     condr[idx] = res[1]
 
-    mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
-    lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
-    ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
-
-    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows, columns, ij2ji, NCpSC, bmin, bmax, homogenize)
-    rows_dev = cp.asarray(rows)
-    columns_dev = cp.asarray(columns)
-
-    nao = vh.shape[0]
-    vh_dev = cp.sparse.csr_matrix(vh)
-
-    mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
-    lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-    ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-
-    for ie in range(ne):
-        #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-        sp_mm_gpu(pr_rgf[ie], pg_rgf[ie], pl_rgf[ie], rows_dev, columns_dev, vh_dev, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-    
-        mr_host[ie, :] = cp.asnumpy(mr_dev[0])
-        lg_host[ie, :] = cp.asnumpy(lg_dev[0])
-        ll_host[ie, :] = cp.asnumpy(ll_dev[0])
-
     for ie in range(ne):
         mr_s[ie] = tuple(
             np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
@@ -318,41 +294,91 @@ def calc_W_pool_mpi_split(
             np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
         )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        executor.map(obc_w_gpu.obc_w_mm_gpu_2,
-            repeat(vh_dev),
-            pg_rgf,
-            pl_rgf,
-            pr_rgf,
-            repeat(bmax),
-            repeat(bmin),
-            dvh_sd,
-            dvh_ed,
-            dmr_sd,
-            dmr_ed,
-            dlg_sd,
-            dlg_ed,
-            dll_sd,
-            dll_ed,
-            mr_s,
-            mr_e,
-            lg_s,
-            lg_e,
-            ll_s,
-            ll_e,
-            vh_s,
-            vh_e,
-            mb00,
-            mbNN,
-            rows_dev,
-            columns_dev,
-            repeat(nbc),
-            repeat(NCpSC),
-            repeat(block_inv),
-            repeat(use_dace),
-            repeat(validate_dace),
-            repeat(ref_flag),
-        )
+    mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
+    lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
+    ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
+
+    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows, columns, ij2ji, NCpSC, bmin, bmax, homogenize)
+    rows_dev = cp.asarray(rows)
+    columns_dev = cp.asarray(columns)
+
+    nao = vh.shape[0]
+    vh_dev = cp.sparse.csr_matrix(vh)
+    vh_ct_dev = vh_dev.T.conj(copy=False)
+
+    mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
+    lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+    ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+
+    for ie in range(ne):
+         
+        pr_dev = cp.asarray(pr_rgf[ie])
+        pg_dev = cp.asarray(pg_rgf[ie])
+        pl_dev = cp.asarray(pl_rgf[ie])
+        pr_dev = cp.sparse.csr_matrix((pr_dev, (rows_dev, columns_dev)), shape = (nao, nao))
+        pg_dev = cp.sparse.csr_matrix((pg_dev, (rows_dev, columns_dev)), shape = (nao, nao))
+        pl_dev = cp.sparse.csr_matrix((pl_dev, (rows_dev, columns_dev)), shape = (nao, nao))
+        mr_dev[0] = (cp.sparse.identity(nao) - spgemm(vh_dev, pr_dev)).data
+        spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[0])
+        spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[0])
+
+        # #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
+        # sp_mm_gpu(pr_rgf[ie], pg_rgf[ie], pl_rgf[ie], rows_dev, columns_dev, vh_dev, mr_dev[0], lg_dev[0], ll_dev[0], nao)
+    
+        mr_host[ie, :] = cp.asnumpy(mr_dev[0])
+        lg_host[ie, :] = cp.asnumpy(lg_dev[0])
+        ll_host[ie, :] = cp.asnumpy(ll_dev[0])
+
+        obc_w_gpu.obc_w_mm_gpu_2(vh_dev,
+                                 pg_dev, pl_dev, pr_dev,
+                                 bmax, bmin,
+                                 dvh_sd[ie], dvh_ed[ie],
+                                 dmr_sd[ie], dmr_ed[ie],
+                                 dlg_sd[ie], dlg_ed[ie],
+                                 dll_sd[ie], dll_ed[ie],
+                                 mr_s[ie], mr_e[ie],
+                                 lg_s[ie], lg_e[ie],
+                                 ll_s[ie], ll_e[ie],
+                                 vh_s[ie], vh_e[ie],
+                                 mb00[ie], mbNN[ie],
+                                 rows_dev, columns_dev,
+                                 nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
+
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     executor.map(obc_w_gpu.obc_w_mm_gpu_2,
+    #         repeat(vh_dev),
+    #         pg_rgf,
+    #         pl_rgf,
+    #         pr_rgf,
+    #         repeat(bmax),
+    #         repeat(bmin),
+    #         dvh_sd,
+    #         dvh_ed,
+    #         dmr_sd,
+    #         dmr_ed,
+    #         dlg_sd,
+    #         dlg_ed,
+    #         dll_sd,
+    #         dll_ed,
+    #         mr_s,
+    #         mr_e,
+    #         lg_s,
+    #         lg_e,
+    #         ll_s,
+    #         ll_e,
+    #         vh_s,
+    #         vh_e,
+    #         mb00,
+    #         mbNN,
+    #         repeat(rows_dev),
+    #         repeat(columns_dev),
+    #         repeat(nbc),
+    #         repeat(NCpSC),
+    #         repeat(block_inv),
+    #         repeat(use_dace),
+    #         repeat(validate_dace),
+    #         repeat(ref_flag),
+    #     )
 
     if compute_mode == 0:
 

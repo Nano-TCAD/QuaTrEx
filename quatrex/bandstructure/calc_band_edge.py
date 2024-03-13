@@ -15,6 +15,7 @@ import numpy.typing as npt
 
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.bandstructure.calc_contact_bs import calc_bandstructure, calc_bandstructure_interpol, calc_bandstructure_mpi, calc_bandstructure_mpi_interpol
+from quatrex.bandstructure.calc_contact_bs import calc_bandstructure_mpi_interpol_2
 from quatrex.utils import change_format
 
 
@@ -237,6 +238,58 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
     return ECmin, ind_ek_plus
 
 
+def get_band_edge_mpi_interpol_2(ECmin_DFT,
+                      E,
+                      S,
+                      H,
+                      SigmaR_GW,
+                      ind_ek_plus,
+                      Bmin,
+                      Bmax,
+                      comm,
+                      rank,
+                      size,
+                      count,
+                      disp,
+                      side,
+                      mapdiag, mapupper, maplower, ij2ji):
+    nao = Bmax[-1] + 1
+    nnz = SigmaR_GW.shape[1]
+    SigmaR_GW_vec = np.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
+
+    # First step: get a first estimate of the CB edge
+    (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(ECmin_DFT, E, comm, rank, size, count, disp)
+    send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec,send_rank_1, send_rank_2, min_ind, rank, comm, disp,  SigmaR_GW, nnz)
+    SigmaR_GW_vec[:] = (SigmaR_GW_vec + SigmaR_GW_vec[:, ij2ji]) / 2
+    if rank == 0:
+        Ek = calc_bandstructure_mpi_interpol_2(E, S, H, ECmin_DFT, SigmaR_GW_vec, min_ind, Bmin, Bmax, side, mapdiag, mapupper, maplower)
+        if(ind_ek_plus == -1):
+            ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
+        ECmin_int = Ek[ind_ek_plus]
+        # broadcasting the band edge (this is actually not necessary, but it is done for consistency), non-root nodes will not use it in get_send_ranks_interpol 
+        comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
+    else:   
+        ECmin_int = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
+        ECmin_int = ECmin_int[0]
+
+    # Second step: refine the position of the CB edge
+    (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(ECmin_int, E, comm, rank, size, count, disp)
+    send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, nnz)
+    SigmaR_GW_vec[:] = (SigmaR_GW_vec + SigmaR_GW_vec[:, ij2ji]) / 2
+    if rank == 0:
+        Ek = calc_bandstructure_mpi_interpol_2(E, S, H, ECmin_int, SigmaR_GW_vec, min_ind, Bmin, Bmax, side, mapdiag, mapupper, maplower)
+        # ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
+        ECmin = Ek[ind_ek_plus]
+        # broadcasting the band edge
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        print("send rank 1 was: " + str(send_rank_1) + " send rank 2 was: " + str(send_rank_2) + " new band edge: " + str(ECmin))
+    else:   
+        ECmin = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        ECmin = ECmin[0]
+    # returning the band edge and the index of the band edge in the eigenvalue problem
+    return ECmin, ind_ek_plus
 
 
 def get_send_ranks_interpol(ECmin_DFT, E, comm,
@@ -374,6 +427,92 @@ def send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, 
             comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
 
 
+def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, nnz):
+    """
+    This function sends the SigmaR_GW, SigmaL_GW and SigmaG_GW and SigmaR_PHN from the ranks that have the minimum index and the minimum index + 1 to rank 0
+    It will be stored in the _vec datastructures.
+    input: 
+    SigmaR_GW_vec: SigmaR_GW vector of size 2 of the target self-energies in sparse format: np.ndarray[np.object]
+    SigmaL_GW_vec: SigmaL_GW vector of size 2 of the target self-energies in sparse format: np.ndarray[np.object]
+    SigmaG_GW_vec: SigmaG_GW vector of size 2 of the target self-energies in sparse format: np.ndarray[np.object]
+    SigmaR_PHN_vec: SigmaR_PHN vector of size 2 of the target self-energies in sparse format: np.ndarray[np.object]
+    send_rank_1: rank that has the minimum index: int
+    send_rank_2: rank that has the minimum index + 1: int
+    min_ind: global minimum index: int
+    rank: rank of the current process: int
+    comm: MPI communicator: MPI communicator
+    SigmaR_GW: local SigmaR_GW vector in sparse format: np.ndarray[np.object]
+    SigmaL_GW: local SigmaL_GW vector in sparse format: np.ndarray[np.object]
+    SigmaG_GW: local SigmaG_GW vector in sparse format: np.ndarray[np.object]
+    SigmaR_PHN: local SigmaR_PHN vector in sparse format: np.ndarray[np.object]
+    """
+    if rank == 0:
+        if send_rank_1 == 0:
+            SigmaR_GW_vec[0] = SigmaR_GW[min_ind - disp[1, rank]]
+            # SigmaL_GW_vec[0] = SigmaL_GW[min_ind - disp[1, rank]]   
+            # SigmaG_GW_vec[0] = SigmaG_GW[min_ind - disp[1, rank]]
+            # SigmaR_PHN_vec[0] = SigmaR_PHN[min_ind - disp[1, rank]]
+
+        else:
+            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sr_phn_buf = np.empty(nnz, dtype=np.complex128)
+            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=0)
+            # comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=1)
+            # comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=2)
+            # comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=3)
+
+            SigmaR_GW_vec[0] = sr_gw_buf
+            # SigmaL_GW_vec[0] = sl_gw_buf
+            # SigmaG_GW_vec[0] = sg_gw_buf
+            # SigmaR_PHN_vec[0] = sr_phn_buf
+
+    else:
+        if send_rank_1 == rank:
+            sr_gw_buf = SigmaR_GW[min_ind - disp[1, rank]]
+            # sl_gw_buf = SigmaL_GW[min_ind - disp[1, rank]]
+            # sg_gw_buf = SigmaG_GW[min_ind - disp[1, rank]]
+            # sr_phn_buf = SigmaR_PHN[min_ind - disp[1, rank]]
+            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
+            # comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
+            # comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
+            # comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
+
+    
+    if rank == 0:
+        if send_rank_2 == 0:
+            SigmaR_GW_vec[1] = SigmaR_GW[min_ind + 1 - disp[1, rank]]
+            # SigmaL_GW_vec[1] = SigmaL_GW[min_ind + 1 - disp[1, rank]]
+            # SigmaG_GW_vec[1] = SigmaG_GW[min_ind + 1 - disp[1, rank]]
+            # SigmaR_PHN_vec[1] = SigmaR_PHN[min_ind + 1 - disp[1, rank]]
+        else:
+            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
+            # sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
+            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=0)
+            # comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=1)
+            # comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=2)
+            # comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=3)
+
+            SigmaR_GW_vec[1] = sr_gw_buf
+            # SigmaL_GW_vec[1] = sl_gw_buf
+            # SigmaG_GW_vec[1] = sg_gw_buf
+            # SigmaR_PHN_vec[1] = sr_phn_buf
+
+    else:
+        if send_rank_2 == rank:
+            sr_gw_buf = SigmaR_GW[min_ind + 1 - disp[1, rank]]
+            # sl_gw_buf = SigmaL_GW[min_ind + 1 - disp[1, rank]]
+            # sg_gw_buf = SigmaG_GW[min_ind + 1 - disp[1, rank]]
+            # sr_phn_buf = SigmaR_PHN[min_ind + 1 - disp[1, rank]]
+            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
+            # comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
+            # comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
+            # comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
+
+
 if __name__ == '__main__':
     MPI.Init_thread(required=MPI.THREAD_MULTIPLE)
     comm = MPI.COMM_WORLD
@@ -450,6 +589,7 @@ if __name__ == '__main__':
                                   sl_h2g_vec,
                                   sg_h2g_vec,
                                   sr_ephn_h2g_vec,
+                                  -1,
                                   rows,
                                   columns,
                                   bmin,
@@ -461,6 +601,46 @@ if __name__ == '__main__':
                                   disp,
                                   side='left')
 
+    if rank == 0:
+        #print(ECmin_single)
+        #for the interpol case: from: -3.67759569 to: -3.68866105
+        print(ECmin_MPI)
+
+    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns, bmax, bmin)
+    ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
+    nb = len(bmax)
+    from quatrex.block_tri_solvers import rgf_GF_GPU_combo
+    mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
+    mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
+    mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+
+    sr = np.copy(sr_h2g)
+    sl = np.copy(sl_h2g)
+    sg = np.copy(sg_h2g)
+
+    rgf_GF_GPU_combo.self_energy_preprocess_2d(sl, sg, sr,
+                                               np.zeros((count[1, rank], nao)),
+                                               np.zeros((count[1, rank], nao)),
+                                               np.zeros((count[1, rank], nao)),
+                                               rows, columns, ij2ji)
+    # sr[:] = (sr + sr[:, ij2ji]) / 2
+    
+    ECmin_MPI = get_band_edge_mpi_interpol_2(-3.67759569,
+                                  energy,
+                                  hamiltonian_obj.Overlap['H_4'],
+                                  hamiltonian_obj.Hamiltonian['H_4'],
+                                  sr,
+                                  -1,
+                                  bmin,
+                                  bmax,
+                                  comm,
+                                  rank,
+                                  size,
+                                  count,
+                                  disp,
+                                  'left',
+                                  mapping_diag, mapping_upper, mapping_lower, ij2ji)
+    
     if rank == 0:
         #print(ECmin_single)
         #for the interpol case: from: -3.67759569 to: -3.68866105

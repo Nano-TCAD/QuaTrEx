@@ -22,6 +22,7 @@ mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol, get_band_edge_mpi
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -38,8 +39,7 @@ from quatrex.Phonon import electron_phonon_selfenergy
 if utils_gpu.gpu_avail():
     try:
         from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
-        from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
-        from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
+        from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved, p2w_gpu_improved_2
         from quatrex.GW.polarization.kernel import g2p_gpu
         from quatrex.GW.selfenergy.kernel import gw2s_gpu
     except ImportError:
@@ -428,6 +428,23 @@ if __name__ == "__main__":
     ne_s = 0
     ne_f = 251
 
+    # Preprocess
+    DH = hamiltonian_obj
+    from quatrex.block_tri_solvers import rgf_GF_GPU_combo
+
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
+
+    mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
+    mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
+    mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+    mapping_diag_dev = cp.asarray(mapping_diag)
+    mapping_upper_dev = cp.asarray(mapping_upper)
+    mapping_lower_dev = cp.asarray(mapping_lower)
+
+    hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
+    overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
+
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
@@ -450,29 +467,33 @@ if __name__ == "__main__":
         # current per energy
         ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
-        sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
-        sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
+        # sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
+        # sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
        
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
-        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
-        
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
+        # sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
+        # sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
+
+        sl_rgf_dev = cp.asarray(sl_h2g)
+        sg_rgf_dev = cp.asarray(sg_h2g)
+        sr_rgf_dev = cp.asarray(sr_h2g)
+        sl_phn_dev = cp.asarray(sl_phn)
+        sg_phn_dev = cp.asarray(sg_phn)
+        sr_phn_dev = cp.asarray(sr_phn)
+        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+        sr_rgf = cp.asnumpy(sr_rgf_dev)
+    
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
-                                                    sr_h2g_vec,
-                                                    sl_h2g_vec,
-                                                    sg_h2g_vec,
-                                                    sr_ephn_h2g_vec,
+                                                    sr_rgf,
                                                     ind_ek,
-                                                    rows,
-                                                    columns,
                                                     bmin,
                                                     bmax,
                                                     comm,
@@ -480,7 +501,29 @@ if __name__ == "__main__":
                                                     size,
                                                     count,
                                                     disp,
-                                                    side='left')
+                                                    'left',
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        # # Adjusting Fermi Levels of both contacts to the current iteration band minima
+        # (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+        #                                             energy,
+        #                                             hamiltonian_obj.Overlap['H_4'],
+        #                                             hamiltonian_obj.Hamiltonian['H_4'],
+        #                                             sr_h2g_vec,
+        #                                             sl_h2g_vec,
+        #                                             sg_h2g_vec,
+        #                                             sr_ephn_h2g_vec,
+        #                                             ind_ek,
+        #                                             rows,
+        #                                             columns,
+        #                                             bmin,
+        #                                             bmax,
+        #                                             comm,
+        #                                             rank,
+        #                                             size,
+        #                                             count,
+        #                                             disp,
+        #                                             side='left')
         
         if rank == 0:
             print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
@@ -521,28 +564,21 @@ if __name__ == "__main__":
         elif args.type in ("gpu"):
             calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
                 hamiltonian_obj,
+                hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
+                overlap_diag, overlap_upper, overlap_lower,
                 energy_loc,
-                sr_h2g_vec,
-                sl_h2g_vec,
-                sg_h2g_vec,
-                sr_ephn_h2g_vec,
-                sl_ephn_h2g_vec,
-                sg_ephn_h2g_vec,
-                sr_h2g,
-                sl_h2g,
-                sg_h2g,
-                sr_phn,
-                sl_phn,
-                sg_phn,
+                sr_rgf_dev,
+                sl_rgf_dev,
+                sg_rgf_dev,
                 gr_h2g,
                 gl_h2g,
                 gg_h2g,
-                map_diag,
-                map_upper,
-                map_lower,
-                rows,
-                columns,
-                ij2ji,
+                mapping_diag_dev,
+                mapping_upper_dev,
+                mapping_lower_dev,
+                # rows,
+                # columns,
+                # ij2ji,
                 energy_fl,
                 energy_fr,
                 temp,
@@ -700,7 +736,7 @@ if __name__ == "__main__":
             #     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
             #     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
             #     mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
-            p2w_gpu_improved.calc_W_pool_mpi_split(
+            p2w_gpu_improved_2.calc_W_pool_mpi_split(
                 hamiltonian_obj,
                 # Energy vector.
                 energy_loc,
@@ -900,7 +936,9 @@ if __name__ == "__main__":
     # np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
     # np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
     if rank == 0:
+        time_start += time.perf_counter()
         print("Finish iteration", flush=True)
+        print(f"Time: {time_start:.2f} s")
         # create buffers at master
         gg_mpi = np.empty_like(gg_gold)
         gl_mpi = np.empty_like(gg_gold)
@@ -1031,6 +1069,6 @@ if __name__ == "__main__":
     # finalize
     MPI.Finalize()
 
-    if rank == 0:
-        time_start += time.perf_counter()
-        print(f"Time: {time_start:.2f} s")
+    # if rank == 0:
+    #     time_start += time.perf_counter()
+    #     print(f"Time: {time_start:.2f} s")
