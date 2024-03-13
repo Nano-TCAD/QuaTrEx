@@ -84,7 +84,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="gpu",
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
