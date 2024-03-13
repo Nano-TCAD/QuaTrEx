@@ -367,7 +367,8 @@ class Hamiltonian:
 
         V[indL] = 0
         V[indR] = -self.Vappl
-        V[indC] = -self.Vappl * (x[indC] - x[indC[0]]) / (x[indC[-1]] - x[indC[0]])
+        if (ABmin.shape[0] > 5):
+            V[indC] = -self.Vappl * (x[indC] - x[indC[0]]) / (x[indC[-1]] - x[indC[0]])
 
         Vpot = np.zeros(np.sum(orb_per_at_loc))
 
