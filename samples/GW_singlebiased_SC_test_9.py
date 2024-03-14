@@ -478,6 +478,9 @@ if __name__ == "__main__":
         # sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
         # sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
 
+        comm.Barrier()
+        start_symmetrization = time.perf_counter()
+
         sl_rgf_dev = cp.asarray(sl_h2g)
         sg_rgf_dev = cp.asarray(sg_h2g)
         sr_rgf_dev = cp.asarray(sr_h2g)
@@ -486,6 +489,13 @@ if __name__ == "__main__":
         sr_phn_dev = cp.asarray(sr_phn)
         rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
         sr_rgf = cp.asnumpy(sr_rgf_dev)
+
+        comm.Barrier()
+        finish_symmetrization = time.perf_counter()
+        if rank == 0:
+            print(f"Symmetrization time: {finish_symmetrization - start_symmetrization}", flush = True)
+        
+        start_band_edge = time.perf_counter()
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
@@ -503,6 +513,11 @@ if __name__ == "__main__":
                                                     disp,
                                                     'left',
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        comm.Barrier()
+        finish_band_edge = time.perf_counter()
+        if rank == 0:
+            print(f"Band edge time: {finish_band_edge - start_band_edge}", flush = True)
         
         # # Adjusting Fermi Levels of both contacts to the current iteration band minima
         # (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
@@ -656,6 +671,10 @@ if __name__ == "__main__":
         #                                                                    no,
         #                                                                    count[1, rank],
         #                                                                    energy_contiguous=False) + mem_g * gr_h2g
+        
+        comm.Barrier()
+        start_g2p_comm = time.perf_counter()
+        
         # calculate the transposed
         gl_transposed_h2g = np.copy(gl_h2g[:, ij2ji], order="C")
         # create local buffers
@@ -669,8 +688,14 @@ if __name__ == "__main__":
         alltoall_g2p(gl_h2g, gl_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gl_transposed_h2g, gl_transposed_g2p, transpose_net=args.net_transpose)
+
+        comm.Barrier()
+        finish_g2p_comm = time.perf_counter()
         if rank == 0:
+            print(f"G2P communication time: {finish_g2p_comm - start_g2p_comm}", flush = True)
             print("Green's function calculated", flush = True)
+        
+        start_p_computation = time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("cpu"):
@@ -687,6 +712,13 @@ if __name__ == "__main__":
                                                 gl_transposed_g2p)
         else: 
             raise ValueError("Argument error, input type not possible")
+        
+        comm.Barrier()
+        finish_p_computation = time.perf_counter()
+        if rank == 0:
+            print(f"Polarization computation time: {finish_p_computation - start_p_computation}", flush = True)
+        
+        start_p2w_comm = time.perf_counter()
 
         # distribute polarization function according to p2w step--------------------
 
@@ -700,11 +732,18 @@ if __name__ == "__main__":
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose)
 
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
-        pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
-        pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
+        # pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
+        # pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
+        pg_p2w_vec = None
+        pl_p2w_vec = None
+        pr_p2w_vec = None
+
+        comm.Barrier()
+        finish_p2w_comm = time.perf_counter()
         if rank == 0:
+            print(f"P2W communication time: {finish_p2w_comm - start_p2w_comm}", flush = True)
             print("Polarization calculated", flush = True)
 
         # calculate the screened interaction on every rank--------------------------
@@ -842,6 +881,9 @@ if __name__ == "__main__":
 
         # distribute screened interaction according to gw2s step--------------------
 
+        comm.Barrier()
+        start_w2s_comm = time.perf_counter()
+        
         # calculate the transposed
         wg_transposed_p2w = np.copy(wg_p2w[:, ij2ji], order="C")
         wl_transposed_p2w = np.copy(wl_p2w[:, ij2ji], order="C")
@@ -860,8 +902,13 @@ if __name__ == "__main__":
         alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose)
 
-        if rank == 0:   
+        comm.Barrier()
+        finish_w2s_comm = time.perf_counter()
+        if rank == 0:
+            print(f"W2S communication time: {finish_w2s_comm - start_w2s_comm}", flush = True)
             print("Finish p2w", flush=True)
+        
+        start_s_computation = time.perf_counter()
 
         # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("cpu"):
@@ -875,6 +922,13 @@ if __name__ == "__main__":
                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         else:
             raise ValueError("Argument error, input type not possible")
+        
+        comm.Barrier()
+        finish_s_computation = time.perf_counter()
+        if rank == 0:
+            print(f"Sigma computation time: {finish_s_computation - start_s_computation}", flush = True)
+
+        start_s2g_comm = time.perf_counter()
 
         # distribute screened interaction according to h2g step---------------------
         # create local buffers
@@ -887,6 +941,13 @@ if __name__ == "__main__":
         alltoall_p2g(sl_gw2s, sl_h2g_buf, transpose_net=args.net_transpose)
         alltoall_p2g(sr_gw2s, sr_h2g_buf, transpose_net=args.net_transpose)
 
+        comm.Barrier()
+        finish_s2g_comm = time.perf_counter()
+        if rank == 0:
+            print(f"S2G communication time: {finish_s2g_comm - start_s2g_comm}", flush = True)
+
+        start_sigma_mem_update = time.perf_counter()
+
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
@@ -896,6 +957,13 @@ if __name__ == "__main__":
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
+
+        comm.Barrier()
+        finish_sigma_mem_update = time.perf_counter()
+        if rank == 0:
+            print(f"Sigma memory update time: {finish_sigma_mem_update - start_sigma_mem_update}", flush = True)
+        
+        start_sephn = time.perf_counter()
 
         # Extract diagonal bands
         gg_diag_band = gg_h2g[:, rows == columns]
@@ -913,6 +981,13 @@ if __name__ == "__main__":
                                                                             DPHN,
                                                                             temp,
                                                                             mem_s)
+        
+        comm.Barrier()
+        finish_sephn = time.perf_counter()
+        if rank == 0:
+            print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
+
+        start_observables = time.perf_counter()
 
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
@@ -927,6 +1002,11 @@ if __name__ == "__main__":
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
+        
+        comm.Barrier()
+        finish_observables = time.perf_counter()
+        if rank == 0:
+            print(f"Observables reduction time: {finish_observables - start_observables}", flush = True)
 
         # if rank == 0:
         # np.savetxt(parent_path + folder + 'E.dat', energy)
