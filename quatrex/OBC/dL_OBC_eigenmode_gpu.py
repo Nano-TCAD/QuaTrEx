@@ -670,23 +670,23 @@ def get_mm_obc_dense_batched(
 
     # output matrices
     batch_size = vh_1.shape[0]
-    # mr_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # mr_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # mr_l2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # lg_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # lg_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # lg_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # ll_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # ll_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # ll_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dmr_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dmr_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dlg_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dlg_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dll_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # dll_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # vh_u = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
-    # vh_l = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    mr_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    mr_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    mr_l2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    lg_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    lg_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    lg_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    ll_d2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    ll_u2 = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    ll_l2 = cp.empty((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dmr_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dmr_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dlg_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dlg_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dll_lu = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    dll_ul = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    vh_u = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
+    vh_l = cp.zeros((batch_size, lb_mm, lb_mm), dtype=cp.complex128)
     if nbc == 1:
         # fill output matrices
         # M^{r}\left(E\right)
@@ -812,67 +812,67 @@ def get_mm_obc_dense_batched(
 
         # fill output matrices
         # M^{r}\left(E\right)
-        mr_d2[batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_u1l1 + vhpr_l1u1
-        mr_d2[batch_size, :lb, lb:] = vhpr_d1u1 + vhpr_u1d1
-        mr_d2[batch_size, lb:, :lb] = vhpr_d1l1 + vhpr_l1d1
-        mr_d2[batch_size, lb:, lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[:batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_u1l1 + vhpr_l1u1
+        mr_d2[:batch_size, :lb, lb:] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[:batch_size, lb:, :lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[:batch_size, lb:, lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
 
-        mr_u2[batch_size, :lb, :lb] = vhpr_u1u1
-        mr_u2[batch_size, lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
-        mr_u2[batch_size, lb:, lb:] = vhpr_u1u1
+        mr_u2[:batch_size, :lb, :lb] = vhpr_u1u1
+        mr_u2[:batch_size, lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_u2[:batch_size, lb:, lb:] = vhpr_u1u1
 
-        mr_l2[batch_size, :lb, :lb] = vhpr_l1l1
-        mr_l2[batch_size, :lb, lb:] = vhpr_d1l1 + vhpr_l1d1
-        mr_l2[batch_size, lb:, lb:] = vhpr_l1l1
+        mr_l2[:batch_size, :lb, :lb] = vhpr_l1l1
+        mr_l2[:batch_size, :lb, lb:] = vhpr_d1l1 + vhpr_l1d1
+        mr_l2[:batch_size, lb:, lb:] = vhpr_l1l1
 
         # L^{\lessgtr}\left(E\right)
-        lg_d2[batch_size, :lb, :
+        lg_d2[:batch_size, :lb, :
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
-        lg_d2[batch_size, :lb, lb:] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[batch_size, lb:, :lb] = vhpgvh_l1l1u1 + vhpgvh_u1l1l1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1
-        lg_d2[batch_size,
+        lg_d2[:batch_size, :lb, lb:] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
+        lg_d2[:batch_size, lb:, :lb] = vhpgvh_l1l1u1 + vhpgvh_u1l1l1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1
+        lg_d2[:batch_size,
             lb:,
             lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
 
-        lg_u2[batch_size, :lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
-        lg_u2[batch_size, :lb, lb:] = vhpgvh_u1u1u1
-        lg_u2[batch_size, lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[batch_size, lb:, lb:] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[:batch_size, :lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_u2[:batch_size, :lb, lb:] = vhpgvh_u1u1u1
+        lg_u2[:batch_size, lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
+        lg_u2[:batch_size, lb:, lb:] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
 
-        ll_d2[batch_size, :lb, :
+        ll_d2[:batch_size, :lb, :
               lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1 + vhplvh_d1d1d1 + vhplvh_u1l1d1 + vhplvh_d1u1l1 + vhplvh_u1d1l1
-        ll_d2[batch_size, :lb, lb:] = vhplvh_l1u1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_u1l1u1 + vhplvh_d1u1d1 + vhplvh_u1d1d1
-        ll_d2[batch_size, lb:, :lb] = vhplvh_l1l1u1 + vhplvh_u1l1l1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_d1l1d1 + vhplvh_l1d1d1
-        ll_d2[batch_size,
+        ll_d2[:batch_size, :lb, lb:] = vhplvh_l1u1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_u1l1u1 + vhplvh_d1u1d1 + vhplvh_u1d1d1
+        ll_d2[:batch_size, lb:, :lb] = vhplvh_l1l1u1 + vhplvh_u1l1l1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_d1l1d1 + vhplvh_l1d1d1
+        ll_d2[:batch_size,
             lb:,
             lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_d1l1u1 + vhplvh_l1d1u1
 
-        ll_u2[batch_size, :lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
-        ll_u2[batch_size, :lb, lb:] = vhplvh_u1u1u1
-        ll_u2[batch_size, lb:, :lb] = vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_u1l1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_l1u1u1
-        ll_u2[batch_size, lb:, lb:] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
+        ll_u2[:batch_size, :lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_u2[:batch_size, :lb, lb:] = vhplvh_u1u1u1
+        ll_u2[:batch_size, lb:, :lb] = vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_u1l1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_l1u1u1
+        ll_u2[:batch_size, lb:, lb:] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
 
-        dmr_lu[batch_size, :lb, :lb] = vhpr_l1u1
-        dmr_ul[batch_size, lb:, lb:] = vhpr_u1l1
+        dmr_lu[:batch_size, :lb, :lb] = vhpr_l1u1
+        dmr_ul[:batch_size, lb:, lb:] = vhpr_u1l1
 
-        dlg_lu[batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
-        dlg_lu[batch_size, :lb, lb:] = vhpgvh_l1u1u1
-        dlg_lu[batch_size, lb:, :lb] = vhpgvh_l1l1u1
+        dlg_lu[:batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
+        dlg_lu[:batch_size, :lb, lb:] = vhpgvh_l1u1u1
+        dlg_lu[:batch_size, lb:, :lb] = vhpgvh_l1l1u1
 
-        dlg_ul[batch_size, :lb, lb:] = vhpgvh_u1u1l1
-        dlg_ul[batch_size, lb:, :lb] = vhpgvh_u1l1l1
-        dlg_ul[batch_size, lb:, lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
+        dlg_ul[:batch_size, :lb, lb:] = vhpgvh_u1u1l1
+        dlg_ul[:batch_size, lb:, :lb] = vhpgvh_u1l1l1
+        dlg_ul[:batch_size, lb:, lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
 
-        dll_lu[batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
-        dll_lu[batch_size, :lb, lb:] = vhplvh_l1u1u1
-        dll_lu[batch_size, lb:, :lb] = vhplvh_l1l1u1
+        dll_lu[:batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
+        dll_lu[:batch_size, :lb, lb:] = vhplvh_l1u1u1
+        dll_lu[:batch_size, lb:, :lb] = vhplvh_l1l1u1
 
-        dll_ul[batch_size, :lb, lb:] = vhplvh_u1u1l1
-        dll_ul[batch_size, lb:, :lb] = vhplvh_u1l1l1
-        dll_ul[batch_size, lb:, lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
+        dll_ul[:batch_size, :lb, lb:] = vhplvh_u1u1l1
+        dll_ul[:batch_size, lb:, :lb] = vhplvh_u1l1l1
+        dll_ul[:batch_size, lb:, lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
 
-        vh_u[batch_size, lb:, :lb] = vh_u1
-        vh_l[batch_size, :lb, lb:] = vh_l1
+        vh_u[:batch_size, lb:, :lb] = vh_u1
+        vh_l[:batch_size, :lb, lb:] = vh_l1
     elif nbc == 3:
         # compute multiplications
         vhpr_d1d1 = -vh_d1 @ pr_d1
@@ -985,101 +985,101 @@ def get_mm_obc_dense_batched(
 
         # fill output matrices
         # M^{r}\left(E\right)
-        mr_d2[batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
-        mr_d2[batch_size, :lb, lb:2 * lb] = vhpr_d1u1 + vhpr_u1d1
-        mr_d2[batch_size, :lb, 2 * lb:] = vhpr_u1u1
-        mr_d2[batch_size, lb:2 * lb, :lb] = vhpr_d1l1 + vhpr_l1d1
-        mr_d2[batch_size, lb:2 * lb, lb:2 * lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
-        mr_d2[batch_size, lb:2 * lb, 2 * lb:] = vhpr_d1u1 + vhpr_u1d1
-        mr_d2[batch_size, 2 * lb:, :lb] = vhpr_l1l1
-        mr_d2[batch_size, 2 * lb:, lb:2 * lb] = vhpr_d1l1 + vhpr_l1d1
-        mr_d2[batch_size, 2 * lb:, 2 * lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[:batch_size, :lb, :lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[:batch_size, :lb, lb:2 * lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[:batch_size, :lb, 2 * lb:] = vhpr_u1u1
+        mr_d2[:batch_size, lb:2 * lb, :lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[:batch_size, lb:2 * lb, lb:2 * lb] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
+        mr_d2[:batch_size, lb:2 * lb, 2 * lb:] = vhpr_d1u1 + vhpr_u1d1
+        mr_d2[:batch_size, 2 * lb:, :lb] = vhpr_l1l1
+        mr_d2[:batch_size, 2 * lb:, lb:2 * lb] = vhpr_d1l1 + vhpr_l1d1
+        mr_d2[:batch_size, 2 * lb:, 2 * lb:] = vhpr_d1d1 + vhpr_l1u1 + vhpr_u1l1
 
-        mr_u2[batch_size, lb:2 * lb, :lb] = vhpr_u1u1
-        mr_u2[batch_size, 2 * lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
-        mr_u2[batch_size, 2 * lb:, lb:2 * lb] = vhpr_u1u1
+        mr_u2[:batch_size, lb:2 * lb, :lb] = vhpr_u1u1
+        mr_u2[:batch_size, 2 * lb:, :lb] = vhpr_d1u1 + vhpr_u1d1
+        mr_u2[:batch_size, 2 * lb:, lb:2 * lb] = vhpr_u1u1
 
-        mr_l2[batch_size, :lb, lb:2 * lb] = vhpr_l1l1
-        mr_l2[batch_size, :lb, 2 * lb:] = vhpr_d1l1 + vhpr_l1d1
-        mr_l2[batch_size, lb:2 * lb, 2 * lb:] = vhpr_l1l1
+        mr_l2[:batch_size, :lb, lb:2 * lb] = vhpr_l1l1
+        mr_l2[:batch_size, :lb, 2 * lb:] = vhpr_d1l1 + vhpr_l1d1
+        mr_l2[:batch_size, lb:2 * lb, 2 * lb:] = vhpr_l1l1
 
-        lg_d2[batch_size, :lb, :
+        lg_d2[:batch_size, :lb, :
               lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1 + vhpgvh_d1d1d1 + vhpgvh_u1l1d1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1
-        lg_d2[batch_size, :lb,
+        lg_d2[:batch_size, :lb,
               lb:2 * lb] = vhpgvh_l1u1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_u1l1u1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1
-        lg_d2[batch_size, :lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
-        lg_d2[batch_size, lb:2 *
+        lg_d2[:batch_size, :lb, 2 * lb:] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_d2[:batch_size, lb:2 *
               lb, :lb] = vhpgvh_l1l1u1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_u1l1l1
-        lg_d2[batch_size,
+        lg_d2[:batch_size,
             lb:2 * lb, lb:2 *
             lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_u1l1d1
-        lg_d2[batch_size, lb:2 * lb,
+        lg_d2[:batch_size, lb:2 * lb,
               2 * lb:] = vhpgvh_u1u1l1 + vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1 + vhpgvh_u1l1u1
-        lg_d2[batch_size, 2 * lb:, :lb] = vhpgvh_l1l1d1 + vhpgvh_d1l1l1 + vhpgvh_l1d1l1
-        lg_d2[batch_size, 2 * lb:,
+        lg_d2[:batch_size, 2 * lb:, :lb] = vhpgvh_l1l1d1 + vhpgvh_d1l1l1 + vhpgvh_l1d1l1
+        lg_d2[:batch_size, 2 * lb:,
               lb:2 * lb] = vhpgvh_l1l1u1 + vhpgvh_u1l1l1 + vhpgvh_d1d1l1 + vhpgvh_l1u1l1 + vhpgvh_d1l1d1 + vhpgvh_l1d1d1
-        lg_d2[batch_size,
+        lg_d2[:batch_size,
             2 * lb:, 2 *
             lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1 + vhpgvh_d1d1d1 + vhpgvh_l1u1d1 + vhpgvh_d1l1u1 + vhpgvh_l1d1u1
 
-        lg_u2[batch_size, :lb, :lb] = vhpgvh_u1u1u1
-        lg_u2[batch_size, lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
-        lg_u2[batch_size, lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
-        lg_u2[batch_size, 2 *
+        lg_u2[:batch_size, :lb, :lb] = vhpgvh_u1u1u1
+        lg_u2[:batch_size, lb:2 * lb, :lb] = vhpgvh_u1u1d1 + vhpgvh_d1u1u1 + vhpgvh_u1d1u1
+        lg_u2[:batch_size, lb:2 * lb, lb:2 * lb] = vhpgvh_u1u1u1
+        lg_u2[:batch_size, 2 *
               lb:, :lb] = vhpgvh_d1u1d1 + vhpgvh_u1d1d1 + vhpgvh_u1l1u1 + vhpgvh_u1u1l1 + vhpgvh_d1d1u1 + vhpgvh_l1u1u1
-        lg_u2[batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
-        lg_u2[batch_size, 2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
+        lg_u2[:batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_d1u1u1 + vhpgvh_u1d1u1 + vhpgvh_u1u1d1
+        lg_u2[:batch_size, 2 * lb:, 2 * lb:] = vhpgvh_u1u1u1
 
-        ll_d2[batch_size, :lb, :
+        ll_d2[:batch_size, :lb, :
               lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1 + vhplvh_d1d1d1 + vhplvh_u1l1d1 + vhplvh_d1u1l1 + vhplvh_u1d1l1
-        ll_d2[batch_size, :lb,
+        ll_d2[:batch_size, :lb,
               lb:2 * lb] = vhplvh_l1u1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_u1l1u1 + vhplvh_d1u1d1 + vhplvh_u1d1d1
-        ll_d2[batch_size, :lb, 2 * lb:] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
-        ll_d2[batch_size, lb:2 *
+        ll_d2[:batch_size, :lb, 2 * lb:] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_d2[:batch_size, lb:2 *
               lb, :lb] = vhplvh_l1l1u1 + vhplvh_d1l1d1 + vhplvh_l1d1d1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_u1l1l1
-        ll_d2[batch_size,
+        ll_d2[:batch_size,
             lb:2 * lb, lb:2 *
             lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_u1l1d1
-        ll_d2[batch_size, lb:2 * lb,
+        ll_d2[:batch_size, lb:2 * lb,
               2 * lb:] = vhplvh_u1u1l1 + vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_d1d1u1 + vhplvh_l1u1u1 + vhplvh_u1l1u1
-        ll_d2[batch_size, 2 * lb:, :lb] = vhplvh_l1l1d1 + vhplvh_d1l1l1 + vhplvh_l1d1l1
-        ll_d2[batch_size, 2 * lb:,
+        ll_d2[:batch_size, 2 * lb:, :lb] = vhplvh_l1l1d1 + vhplvh_d1l1l1 + vhplvh_l1d1l1
+        ll_d2[:batch_size, 2 * lb:,
               lb:2 * lb] = vhplvh_l1l1u1 + vhplvh_u1l1l1 + vhplvh_d1d1l1 + vhplvh_l1u1l1 + vhplvh_d1l1d1 + vhplvh_l1d1d1
-        ll_d2[batch_size,
+        ll_d2[:batch_size,
             2 * lb:, 2 *
             lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1 + vhplvh_d1d1d1 + vhplvh_l1u1d1 + vhplvh_d1l1u1 + vhplvh_l1d1u1
 
-        ll_u2[batch_size, :lb, :lb] = vhplvh_u1u1u1
-        ll_u2[batch_size, lb:2 * lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
-        ll_u2[batch_size, lb:2 * lb, lb:2 * lb] = vhplvh_u1u1u1
-        ll_u2[batch_size, 2 *
+        ll_u2[:batch_size, :lb, :lb] = vhplvh_u1u1u1
+        ll_u2[:batch_size, lb:2 * lb, :lb] = vhplvh_u1u1d1 + vhplvh_d1u1u1 + vhplvh_u1d1u1
+        ll_u2[:batch_size, lb:2 * lb, lb:2 * lb] = vhplvh_u1u1u1
+        ll_u2[:batch_size, 2 *
               lb:, :lb] = vhplvh_d1u1d1 + vhplvh_u1d1d1 + vhplvh_u1l1u1 + vhplvh_u1u1l1 + vhplvh_d1d1u1 + vhplvh_l1u1u1
-        ll_u2[batch_size, 2 * lb:, lb:2 * lb] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
-        ll_u2[batch_size, 2 * lb:, 2 * lb:] = vhplvh_u1u1u1
+        ll_u2[:batch_size, 2 * lb:, lb:2 * lb] = vhplvh_d1u1u1 + vhplvh_u1d1u1 + vhplvh_u1u1d1
+        ll_u2[:batch_size, 2 * lb:, 2 * lb:] = vhplvh_u1u1u1
 
-        dmr_lu[batch_size, :lb, :lb] = vhpr_l1u1
+        dmr_lu[:batch_size, :lb, :lb] = vhpr_l1u1
 
-        dmr_ul[batch_size, 2 * lb:, 2 * lb:] = vhpr_u1l1
+        dmr_ul[:batch_size, 2 * lb:, 2 * lb:] = vhpr_u1l1
 
-        dlg_lu[batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
-        dlg_lu[batch_size, :lb, lb:2 * lb] = vhpgvh_l1u1u1
-        dlg_lu[batch_size, lb:2 * lb, :lb] = vhpgvh_l1l1u1
+        dlg_lu[:batch_size, :lb, :lb] = vhpgvh_d1l1u1 + vhpgvh_l1d1u1 + vhpgvh_l1u1d1
+        dlg_lu[:batch_size, :lb, lb:2 * lb] = vhpgvh_l1u1u1
+        dlg_lu[:batch_size, lb:2 * lb, :lb] = vhpgvh_l1l1u1
 
-        dlg_ul[batch_size, lb:2 * lb, 2 * lb:] = vhpgvh_u1u1l1
-        dlg_ul[batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_u1l1l1
-        dlg_ul[batch_size, 2 * lb:, 2 * lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
+        dlg_ul[:batch_size, lb:2 * lb, 2 * lb:] = vhpgvh_u1u1l1
+        dlg_ul[:batch_size, 2 * lb:, lb:2 * lb] = vhpgvh_u1l1l1
+        dlg_ul[:batch_size, 2 * lb:, 2 * lb:] = vhpgvh_d1u1l1 + vhpgvh_u1d1l1 + vhpgvh_u1l1d1
 
-        dll_lu[batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
-        dll_lu[batch_size, :lb, lb:2 * lb] = vhplvh_l1u1u1
-        dll_lu[batch_size, lb:2 * lb, :lb] = vhplvh_l1l1u1
+        dll_lu[:batch_size, :lb, :lb] = vhplvh_d1l1u1 + vhplvh_l1d1u1 + vhplvh_l1u1d1
+        dll_lu[:batch_size, :lb, lb:2 * lb] = vhplvh_l1u1u1
+        dll_lu[:batch_size, lb:2 * lb, :lb] = vhplvh_l1l1u1
 
-        dll_ul[batch_size, lb:2 * lb, 2 * lb:] = vhplvh_u1u1l1
-        dll_ul[batch_size, 2 * lb:, lb:2 * lb] = vhplvh_u1l1l1
-        dll_ul[batch_size, 2 * lb:, 2 * lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
+        dll_ul[:batch_size, lb:2 * lb, 2 * lb:] = vhplvh_u1u1l1
+        dll_ul[:batch_size, 2 * lb:, lb:2 * lb] = vhplvh_u1l1l1
+        dll_ul[:batch_size, 2 * lb:, 2 * lb:] = vhplvh_d1u1l1 + vhplvh_u1d1l1 + vhplvh_u1l1d1
 
-        vh_u[batch_size, 2 * lb:, :lb] = vh_u1 # change
+        vh_u[:batch_size, 2 * lb:, :lb] = vh_u1 # change
 
-        vh_l[batch_size, :lb, 2 * lb:] = vh_l1 # change
+        vh_l[:batch_size, :lb, 2 * lb:] = vh_l1 # change
 
 
     # lg_l2[:] = -lg_u2.transpose(0, 2, 1).conjugate()
