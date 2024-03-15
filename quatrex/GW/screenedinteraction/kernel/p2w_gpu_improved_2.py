@@ -39,7 +39,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
                 out[bid, j - scol] = data[i]
 
 
-def spgemm(A, B, rows: int = 4096):
+def spgemm(A, B, rows: int = 2048):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -51,7 +51,7 @@ def spgemm(A, B, rows: int = 4096):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 4096):
+def spgemm_direct(A, B, C, rows: int = 2048):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -440,17 +440,17 @@ def calc_W_pool_mpi_split(
 
         time_copy_in -= time.perf_counter()
 
-        if pr_dev is None:
-            pr_dev = cp.sparse.csr_matrix((cp.asarray(pr_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-            pg_dev = cp.sparse.csr_matrix((cp.asarray(pg_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-            pl_dev = cp.sparse.csr_matrix((cp.asarray(pl_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-        else:
-            pr_tmp = cp.asarray(pr_rgf[ie])
-            pr_dev.data[:] = pr_tmp[ij2ji]
-            pg_tmp = cp.asarray(pg_rgf[ie])
-            pg_dev.data[:] = pg_tmp[ij2ji]
-            pl_tmp = cp.asarray(pl_rgf[ie])
-            pl_dev.data[:] = pl_tmp[ij2ji]
+        # if pr_dev is None:
+        pr_dev = cp.sparse.csr_matrix((cp.asarray(pr_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+        pg_dev = cp.sparse.csr_matrix((cp.asarray(pg_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+        pl_dev = cp.sparse.csr_matrix((cp.asarray(pl_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+        # else:
+        #     pr_tmp = cp.asarray(pr_rgf[ie])
+        #     pr_dev.data[:] = pr_tmp[ij2ji]
+        #     pg_tmp = cp.asarray(pg_rgf[ie])
+        #     pg_dev.data[:] = pg_tmp[ij2ji]
+        #     pl_tmp = cp.asarray(pl_rgf[ie])
+        #     pl_dev.data[:] = pl_tmp[ij2ji]
          
         # pr_dev = cp.asarray(pr_rgf[ie])
         # pg_dev = cp.asarray(pg_rgf[ie])

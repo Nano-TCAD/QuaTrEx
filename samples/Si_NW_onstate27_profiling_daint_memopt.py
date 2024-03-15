@@ -34,7 +34,7 @@ print("Time for mpi import: %.3f s" % time_mpi, flush = True)
 
 time_quatrex = -time.perf_counter()
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
 #from quatrex.GW.screenedinteraction.kernel import p2w_cpu
@@ -49,8 +49,8 @@ from quatrex.Phonon import electron_phonon_selfenergy
 
 # if utils_gpu.gpu_avail():
 #     try:
-from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt
-from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved
+from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
+from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved_2
 from quatrex.GW.polarization.kernel import g2p_gpu
 from quatrex.GW.selfenergy.kernel import gw2s_gpu
     # except ImportError:
@@ -477,137 +477,133 @@ if __name__ == "__main__":
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     ind_ek = -1
 
-    # Communication buffers
-    # G2P
-    gg_g2p = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    gl_g2p = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    # gr_g2p = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    # P2W
-    pg_p2w = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    pl_p2w = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    pr_p2w = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    # GW2S
-    wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-    #                 dtype=np.complex128, order="C")
-    wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    # wg_gw2s = gg_g2p
-    # wl_gw2s = gl_g2p
-    # wr_gw2s = gr_g2p
-    # wg_transposed_gw2s = gl_transposed_g2p
-    wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-                    dtype=np.complex128, order="C")
-    # H2G
-    sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-                    dtype=np.complex128, order="C")
-    # sg_h2g_buf = pg_p2w
-    # sl_h2g_buf = pl_p2w
-    # sr_h2g_buf = pr_p2w
+        # Preprocess
+    DH = hamiltonian_obj
+    from quatrex.block_tri_solvers import rgf_GF_GPU_combo
 
-    comm.Barrier()
+    bmin = DH.Bmin.copy()
+    bmax = DH.Bmax.copy()
+
+    mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
+    mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
+    mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
+    mapping_diag_dev = cp.asarray(mapping_diag)
+    mapping_upper_dev = cp.asarray(mapping_upper)
+    mapping_lower_dev = cp.asarray(mapping_lower)
+
+    hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
+    overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
 
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    #folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_27_SC_eps5/'
     folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
     for iter_num in range(max_iter):
-
+                
         if((iter_num % 10 == 0) and iter_num > 0):
             cp.get_default_memory_pool().free_all_blocks()
-
-        comm.Barrier()
-
-        if rank == 0:
-            iter_time = -time.perf_counter()
-            pre_gf_time = -time.perf_counter()
-            print(f"Iteration {iter_num+1} of {max_iter}:", flush=True)
-            #print(f" norm of sg_h2g: {np.linalg.norm(sg_h2g):.3e}", flush=True)
 
         # initialize observables----------------------------------------------------
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        dosw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
+        dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
         # occupied screening/unoccupied screening
-        nEw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
-        nPw = cpx.zeros_pinned(shape=(ne,nb//nbc), dtype = np.complex128)
+        nEw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+        nPw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
         # current per energy
         ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
 
-        
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
+        # sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
+        # sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
-        sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
-        sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
-
-        # transform from 2D format to list/vector of sparse arrays format-----------
-        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
-        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
-
-        # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[iter_num+1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
-                                                            energy,
-                                                            hamiltonian_obj.Overlap['H_4'], 
-                                                            hamiltonian_obj.Hamiltonian['H_4'], 
-                                                            sr_h2g_vec,
-                                                            sl_h2g_vec,
-                                                            sg_h2g_vec,
-                                                            sr_ephn_h2g_vec,
-                                                            ind_ek,
-                                                            rows, 
-                                                            columns, 
-                                                            bmin, 
-                                                            bmax, 
-                                                            comm, 
-                                                            rank, 
-                                                            size, 
-                                                            count, 
-                                                            disp, 
-                                                            side = 'left')
-        if iter_num == 0:
-            dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
-            dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
-        else:
-            energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
-
-        EFL_vec[iter_num+1] = energy_fl
-        EFR_vec[iter_num+1] = energy_fr
+       
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
+        # sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
+        # sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
 
         comm.Barrier()
-            
-        if rank == 0:
-            pre_gf_time += time.perf_counter()
-            print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
-            gf_time = -time.perf_counter()
+        start_symmetrization = time.perf_counter()
 
+        sl_rgf_dev = cp.asarray(sl_h2g)
+        sg_rgf_dev = cp.asarray(sg_h2g)
+        sr_rgf_dev = cp.asarray(sr_h2g)
+        sl_phn_dev = cp.asarray(sl_phn)
+        sg_phn_dev = cp.asarray(sg_phn)
+        sr_phn_dev = cp.asarray(sr_phn)
+        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+        sr_rgf = cp.asnumpy(sr_rgf_dev)
+
+        comm.Barrier()
+        finish_symmetrization = time.perf_counter()
+        if rank == 0:
+            print(f"Symmetrization time: {finish_symmetrization - start_symmetrization}", flush = True)
+        
+        start_band_edge = time.perf_counter()
+    
+        # Adjusting Fermi Levels of both contacts to the current iteration band minima
+        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    'left',
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        comm.Barrier()
+        finish_band_edge = time.perf_counter()
+        if rank == 0:
+            print(f"Band edge time: {finish_band_edge - start_band_edge}", flush = True)
+        
+        # # Adjusting Fermi Levels of both contacts to the current iteration band minima
+        # (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
+        #                                             energy,
+        #                                             hamiltonian_obj.Overlap['H_4'],
+        #                                             hamiltonian_obj.Hamiltonian['H_4'],
+        #                                             sr_h2g_vec,
+        #                                             sl_h2g_vec,
+        #                                             sg_h2g_vec,
+        #                                             sr_ephn_h2g_vec,
+        #                                             ind_ek,
+        #                                             rows,
+        #                                             columns,
+        #                                             bmin,
+        #                                             bmax,
+        #                                             comm,
+        #                                             rank,
+        #                                             size,
+        #                                             count,
+        #                                             disp,
+        #                                             side='left')
+        
+        if rank == 0:
+            print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
+        
+        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
+        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+
+        EFL_vec[iter_num + 1] = energy_fl
+        EFR_vec[iter_num + 1] = energy_fr
+        
         # calculate the green's function at every rank------------------------------
         if args.type in ("cpu"):
-            _, _, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi_split(
+            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi_split(
                 hamiltonian_obj,
                 energy_loc,
                 sr_h2g_vec,
@@ -628,35 +624,28 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
-                return_sigma_boundary=False,
+                return_sigma_boundary=True,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
         elif args.type in ("gpu"):
-            calc_GF_pool_GPU_memopt.calc_GF_pool_mpi_split_memopt(
+            calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
                 hamiltonian_obj,
+                hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
+                overlap_diag, overlap_upper, overlap_lower,
                 energy_loc,
-                sr_h2g_vec,
-                sl_h2g_vec,
-                sg_h2g_vec,
-                sr_ephn_h2g_vec,
-                sl_ephn_h2g_vec,
-                sg_ephn_h2g_vec,
-                sr_h2g,
-                sl_h2g,
-                sg_h2g,
-                sr_phn,
-                sl_phn,
-                sg_phn,
+                sr_rgf_dev,
+                sl_rgf_dev,
+                sg_rgf_dev,
                 gr_h2g,
                 gl_h2g,
                 gg_h2g,
-                map_diag,
-                map_upper,
-                map_lower,
-                rows,
-                columns,
-                ij2ji,
+                mapping_diag_dev,
+                mapping_upper_dev,
+                mapping_lower_dev,
+                # rows,
+                # columns,
+                # ij2ji,
                 energy_fl,
                 energy_fr,
                 temp,
@@ -673,79 +662,92 @@ if __name__ == "__main__":
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
 
-        
-        comm.Barrier()
-
-        if rank == 0:
-            gf_time += time.perf_counter()
-            print(f"    GF time: {gf_time:.3f} s", flush=True)
-            pre_comm0_time = -time.perf_counter()
-            
-
-        # # lower diagonal blocks from physics identity
-        # gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
-        # gl_lower = -gl_upper.conjugate().transpose((0,1,3,2))
-        # #gr_lower = gr_upper.transpose((0,1,3,2))
+        # lower diagonal blocks from physics identity
+        #gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
+        #gl_lower = -gl_upper.conjugate().transpose((0, 1, 3, 2))
+        #gr_lower = gr_upper.transpose((0, 1, 3, 2))
         # if iter_num == 0:
-        #     gg_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gg_diag, gg_upper,
-        #                                                     gg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     gl_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gl_diag, gl_upper,
-        #                                                     gl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     # gr_h2g = change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #     #                                                 map_lower, gr_diag, gr_upper,
-        #     #                                                 gr_lower, no, count[1,rank],
-        #     #                                                 energy_contiguous=False)
-        # else:   
+        #     gg_h2g = change_format.block2sparse_energy_alt(map_diag,
+        #                                                    map_upper,
+        #                                                    map_lower,
+        #                                                    gg_diag,
+        #                                                    gg_upper,
+        #                                                    gg_lower,
+        #                                                    no,
+        #                                                    count[1, rank],
+        #                                                    energy_contiguous=False)
+        #     gl_h2g = change_format.block2sparse_energy_alt(map_diag,
+        #                                                    map_upper,
+        #                                                    map_lower,
+        #                                                    gl_diag,
+        #                                                    gl_upper,
+        #                                                    gl_lower,
+        #                                                    no,
+        #                                                    count[1, rank],
+        #                                                    energy_contiguous=False)
+        #     gr_h2g = change_format.block2sparse_energy_alt(map_diag,
+        #                                                    map_upper,
+        #                                                    map_lower,
+        #                                                    gr_diag,
+        #                                                    gr_upper,
+        #                                                    gr_lower,
+        #                                                    no,
+        #                                                    count[1, rank],
+        #                                                    energy_contiguous=False)
+        # else:
         #     # add new contribution to the Green's function
-        #     gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gg_diag, gg_upper,
-        #                                                     gg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False) + mem_g * gg_h2g
-        #     gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #                                                     map_lower, gl_diag, gl_upper,
-        #                                                     gl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False) + mem_g * gl_h2g
-        #     # gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag, map_upper,
-        #     #                                                 map_lower, gr_diag, gr_upper,
-        #     #                                                 gr_lower, no, count[1,rank],
-        #     #                                                 energy_contiguous=False) + mem_g * gr_h2g 
-
-
-        # calculate the transposed
-        gl_transposed_h2g = np.copy(gl_h2g[:,ij2ji], order="C")
-        # # create local buffers
-        # gg_g2p = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # gl_g2p = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # gr_g2p = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
+        #     gg_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+        #                                                                    map_upper,
+        #                                                                    map_lower,
+        #                                                                    gg_diag,
+        #                                                                    gg_upper,
+        #                                                                    gg_lower,
+        #                                                                    no,
+        #                                                                    count[1, rank],
+        #                                                                    energy_contiguous=False) + mem_g * gg_h2g
+        #     gl_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+        #                                                                    map_upper,
+        #                                                                    map_lower,
+        #                                                                    gl_diag,
+        #                                                                    gl_upper,
+        #                                                                    gl_lower,
+        #                                                                    no,
+        #                                                                    count[1, rank],
+        #                                                                    energy_contiguous=False) + mem_g * gl_h2g
+        #     gr_h2g = (1.0 - mem_g) * change_format.block2sparse_energy_alt(map_diag,
+        #                                                                    map_upper,
+        #                                                                    map_lower,
+        #                                                                    gr_diag,
+        #                                                                    gr_upper,
+        #                                                                    gr_lower,
+        #                                                                    no,
+        #                                                                    count[1, rank],
+        #                                                                    energy_contiguous=False) + mem_g * gr_h2g
         
         comm.Barrier()
-
-        if rank == 0:
-            pre_comm0_time += time.perf_counter()
-            print(f"    Pre-Comm-0 time: {pre_comm0_time:.3f} s", flush=True)
-            comm0_time = -time.perf_counter()
+        start_g2p_comm = time.perf_counter()
+        
+        # calculate the transposed
+        gl_transposed_h2g = np.copy(gl_h2g[:, ij2ji], order="C")
+        # create local buffers
+        gg_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        gl_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        gr_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        gl_transposed_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
 
         # use of all to all w since not divisible
         alltoall_g2p(gg_h2g, gg_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gl_h2g, gl_g2p, transpose_net=args.net_transpose)
-        #alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose)
+        alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose)
         alltoall_g2p(gl_transposed_h2g, gl_transposed_g2p, transpose_net=args.net_transpose)
 
         comm.Barrier()
-
+        finish_g2p_comm = time.perf_counter()
         if rank == 0:
-            comm0_time += time.perf_counter()
-            print(f"    Comm-0 time: {comm0_time:.3f} s", flush=True)
-            g2p_time = -time.perf_counter()
+            print(f"G2P communication time: {finish_g2p_comm - start_g2p_comm}", flush = True)
+            print("Green's function calculated", flush = True)
+        
+        start_p_computation = time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("cpu"):
@@ -755,131 +757,77 @@ if __name__ == "__main__":
                                                 gl_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("gpu"):
-             pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+            pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
-                                                gl_transposed_g2p, batch_size = 500)   
-        else:
+                                                gl_transposed_g2p)
+        else: 
             raise ValueError("Argument error, input type not possible")
-
+        
         comm.Barrier()
-
+        finish_p_computation = time.perf_counter()
         if rank == 0:
-            g2p_time += time.perf_counter()
-            print(f"    G2P time: {g2p_time:.3f} s", flush=True)
-            pre_comm1_time = -time.perf_counter()
+            print(f"Polarization computation time: {finish_p_computation - start_p_computation}", flush = True)
+        
+        start_p2w_comm = time.perf_counter()
 
         # distribute polarization function according to p2w step--------------------
 
-        # # create local buffers
-        # pg_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # pl_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # pr_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-
-        comm.Barrier()
-
-        if rank == 0:
-            pre_comm1_time += time.perf_counter()
-            print(f"    Pre-Comm-1 time: {pre_comm1_time:.3f} s", flush=True)
-            comm1_time = -time.perf_counter()
+        # create local buffers
+        pg_p2w = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        pl_p2w = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        pr_p2w = np.zeros((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        #alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose)
+        alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose)
+
+        # # transform from 2D format to list/vector of sparse arrays format-----------
+        # pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
+        # pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
+        # pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
+        pg_p2w_vec = None
+        pl_p2w_vec = None
+        pr_p2w_vec = None
 
         comm.Barrier()
-
+        finish_p2w_comm = time.perf_counter()
         if rank == 0:
-            comm1_time += time.perf_counter()
-            print(f"    Comm-1 time: {comm1_time:.3f} s", flush=True)
-            p2w_time = -time.perf_counter()
+            print(f"P2W communication time: {finish_p2w_comm - start_p2w_comm}", flush = True)
+            print("Polarization calculated", flush = True)
 
-        if args.bsr:
-
-            # transform from 2D format to list/vector of sparse arrays format-----------
-            pg_p2w_vec = change_format.sparse2vecbsr_v2(pg_p2w, rows, columns, nao, w_bsize)
-            pl_p2w_vec = change_format.sparse2vecbsr_v2(pl_p2w, rows, columns, nao, w_bsize)
-            pr_p2w_vec = change_format.sparse2vecbsr_v2(pg_p2w, rows, columns, nao, w_bsize)
-
-            # calculate the screened interaction on every rank--------------------------
-            if args.pool:
-                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                                    hamiltonian_obj, energy_loc,
-                                                                                                    pg_p2w_vec, pl_p2w_vec,
-                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    Idx_e_loc,   
-                                                                                                    factor_w_loc,
-                                                                                                    comm,
-                                                                                                    rank,
-                                                                                                    size,
-                                                                                                    nbc,
-                                                                                                    mkl_threads = w_mkl_threads,
-                                                                                                    worker_threads = w_worker_threads,
-                                                                                                    block_inv=args.block_inv,
-                                                                                                    use_dace=args.dace,
-                                                                                                    validate_dace=args.validate_dace)
-            else:
-                wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr, nb_mm, lb_max_mm = p2w_cpu.p2w_mpi_cpu(
-                                                                                                    hamiltonian_obj, energy_loc,
-                                                                                                    pg_p2w_vec, pl_p2w_vec,
-                                                                                                    pr_p2w_vec, vh, dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],  
-                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],    
-                                                                                                    factor_w_loc,
-                                                                                                    comm,
-                                                                                                    rank,
-                                                                                                    size,
-                                                                                                    w_mkl_threads,
-                                                                                                    block_inv=args.block_inv,
-                                                                                                    use_dace=args.dace,
-                                                                                                    validate_dace=args.validate_dace)
-        
-        if not args.bsr or (args.bsr and args.validate_bsr):
-
-            # transform from 2D format to list/vector of sparse arrays format-----------
-            pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
-            pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
-            pr_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
-
-
-            # calculate the screened interaction on every rank--------------------------
-            if args.type in ("cpu"):
-                wg_diag, wg_upper, wl_diag, wl_upper, _, _, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
-                                                                                                    hamiltonian_obj,
-                                                                                                    energy_loc,
-                                                                                                    pg_p2w_vec, 
-                                                                                                    pl_p2w_vec,
-                                                                                                    pr_p2w_vec, 
-                                                                                                    vh, 
-                                                                                                    dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], 
-                                                                                                    nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                                                    Idx_e_loc,   
-                                                                                                    factor_w_loc,
-                                                                                                    comm,
-                                                                                                    rank,
-                                                                                                    size,
-                                                                                                    nbc,
-                                                                                                    homogenize = False,
-                                                                                                    NCpSC = NCpSC,
-                                                                                                    mkl_threads = w_mkl_threads,
-                                                                                                    worker_num = w_worker_threads,
-                                                                                                    block_inv=args.block_inv,
-                                                                                                    use_dace=args.dace,
-                                                                                                    validate_dace=args.validate_dace)
-            elif args.type in ("gpu"):
-                # wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
-                # hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
-                # map_upper_mm, map_lower_mm, rows, columns, ij2ji,
-                # dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                # nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
-                # mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
-                p2w_gpu_improved.calc_W_pool_mpi_split(
+        # calculate the screened interaction on every rank--------------------------
+        if args.type in ("cpu"):
+            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+                hamiltonian_obj,
+                energy_loc,
+                pg_p2w_vec,
+                pl_p2w_vec,
+                pr_p2w_vec,
+                vh,
+                dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                Idx_e_loc,
+                factor_w_loc,
+                comm,
+                rank,
+                size,
+                nbc,
+                homogenize=False,
+                NCpSC=NCpSC,
+                mkl_threads=w_mkl_threads,
+                worker_num=w_worker_threads)
+        elif args.type in ("gpu"):
+            # wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_gpu.p2w_pool_mpi_gpu_split(
+            #     hamiltonian_obj, energy_loc, pg_p2w_vec, pl_p2w_vec, pr_p2w_vec, vh, map_diag_mm,
+            #     map_upper_mm, map_lower_mm, rows, columns, ij2ji,
+            #     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]], nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
+            #     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]], Idx_e_loc, factor_w_loc, comm, rank, size, nbc, homogenize=False, NCpSC=NCpSC,
+            #     mkl_threads = w_mkl_threads, worker_num = w_worker_threads, compute_mode = 1)
+            p2w_gpu_improved_2.calc_W_pool_mpi_split(
                 hamiltonian_obj,
                 # Energy vector.
                 energy_loc,
@@ -908,10 +856,10 @@ if __name__ == "__main__":
                 map_upper_l,
                 map_lower_l,
                 # P indices
-                rows, 
+                rows,
                 columns,
                 # P transposition indices.
-                ij2ji,                
+                ij2ji,
                 # M and L indices.
                 rows_m,
                 columns_m,
@@ -940,165 +888,105 @@ if __name__ == "__main__":
                 worker_num=w_worker_threads,
                 compute_mode = 1
             )
-            
-            if args.bsr and args.validate_bsr:
-                assert np.allclose(wg_diag, wg_diag_bsr)
-                assert np.allclose(wg_upper, wg_upper_bsr)
-                assert np.allclose(wl_diag, wl_diag_bsr)
-                assert np.allclose(wl_upper, wl_upper_bsr)
-                assert np.allclose(wr_diag, wr_diag_bsr)
-                assert np.allclose(wr_upper, wr_upper_bsr)
-                if rank == 0:
-                    print("Validation passed!")
-        
-        if args.bsr:
-            wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper = wg_diag_bsr, wg_upper_bsr, wl_diag_bsr, wl_upper_bsr, wr_diag_bsr, wr_upper_bsr
-            
-        comm.Barrier()
 
-        if rank == 0:
-            p2w_time += time.perf_counter()
-            print(f"    P2W time: {p2w_time:.3f} s", flush=True)
-            #print(f"    # of ind_zeros: {ind_zeros.shape[0]}", flush=True)
-            pre_comm2_time = -time.perf_counter()
+        # transform from block format to 2D format-----------------------------------
+        # lower diagonal blocks from physics identity
+        # wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
+        # wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
+        # wr_lower = wr_upper.transpose((0, 1, 3, 2))
 
         # memory_mask = np.ones(energy_loc.shape[0], dtype=bool)
         # memory_mask[ind_zeros] = False
-
-        # # transform from block format to 2D format-----------------------------------
-        # # lower diagonal blocks from physics identity
-        # wg_lower = -wg_upper.conjugate().transpose((0,1,3,2))
-        # wl_lower = -wl_upper.conjugate().transpose((0,1,3,2))
-        # #wr_lower = wr_upper.transpose((0,1,3,2))
-        # # if iter_num == 0:
-        # #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wg_diag, wg_upper,
-        # #                                                     wg_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wl_diag, wl_upper,
-        # #                                                     wl_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                     map_lower_mm, wr_diag, wr_upper,
-        # #                                                     wr_lower, no, count[1,rank],
-        # #                                                     energy_contiguous=False)
-        # # else:
         # # add new contribution to the Screened interaction
-        # wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                 map_lower_mm, wg_diag, wg_upper,
-        #                                                 wg_lower, no, count[1,rank],
-        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
+        # wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(
+        #     map_diag_mm,
+        #     map_upper_mm,
+        #     map_lower_mm,
+        #     wg_diag,
+        #     wg_upper,
+        #     wg_lower,
+        #     no,
+        #     count[1, rank],
+        #     energy_contiguous=False)[memory_mask] + mem_w * wg_p2w[memory_mask]
         # wg_p2w[ind_zeros, :] = 0.0 + 0.0j
-        # wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                 map_lower_mm, wl_diag, wl_upper,
-        #                                                 wl_lower, no, count[1,rank],
-        #                                                 energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
+        # wl_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(
+        #     map_diag_mm,
+        #     map_upper_mm,
+        #     map_lower_mm,
+        #     wl_diag,
+        #     wl_upper,
+        #     wl_lower,
+        #     no,
+        #     count[1, rank],
+        #     energy_contiguous=False)[memory_mask] + mem_w * wl_p2w[memory_mask]
         # wl_p2w[ind_zeros, :] = 0.0 + 0.0j
-        # # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        # #                                                 map_lower_mm, wr_diag, wr_upper,
-        # #                                                 wr_lower, no, count[1,rank],
-        # #                                                 energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
-
+        # wr_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(
+        #     map_diag_mm,
+        #     map_upper_mm,
+        #     map_lower_mm,
+        #     wr_diag,
+        #     wr_upper,
+        #     wr_lower,
+        #     no,
+        #     count[1, rank],
+        #     energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
 
         # distribute screened interaction according to gw2s step--------------------
 
-        # calculate the transposed
-        wg_transposed_p2w = np.copy(wg_p2w[:,ij2ji], order="C")
-        wl_transposed_p2w = np.copy(wl_p2w[:,ij2ji], order="C")
-
-        # # create local buffers
-        # wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        
         comm.Barrier()
-
-        if rank == 0:
-            pre_comm2_time += time.perf_counter()
-            print(f"    Pre-Comm-2 time: {pre_comm2_time:.3f} s", flush=True)
-            #print(f" Norm of wg_p2w: {np.linalg.norm(wg_p2w):.3e}", flush=True)
-            comm2_time = -time.perf_counter()
+        start_w2s_comm = time.perf_counter()
         
+        # calculate the transposed
+        wg_transposed_p2w = np.copy(wg_p2w[:, ij2ji], order="C")
+        wl_transposed_p2w = np.copy(wl_p2w[:, ij2ji], order="C")
+
+        # create local buffers
+        wg_gw2s = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        wl_gw2s = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        wr_gw2s = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
 
         # use of all to all w since not divisible
         alltoall_g2p(wg_p2w, wg_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wl_p2w, wl_gw2s, transpose_net=args.net_transpose)
-        #alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose)
+        alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose)
-    
+
         comm.Barrier()
-
+        finish_w2s_comm = time.perf_counter()
         if rank == 0:
-            comm2_time += time.perf_counter()
-            print(f"    Comm-2 time: {comm2_time:.3f} s", flush=True)
-            gw2s_time = -time.perf_counter()
+            print(f"W2S communication time: {finish_w2s_comm - start_w2s_comm}", flush = True)
+            print("Finish p2w", flush=True)
+        
+        start_s_computation = time.perf_counter()
 
-    # tod optimize and not load two time green's function to gpu and do twice the fft
+        # tod optimize and not load two time green's function to gpu and do twice the fft
         if args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, 
-                                                                           wg_gw2s, wl_gw2s, 
-                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
-
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+            
         elif args.type in ("gpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 500)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         else:
             raise ValueError("Argument error, input type not possible")
         
         comm.Barrier()
-
+        finish_s_computation = time.perf_counter()
         if rank == 0:
-            gw2s_time += time.perf_counter()
-            print(f"    GW2S time: {gw2s_time:.3f} s", flush=True)
-            pre_comm3_time = -time.perf_counter()
+            print(f"Sigma computation time: {finish_s_computation - start_s_computation}", flush = True)
+
+        start_s2g_comm = time.perf_counter()
 
         # distribute screened interaction according to h2g step---------------------
-        # # create local buffers
-        # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        
-        comm.Barrier()
-
-        if rank == 0:
-            pre_comm3_time += time.perf_counter()
-            print(f"    Pre-comm-3 time: {pre_comm3_time:.3f} s", flush=True)
-            comm3_time = -time.perf_counter()
+        # create local buffers
+        sg_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        sl_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
         # use of all to all w since not divisible
         alltoall_p2g(sg_gw2s, sg_h2g_buf, transpose_net=args.net_transpose)
@@ -1106,11 +994,11 @@ if __name__ == "__main__":
         alltoall_p2g(sr_gw2s, sr_h2g_buf, transpose_net=args.net_transpose)
 
         comm.Barrier()
-
+        finish_s2g_comm = time.perf_counter()
         if rank == 0:
-            comm3_time += time.perf_counter()
-            print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
-            wrapping_up_time = -time.perf_counter()
+            print(f"S2G communication time: {finish_s2g_comm - start_s2g_comm}", flush = True)
+
+        start_sigma_mem_update = time.perf_counter()
 
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
@@ -1121,7 +1009,14 @@ if __name__ == "__main__":
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
+
+        comm.Barrier()
+        finish_sigma_mem_update = time.perf_counter()
+        if rank == 0:
+            print(f"Sigma memory update time: {finish_sigma_mem_update - start_sigma_mem_update}", flush = True)
         
+        start_sephn = time.perf_counter()
+
         # Extract diagonal bands
         gg_diag_band = gg_h2g[:, rows == columns]
         gl_diag_band = gl_h2g[:, rows == columns]
@@ -1138,14 +1033,19 @@ if __name__ == "__main__":
                                                                             DPHN,
                                                                             temp,
                                                                             mem_s)
+        
+        comm.Barrier()
+        finish_sephn = time.perf_counter()
+        if rank == 0:
+            print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
 
+        start_observables = time.perf_counter()
 
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
         #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
         #     alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
 
-        
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
@@ -1155,12 +1055,10 @@ if __name__ == "__main__":
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
         
+        comm.Barrier()
+        finish_observables = time.perf_counter()
         if rank == 0:
-            wrapping_up_time += time.perf_counter()
-            print(f"    Wrapping-up time: {wrapping_up_time:.3f} s", flush=True)
-            iter_time += time.perf_counter()
-            print(f"Iteration time: {iter_time:.3f} s", flush=True)
-            print()
+            print(f"Observables reduction time: {finish_observables - start_observables}", flush = True)
 
         if rank == 0:
             np.savetxt(folder + 'E.dat', energy)

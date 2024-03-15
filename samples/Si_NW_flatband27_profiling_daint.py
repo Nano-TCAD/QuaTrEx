@@ -9,6 +9,8 @@ print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
 import sys
 import numpy as np
+import cupy as cp
+import cupyx as cpx
 import numpy.typing as npt
 import os
 import argparse
@@ -72,7 +74,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire_nobias_lm6_generation/")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire_nobias_lm4_generation/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -231,7 +233,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 3.0
+    epsR = 2.5
     # DFT Conduction Band Minimum
     ECmin = -2.0761
 
@@ -440,7 +442,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 75
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -494,8 +496,11 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_109_LM_eps5_flat/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_8000_109_LM_eps25_flat/'
     for iter_num in range(max_iter):
+
+        if((iter_num % 5 == 0) and iter_num > 0):
+            cp.get_default_memory_pool().free_all_blocks()
 
         comm.Barrier()
 
