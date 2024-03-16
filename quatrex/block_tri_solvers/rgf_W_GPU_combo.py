@@ -213,9 +213,9 @@ def rgf_batched_GPU(
     WL_compressed = cp.zeros_like(wl_host)
     WG_compressed = cp.zeros_like(wg_host)
 
-    mr_dev = cp.empty_like(mr_host)
-    ll_dev = cp.empty_like(ll_host)
-    lg_dev = cp.empty_like(lg_host)
+    mr_dev = cp.empty_like(mr_host) if isinstance(mr_host, np.ndarray) else None
+    ll_dev = cp.empty_like(ll_host) if isinstance(ll_host, np.ndarray) else None
+    lg_dev = cp.empty_like(lg_host) if isinstance(lg_host, np.ndarray) else None
     dmr_dev = [None for _ in range(num_blocks)]
     dvh_dev = [None for _ in range(num_blocks)]
     dll_dev = [None for _ in range(num_blocks)]
@@ -247,9 +247,14 @@ def rgf_batched_GPU(
                 map_lower_m_dev[i].set(map_lower_m[i])
                 map_lower_l_dev[i].set(map_lower_l[i])
 
-        mr_dev.set(mr_host)
-        ll_dev.set(ll_host)
-        lg_dev.set(lg_host)
+        if mr_dev is not None:
+            mr_dev.set(mr_host)
+            ll_dev.set(ll_host)
+            lg_dev.set(lg_host)
+        else:
+            mr_dev = mr_host
+            ll_dev = ll_host
+            lg_dev = lg_host
         input_events[idx].record(stream=input_stream)
 
         if num_blocks > 1:

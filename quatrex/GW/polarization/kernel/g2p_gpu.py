@@ -226,9 +226,9 @@ def g2p_fft_mpi_gpu_batched_nopr(
 
     # load data to gpu and compute----------------------------------------------
     # allocate gpu memory
-    gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
 
 
     # compute pg/pl/pr----------------------------------------------------------
@@ -237,11 +237,15 @@ def g2p_fft_mpi_gpu_batched_nopr(
         # last batch different, if not dividable
         batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
         # fft
-        gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
-        gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        # gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        # gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gg_gpu = gg[batch_start:batch_end, :]
+        gg_t_gpu = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
 
-        gl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(gl_transposed[batch_start:batch_end, :])
-        gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        # gl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(gl_transposed[batch_start:batch_end, :])
+        # gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gl_transposed_gpu = gl_transposed[batch_start:batch_end, :]
+        gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu, n=2 * ne, axis=1)
 
         # time reversed
         gl_t_mod_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)

@@ -558,18 +558,18 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
 
     
     # load data to gpu and compute----------------------------------------------------
-    gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    wg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    wl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    wg_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    wl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # wg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # wl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # wg_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # wl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
     # compute sg/sl/sr----------------------------------------------------------
 
     #Calculating the truncated fock part
     #vh1d = np.asarray(vh[rows, cols].reshape(-1))
     gl_density = np.imag(np.sum(gl, axis = 1))
-    rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
+    rSigmaRF = -cp.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
     #rSigmaRF = np.tile(rSigmaRF, (1,ne))
     rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
 
@@ -592,22 +592,34 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
 
         # todo possibility to avoid fft in global chain
         # fft
-        gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        # gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        # gg_t = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gg_gpu = gg[batch_start:batch_end, :]
         gg_t = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
 
-        gl_gpu[0:batch_end - batch_start] = cp.asarray(gl[batch_start:batch_end, :])
+        # gl_gpu[0:batch_end - batch_start] = cp.asarray(gl[batch_start:batch_end, :])
+        # gl_t = cp.fft.fft(gl_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gl_gpu = gl[batch_start:batch_end, :]
         gl_t = cp.fft.fft(gl_gpu, n=2 * ne, axis=1)
 
-        wg_gpu[0:batch_end - batch_start] = cp.asarray(wg[batch_start:batch_end, :])
+        # wg_gpu[0:batch_end - batch_start] = cp.asarray(wg[batch_start:batch_end, :])
+        # wg_t = cp.fft.fft(wg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        wg_gpu = wg[batch_start:batch_end, :]
         wg_t = cp.fft.fft(wg_gpu, n=2 * ne, axis=1)
 
-        wl_gpu[0:batch_end - batch_start] = cp.asarray(wl[batch_start:batch_end, :])
+        # wl_gpu[0:batch_end - batch_start] = cp.asarray(wl[batch_start:batch_end, :])
+        # wl_t = cp.fft.fft(wl_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        wl_gpu = wl[batch_start:batch_end, :]
         wl_t = cp.fft.fft(wl_gpu, n=2 * ne, axis=1)
 
-        wg_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wg_transposed[batch_start:batch_end, :])
+        # wg_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wg_transposed[batch_start:batch_end, :])
+        # wg_transposed_t = cp.fft.fft(wg_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        wg_transposed_gpu = wg_transposed[batch_start:batch_end, :]
         wg_transposed_t = cp.fft.fft(wg_transposed_gpu, n=2 * ne, axis=1)
 
-        wl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wl_transposed[batch_start:batch_end, :])
+        # wl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(wl_transposed[batch_start:batch_end, :])
+        # wl_transposed_t = cp.fft.fft(wl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        wl_transposed_gpu = wl_transposed[batch_start:batch_end, :]
         wl_transposed_t = cp.fft.fft(wl_transposed_gpu, n=2 * ne, axis=1)
         
         # fft of energy reversed
@@ -621,6 +633,8 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
 
         # multiply elementwise the energy reversed with difference of transposed and energy zero
         # see the README for derivation
+        # sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[0:batch_end - batch_start, 0].reshape(-1, 1), 2 * ne, axis=1))
+        # sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[0:batch_end - batch_start, 0].reshape(-1, 1), 2 * ne, axis=1))
         sg_t_2 = cp.multiply(rgg_t, wl_transposed_t - cp.repeat(wl_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
         sl_t_2 = cp.multiply(rgl_t, wg_transposed_t - cp.repeat(wg_transposed_gpu[:, 0].reshape(-1, 1), 2 * ne, axis=1))
         #sr_t_2 = (cp.multiply(rgg_t, cp.conjugate(wr_t_mod - cp.repeat(wr_gpu[:,0].reshape(-1,1), 2*ne, axis=1))) +
@@ -637,12 +651,14 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
         sg_gpu = cp.multiply(sg_1 + sg_2, pre_factor)
         sl_gpu = cp.multiply(sl_1 + sl_2, pre_factor)
 
-        SGmSL_t_gpu = cp.fft.fft(1j*cp.imag(sg_gpu-sl_gpu)[0:batch_end - batch_start,:],  n=2 * ne, axis=1)
+        # SGmSL_t_gpu = cp.fft.fft(1j*cp.imag(sg_gpu-sl_gpu)[0:batch_end - batch_start,:],  n=2 * ne, axis=1)
+        SGmSL_t_gpu = cp.fft.fft(1j*cp.imag(sg_gpu-sl_gpu),  n=2 * ne, axis=1)
         rSigmaR_t_gpu = cp.multiply(SGmSL_t_gpu, one_div_by_E_t_gpu)
         #rSigmaR_t = linalg_cpu.elementmul(SGmSL_t, one_div_by_E_t)
         rSigmaR_gpu = cp.fft.ifft(rSigmaR_t_gpu, axis = 1)[:, ne-1:-1].astype(np.complex128)
         cp.multiply(rSigmaR_gpu, 2*pre_factor, out=rSigmaR_gpu)
-        sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2)[0:batch_end - batch_start,:].astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :]
+        # sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2)[0:batch_end - batch_start,:].astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :].get()
+        sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2).astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :].get()
 
         # load data to cpu----------------------------------------------------------
 

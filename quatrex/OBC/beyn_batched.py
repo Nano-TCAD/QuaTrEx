@@ -560,7 +560,7 @@ def beyn_new_batched_gpu_3(factor: int,
     # finish = time.time()
     # print(f"Time for all svd-eig-phi: {finish - start}", flush=True)
 
-    start = time.time()
+    # start = time.time()
     Sigma, gR, min_dEk = beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, side)
     # finish = time.time()
     # print(f"Time for all sigma: {finish - start}", flush=True)

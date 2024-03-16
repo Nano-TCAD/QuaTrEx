@@ -1,26 +1,35 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-import concurrent.futures
-from itertools import repeat
+# import concurrent.futures
+# from itertools import repeat
 
 import time
 
 import numpy as np
 import numpy.typing as npt
-import mkl
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
 
 import cupy as cp
 import cupyx as cpx
 
-from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
+# from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
-from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
+# from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 
 import quatrex.block_tri_solvers.rgf_GF_GPU_combo as rgf_GF_GPU_combo
-from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
+# from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
 from quatrex.OBC.beyn_batched import beyn_batched_gpu_3 as beyn_gpu
 
-from operator import mul
+# from operator import mul
 
 
 import time
@@ -83,12 +92,12 @@ def calc_GF_pool_mpi_split_memopt(
 
     mkl.set_num_threads(mkl_threads)
 
-    index_e = np.arange(ne)
+    # index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
-    bmin_fi = bmin -1
-    bmax_fi = bmax -1
+    # bmin_fi = bmin -1
+    # bmax_fi = bmax -1
 
     LBsize = bmax[0] - bmin[0] + 1
     RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
@@ -299,7 +308,7 @@ def calc_GF_pool_mpi_split_memopt(
         time_SE = -time.perf_counter()
 
 
-    energy_batchsize = 7
+    energy_batchsize = ne 
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()

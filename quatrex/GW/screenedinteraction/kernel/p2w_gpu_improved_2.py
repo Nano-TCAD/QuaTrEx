@@ -4,22 +4,31 @@ from itertools import repeat
 
 import cupy as cp
 import cupyx as cpx
-import mkl
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
 import numpy as np
 import numpy.typing as npt
 
 from quatrex.block_tri_solvers import (
-    matrix_inversion_w,
+    # matrix_inversion_w,
     rgf_GF_GPU_combo,
-    rgf_W_GPU,
+    # rgf_W_GPU,
     rgf_W_GPU_combo,
 )
-from quatrex.OBC import obc_w_cpu, obc_w_gpu
+from quatrex.OBC import obc_w_gpu
 from quatrex.OBC.beyn_batched import beyn_new_batched_gpu_3 as beyn_gpu
-from quatrex.utils.matrix_creation import (
-    extract_small_matrix_blocks,
-    homogenize_matrix_Rnosym,
-)
+# from quatrex.utils.matrix_creation import (
+#     extract_small_matrix_blocks,
+#     homogenize_matrix_Rnosym,
+# )
 
 from quatrex.GW.screenedinteraction.polarization_preprocess import polarization_preprocess_2d
 
@@ -39,7 +48,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
                 out[bid, j - scol] = data[i]
 
 
-def spgemm(A, B, rows: int = 4096):
+def spgemm(A, B, rows: int = 8192):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -51,7 +60,7 @@ def spgemm(A, B, rows: int = 4096):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 4096):
+def spgemm_direct(A, B, C, rows: int = 8192):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -379,9 +388,9 @@ def calc_W_pool_mpi_split(
         #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
         # )
 
-    mr_host = cpx.empty_pinned((ne, len(rows_m)), dtype = np.complex128)
-    lg_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
-    ll_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
+    # mr_host = cpx.empty_pinned((ne, len(rows_m)), dtype = np.complex128)
+    # lg_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
+    # ll_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
 
     ij2ji_dev = cp.asarray(ij2ji)
     rows_dev = cp.asarray(rows)
@@ -393,9 +402,12 @@ def calc_W_pool_mpi_split(
     vh_ct_dev = vh_dev.T.conj(copy=False)
     identity = cp.sparse.identity(nao)
 
-    mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
-    lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-    ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
+    mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
+    lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+    ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
+    mr_host = mr_dev
+    lg_host = lg_dev
+    ll_host = ll_dev
 
     # slice block start diagonal and slice block start off diagonal
     slb_sd = slice(0, lb_start)
@@ -465,9 +477,9 @@ def calc_W_pool_mpi_split(
 
         cp.cuda.Stream.null.synchronize()
 
-        mr_dev[0] = (identity - spgemm(vh_dev, pr_dev)).data
-        spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[0])
-        spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[0])
+        mr_dev[ie] = (identity - spgemm(vh_dev, pr_dev)).data
+        spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[ie])
+        spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[ie])
 
         time_spgemm += time.perf_counter()
 
@@ -476,9 +488,9 @@ def calc_W_pool_mpi_split(
     
         time_copy_out -= time.perf_counter()
         
-        mr_host[ie, :] = cp.asnumpy(mr_dev[0])
-        lg_host[ie, :] = cp.asnumpy(lg_dev[0])
-        ll_host[ie, :] = cp.asnumpy(ll_dev[0])
+        # mr_host[ie, :] = cp.asnumpy(mr_dev[0])
+        # lg_host[ie, :] = cp.asnumpy(lg_dev[0])
+        # ll_host[ie, :] = cp.asnumpy(ll_dev[0])
 
         time_copy_out += time.perf_counter()
 
@@ -553,21 +565,6 @@ def calc_W_pool_mpi_split(
         # pr_e3[ie] = pr_dev[slb_ed, slb_eo].toarray()
 
         time_dense += time.perf_counter()
-
-        # obc_w_gpu.obc_w_mm_gpu_2(vh_dev,
-        #                          pg_dev, pl_dev, pr_dev,
-        #                          bmax, bmin,
-        #                          dvh_sd_ref[ie], dvh_ed_ref[ie],
-        #                          dmr_sd_ref[ie], dmr_ed_ref[ie],
-        #                          dlg_sd_ref[ie], dlg_ed_ref[ie],
-        #                          dll_sd_ref[ie], dll_ed_ref[ie],
-        #                          mr_s_ref[ie], mr_e_ref[ie],
-        #                          lg_s_ref[ie], lg_e_ref[ie],
-        #                          ll_s_ref[ie], ll_e_ref[ie],
-        #                          vh_s_ref[ie], vh_e_ref[ie],
-        #                          mb00_ref[ie], mbNN_ref[ie],
-        #                          rows_dev, columns_dev,
-        #                          nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
     
     comm.Barrier()
     finish_spgemm = time.perf_counter()
@@ -594,86 +591,6 @@ def calc_W_pool_mpi_split(
     
     def _norm(val, ref):
         return np.linalg.norm(val - ref) / np.linalg.norm(ref)
-    
-    # print("dmr_sd", _norm(dmr_sd, dmr_sd_ref))
-    # print("dmr_ed", _norm(dmr_ed, dmr_ed_ref))
-    # print("dlg_sd", _norm(dlg_sd, dlg_sd_ref))
-    # print("dlg_ed", _norm(dlg_ed, dlg_ed_ref))
-    # print("dll_sd", _norm(dll_sd, dll_sd_ref))
-    # print("dll_ed", _norm(dll_ed, dll_ed_ref))
-    # print("vh_s", _norm(vh_s, vh_s_ref))
-    # print("vh_e", _norm(vh_e, vh_e_ref))
-    # print("mb00", _norm(mb00, mb00_ref))
-    # print("mbNN", _norm(mbNN, mbNN_ref))
-
-    # for ie in range(ne):
-    #     print("mr_s[0]", _norm(mr_s[ie][0], mr_s_ref[ie][0]))
-    #     print("mr_s[1]", _norm(mr_s[ie][1], mr_s_ref[ie][1]))
-    #     print("mr_s[2]", _norm(mr_s[ie][2], mr_s_ref[ie][2]))
-    #     print("mr_e[0]", _norm(mr_e[ie][0], mr_e_ref[ie][0]))
-    #     print("mr_e[1]", _norm(mr_e[ie][1], mr_e_ref[ie][1]))
-    #     print("mr_e[2]", _norm(mr_e[ie][2], mr_e_ref[ie][2]))
-    #     print("lg_s[0]", _norm(lg_s[ie][0], lg_s_ref[ie][0]))
-    #     print("lg_s[1]", _norm(lg_s[ie][1], lg_s_ref[ie][1]))
-    #     print("lg_e[0]", _norm(lg_e[ie][0], lg_e_ref[ie][0]))
-    #     print("lg_e[1]", _norm(lg_e[ie][1], lg_e_ref[ie][1]))
-    #     print("ll_s[0]", _norm(ll_s[ie][0], ll_s_ref[ie][0]))
-    #     print("ll_s[1]", _norm(ll_s[ie][1], ll_s_ref[ie][1]))
-    #     print("ll_e[0]", _norm(ll_e[ie][0], ll_e_ref[ie][0]))
-    #     print("ll_e[1]", _norm(ll_e[ie][1], ll_e_ref[ie][1]))
-
-    # dmr_sd = dmr_sd_ref
-    # dmr_ed = dmr_ed_ref
-    # dlg_sd = dlg_sd_ref
-    # dlg_ed = dlg_ed_ref
-    # dll_sd = dll_sd_ref
-    # dll_ed = dll_ed_ref
-    # mr_s = mr_s_ref
-    # mr_e = mr_e_ref
-    # lg_s = lg_s_ref
-    # lg_e = lg_e_ref
-    # ll_s = ll_s_ref
-    # ll_e = ll_e_ref
-    # vh_s = vh_s_ref
-    # vh_e = vh_e_ref
-    # mb00 = mb00_ref
-    # mbNN = mbNN_ref
-
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     executor.map(obc_w_gpu.obc_w_mm_gpu_2,
-    #         repeat(vh_dev),
-    #         pg_rgf,
-    #         pl_rgf,
-    #         pr_rgf,
-    #         repeat(bmax),
-    #         repeat(bmin),
-    #         dvh_sd,
-    #         dvh_ed,
-    #         dmr_sd,
-    #         dmr_ed,
-    #         dlg_sd,
-    #         dlg_ed,
-    #         dll_sd,
-    #         dll_ed,
-    #         mr_s,
-    #         mr_e,
-    #         lg_s,
-    #         lg_e,
-    #         ll_s,
-    #         ll_e,
-    #         vh_s,
-    #         vh_e,
-    #         mb00,
-    #         mbNN,
-    #         repeat(rows_dev),
-    #         repeat(columns_dev),
-    #         repeat(nbc),
-    #         repeat(NCpSC),
-    #         repeat(block_inv),
-    #         repeat(use_dace),
-    #         repeat(validate_dace),
-    #         repeat(ref_flag),
-    #     )
 
     if compute_mode == 0:
 
@@ -714,29 +631,6 @@ def calc_W_pool_mpi_split(
             )
 
     else:
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        #     # results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-        #     executor.map(
-        #         obc_w_gpu.obc_w_gpu_beynonly,
-        #         dxr_sd,
-        #         dxr_ed,
-        #         dvh_sd,
-        #         dvh_ed,
-        #         dmr_sd,
-        #         dmr_ed,
-        #         mr_s,
-        #         mr_e,
-        #         vh_s,
-        #         vh_e,
-        #         mb00,
-        #         mbNN,
-        #         repeat(nbc),
-        #         repeat(NCpSC),
-        #         repeat(block_inv),
-        #         repeat(use_dace),
-        #         repeat(validate_dace),
-        #         repeat(ref_flag),
-        #     )
 
         comm.Barrier()
         start_beyn_w = time.perf_counter()
@@ -837,64 +731,6 @@ def calc_W_pool_mpi_split(
         print("Time for OBC: %.3f s" % time_OBC, flush=True)
         time_spmm = -time.perf_counter()
 
-    # # --- Sparse matrix multiplication ---------------------------------
-    # # NOTE: This is what currently kills the performance. The CPU
-    # # implementation is not efficient. The GPU implementation is not
-    # # memory efficient.
-        
-    # mr_host = np.empty((ne, len(rows_m)), dtype = np.complex128)
-    # lg_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
-    # ll_host = np.empty((ne, len(rows_l)), dtype = np.complex128)
-
-    # pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows, columns, ij2ji, NCpSC, bmin, bmax, homogenize)
-    # rows_dev = cp.asarray(rows)
-    # columns_dev = cp.asarray(columns)
-
-    # use_gpu = True
-    # if use_gpu:
-    #     nao = vh.shape[0]
-
-    #     for ie in range(ne):
-    #         mr_dev = cp.empty((1, len(rows_m)), dtype=np.complex128)
-    #         lg_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-    #         ll_dev = cp.empty((1, len(rows_l)), dtype=np.complex128)
-    #         #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-    #         sp_mm_gpu(pr_rgf[ie], pg_rgf[ie], pl_rgf[ie], rows_dev, columns_dev, vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-        
-    #         mr_host[ie, :] = cp.asnumpy(mr_dev[0])
-    #         lg_host[ie, :] = cp.asnumpy(lg_dev[0])
-    #         ll_host[ie, :] = cp.asnumpy(ll_dev[0])
-        
-    # # use_gpu = True
-    # # if use_gpu:
-    # #     nao = vh.shape[0]
-    # #     mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
-    # #     lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
-    # #     ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
-
-    # #     for ie in range(ne):
-    # #         sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[ie], lg_dev[ie], ll_dev[ie], nao)
-
-    # #     mr_host = cp.asnumpy(mr_dev)
-    # #     lg_host = cp.asnumpy(lg_dev)
-    # #     ll_host = cp.asnumpy(ll_dev)
-
-    # else:
-    #     vh_ct = vh.conj().transpose()
-    #     nao = vh.shape[0]
-    #     mr_host = np.empty((ne, len(rows_m)), dtype=np.complex128)
-    #     lg_host = np.empty((ne, len(rows_l)), dtype=np.complex128)
-    #     ll_host = np.empty((ne, len(rows_l)), dtype=np.complex128)
-
-    #     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #         results = executor.map(
-    #             rgf_W_GPU.sp_mm_cpu, pr, pg, pl, repeat(vh), repeat(vh_ct), repeat(nao)
-    #         )
-    #         for ie, res in enumerate(results):
-    #             mr_host[ie] = res[0][rows_m, columns_m]
-    #             lg_host[ie] = res[1][rows_l, columns_l]
-    #             ll_host[ie] = res[2][rows_l, columns_l]
-
     comm.Barrier()
     if rank == 0:
         time_spmm += time.perf_counter()
@@ -918,24 +754,6 @@ def calc_W_pool_mpi_split(
     vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
         vh, bmin_mm, bmax_mm + 1
     )
-    # mr_rgf = np.empty((ne, len(columns_m)), dtype=np.complex128)
-    # lg_rgf = np.empty((ne, len(columns_l)), dtype=np.complex128)
-    # ll_rgf = np.empty((ne, len(columns_l)), dtype=np.complex128)
-
-    # Extract the data from the sparse matrices.
-    # NOTE: Kinda inefficient but ll_rgf can be ragged so this is safer.
-    # def _get_data(x, x_rgf, rows, columns):
-    #     x_rgf[:] = x[rows, columns]
-
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     executor.map(_get_data, mr, mr_rgf, repeat(rows_m), repeat(columns_m))
-    #     executor.map(_get_data, lg, lg_rgf, repeat(rows_l), repeat(columns_l))
-    #     executor.map(_get_data, ll, ll_rgf, repeat(rows_l), repeat(columns_l))
-
-    # Sanity checks.
-    # assert lg_rgf.shape[1] == rows_l.size
-    # assert ll_rgf.shape[1] == rows_l.size
-    # assert mr_rgf.shape[1] == rows_m.size
 
     comm.Barrier()
     if rank == 0:
@@ -948,7 +766,7 @@ def calc_W_pool_mpi_split(
 
     input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    energy_batchsize = 7
+    energy_batchsize = ne
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     for ie in energy_batch:
