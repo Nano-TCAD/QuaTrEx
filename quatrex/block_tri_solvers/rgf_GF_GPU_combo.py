@@ -294,9 +294,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     GG_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
     GGnn1_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
 
-    GR_compressed = cp.zeros_like(GR_host)
-    GL_compressed = cp.zeros_like(GL_host)
-    GG_compressed = cp.zeros_like(GG_host)
+    GR_compressed = cp.zeros_like(GR_host) if isinstance(GR_host, np.ndarray) else GR_host
+    GL_compressed = cp.zeros_like(GL_host) if isinstance(GL_host, np.ndarray) else GL_host
+    GG_compressed = cp.zeros_like(GG_host) if isinstance(GG_host, np.ndarray) else GG_host
 
     SR_dev = cp.empty_like(SR_host) if isinstance(SR_host, np.ndarray) else None
     SL_dev = cp.empty_like(SL_host) if isinstance(SL_host, np.ndarray) else None
@@ -774,10 +774,13 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     with input_stream:
         _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GL, None, num_blocks - 1, GL_compressed)
         _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GG, None, num_blocks - 1, GG_compressed)
-        GL_compressed.get(out=GL_host)
-        GG_compressed.get(out=GG_host)
+        if isinstance(GL_host, np.ndarray):
+            GL_compressed.get(out=GL_host)
+        if isinstance(GG_host, np.ndarray):
+            GG_compressed.get(out=GG_host)
     _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, None, num_blocks - 1, GR_compressed)
-    GR_compressed.get(out=GR_host)
+    if isinstance(GR_host, np.ndarray):
+        GR_compressed.get(out=GR_host)
     DOS_gpu.get(out=DOS)
     nE_gpu.get(out=nE)
     nP_gpu.get(out=nP)

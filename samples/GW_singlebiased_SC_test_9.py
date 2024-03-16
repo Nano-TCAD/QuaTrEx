@@ -428,14 +428,26 @@ if __name__ == "__main__":
         #     ], [outp, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
 
     # initialize self energy----------------------------------------------------
-    sg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    sl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    sr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # sg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # sl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # sr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+
+    # # phonon self energy. Only diagonal so far----------------------------------
+    # sg_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
+    # sl_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
+    # sr_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
+    
+    sg_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    sl_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    sr_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    sg_rgf_dev = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    sl_rgf_dev = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    sr_rgf_dev = cp.zeros((count[1, rank], no), dtype=np.complex128)
 
     # phonon self energy. Only diagonal so far----------------------------------
-    sg_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
-    sl_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
-    sr_phn = cpx.zeros_pinned((count[1,rank], nao), dtype=np.complex128)
+    sg_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
+    sl_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
+    sr_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
 
     # # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
@@ -449,9 +461,12 @@ if __name__ == "__main__":
 
 
     # initialize Green's function------------------------------------------------
-    gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    gl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # gl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    gg_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    gl_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    gr_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
     wg_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
@@ -528,6 +543,22 @@ if __name__ == "__main__":
         sg_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
         sl_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
         sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+    
+    # initialize observables----------------------------------------------------
+    # density of states
+    dos = cpx.empty_pinned(shape=(ne, nb), dtype=np.complex128)
+    dosw = cpx.empty_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+
+    # occupied states/unoccupied states
+    nE = cpx.empty_pinned(shape=(ne, nb), dtype=np.complex128)
+    nP = cpx.empty_pinned(shape=(ne, nb), dtype=np.complex128)
+
+    # occupied screening/unoccupied screening
+    nEw = cpx.empty_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+    nPw = cpx.empty_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+
+    # current per energy
+    ide = cpx.empty_pinned(shape=(ne, nb), dtype=np.complex128)
 
     if rank == 0:
         time_start = -time.perf_counter()
@@ -535,44 +566,13 @@ if __name__ == "__main__":
     folder = '/quatrex/results/InAs_biased_sc/'
     for iter_num in range(max_iter):
 
-        # initialize observables----------------------------------------------------
-        # density of states
-        dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
-
-        # occupied states/unoccupied states
-        nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        nP = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-
-        # occupied screening/unoccupied screening
-        nEw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
-        nPw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
-
-        # current per energy
-        ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-
-        # # transform from 2D format to list/vector of sparse arrays format-----------
-        # sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
-        # sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
-        # sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
-
-       
-        # # transform from 2D format to list/vector of sparse arrays format-----------
-        # sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
-        # sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
-        # sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
-
         comm.Barrier()
         start_symmetrization = time.perf_counter()
 
-        sl_rgf_dev = cp.asarray(sl_h2g)
-        sg_rgf_dev = cp.asarray(sg_h2g)
-        sr_rgf_dev = cp.asarray(sr_h2g)
-        sl_phn_dev = cp.asarray(sl_phn)
-        sg_phn_dev = cp.asarray(sg_phn)
-        sr_phn_dev = cp.asarray(sr_phn)
-        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
-        sr_rgf = cp.asnumpy(sr_rgf_dev)
+        sl_rgf_dev[:] = sl_h2g
+        sg_rgf_dev[:] = sg_h2g
+        sr_rgf_dev[:] = sr_h2g
+        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn, sg_phn, sr_phn, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
 
         comm.Barrier()
         finish_symmetrization = time.perf_counter()
@@ -580,6 +580,8 @@ if __name__ == "__main__":
             print(f"Symmetrization time: {finish_symmetrization - start_symmetrization}", flush = True)
         
         start_band_edge = time.perf_counter()
+
+        sr_rgf = cp.asnumpy(sr_rgf_dev)
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
@@ -602,27 +604,6 @@ if __name__ == "__main__":
         finish_band_edge = time.perf_counter()
         if rank == 0:
             print(f"Band edge time: {finish_band_edge - start_band_edge}", flush = True)
-        
-        # # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        # (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol(ECmin_vec[iter_num],
-        #                                             energy,
-        #                                             hamiltonian_obj.Overlap['H_4'],
-        #                                             hamiltonian_obj.Hamiltonian['H_4'],
-        #                                             sr_h2g_vec,
-        #                                             sl_h2g_vec,
-        #                                             sg_h2g_vec,
-        #                                             sr_ephn_h2g_vec,
-        #                                             ind_ek,
-        #                                             rows,
-        #                                             columns,
-        #                                             bmin,
-        #                                             bmax,
-        #                                             comm,
-        #                                             rank,
-        #                                             size,
-        #                                             count,
-        #                                             disp,
-        #                                             side='left')
         
         if rank == 0:
             print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
@@ -693,14 +674,6 @@ if __name__ == "__main__":
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
-        
-        gr_host = gr_h2g
-        gg_host = gg_h2g
-        gl_host = gl_h2g
-
-        gr_h2g = cp.asarray(gr_h2g)
-        gg_h2g = cp.asarray(gg_h2g)
-        gl_h2g = cp.asarray(gl_h2g)
 
         comm.Barrier()
         start_g2p_comm = time.perf_counter()
@@ -722,10 +695,6 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"G2P communication time: {finish_g2p_comm - start_g2p_comm}", flush = True)
             print("Green's function calculated", flush = True)
-
-        gr_h2g = gr_host
-        gg_h2g = gg_host
-        gl_h2g = gl_host
         
         start_p_computation = time.perf_counter()
 
@@ -977,30 +946,22 @@ if __name__ == "__main__":
         sl_gw2s = sl_host
         sr_gw2s = sg_host
 
-        sg_h2g = cp.asarray(sg_h2g)
-        sl_h2g = cp.asarray(sl_h2g)
-        sr_h2g = cp.asarray(sr_h2g)
-
         start_sigma_mem_update = time.perf_counter()
 
         if iter_num == 0:
-            sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
-            sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
-            sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
+            sg_h2g[:] = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
+            sl_h2g[:] = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
+            sr_h2g[:] = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
         else:
             # add new contribution to the Self-Energy
-            sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
-            sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
-            sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
+            sg_h2g[:] = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
+            sl_h2g[:] = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
+            sr_h2g[:] = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
         comm.Barrier()
         finish_sigma_mem_update = time.perf_counter()
         if rank == 0:
             print(f"Sigma memory update time: {finish_sigma_mem_update - start_sigma_mem_update}", flush = True)
-        
-        sg_h2g = cp.asnumpy(sg_h2g)
-        sl_h2g = cp.asnumpy(sl_h2g)
-        sr_h2g = cp.asnumpy(sr_h2g)
         
         start_sephn = time.perf_counter()
 
@@ -1010,7 +971,7 @@ if __name__ == "__main__":
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+        electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
                                                                             gl_diag_band,
                                                                             gg_diag_band,
                                                                             sg_phn,
@@ -1027,6 +988,8 @@ if __name__ == "__main__":
             print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
 
         start_observables = time.perf_counter()
+
+        # cp.cuda.get_current_stream().synchronize()
 
         # if iter_num == max_iter - 1:
         #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
@@ -1057,7 +1020,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start += time.perf_counter()
         print("Finish iteration", flush=True)
-        print(f"Time: {time_start:.2f} s")
+        print(f"Time: {time_start:.2f} s", flush=True)
         # create buffers at master
         gg_mpi = np.empty_like(gg_gold)
         gl_mpi = np.empty_like(gg_gold)
