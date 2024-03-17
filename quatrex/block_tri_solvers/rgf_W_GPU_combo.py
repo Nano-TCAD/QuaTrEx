@@ -233,6 +233,17 @@ def rgf_batched_GPU(
     nidx = nIB % 2
     NN = bmax[-1] - bmin[-1] + 1
 
+    dmr_dev[0] = cp.asarray(dmr_left_host)
+    dmr_dev[-1] = cp.asarray(dmr_right_host)
+
+    dvh_dev[0] = cp.asarray(dvh_left_host)
+    dvh_dev[-1] = cp.asarray(dvh_right_host)
+
+    dll_dev[0] = cp.asarray(dll_left_host)
+    dll_dev[-1] = cp.asarray(dll_right_host)
+    dlg_dev[0] = cp.asarray(dlg_left_host)
+    dlg_dev[-1] = cp.asarray(dlg_right_host)
+
     with input_stream:
 
         for i in range(num_blocks):
@@ -262,27 +273,22 @@ def rgf_batched_GPU(
             nlgd = lg_diag_buffer[nidx]
             nlgl = lg_lower_buffer[nidx]
 
-            # NOTE: We are assuming here that the next block is not in the boundary.
-            _get_dense_block_batch(mr_dev, map_diag_m_dev, nIB, nmrd)
+            ndmr = dmr_dev[nIB]
+            ndll = dll_dev[nIB]
+            ndlg = dlg_dev[nIB]
+
+            # NOTE: The next block can already be at the boundary!
+            _get_dense_block_batch(mr_dev, map_diag_m_dev, nIB, nmrd, ndmr)
             _get_dense_block_batch(mr_dev, map_upper_m_dev, nIB, nmru)
             _get_dense_block_batch(mr_dev, map_lower_m_dev, nIB, nmrl)
-            _get_dense_block_batch(ll_dev, map_diag_l_dev, nIB, nlld)
+            _get_dense_block_batch(ll_dev, map_diag_l_dev, nIB, nlld, ndll)
             _get_dense_block_batch(ll_dev, map_lower_l_dev, nIB, nlll)
-            _get_dense_block_batch(lg_dev, map_diag_l_dev, nIB, nlgd)
+            _get_dense_block_batch(lg_dev, map_diag_l_dev, nIB, nlgd, ndlg)
             _get_dense_block_batch(lg_dev, map_lower_l_dev, nIB, nlgl)
 
             input_events[nidx].record(stream=input_stream)
 
-    dmr_dev[0] = cp.asarray(dmr_left_host)
-    dmr_dev[-1] = cp.asarray(dmr_right_host)
 
-    dvh_dev[0] = cp.asarray(dvh_left_host)
-    dvh_dev[-1] = cp.asarray(dvh_right_host)
-
-    dll_dev[0] = cp.asarray(dll_left_host)
-    dll_dev[-1] = cp.asarray(dll_right_host)
-    dlg_dev[0] = cp.asarray(dlg_left_host)
-    dlg_dev[-1] = cp.asarray(dlg_right_host)
 
     computation_stream.wait_event(event=input_events[idx])
 

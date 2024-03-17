@@ -53,11 +53,11 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory0_CNTNBC2_0_2V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC3_0_2V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_0v.mat")
-    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_0v.mat")
-    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_0v.mat")
+    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_3v.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_3v.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_3v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -87,7 +87,7 @@ if __name__ == "__main__":
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = NCpSC)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix107.dat', homogenize = True, NCpSC = NCpSC)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     ind_ek = -1
     # max number of iterations
 
-    max_iter = 1
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

@@ -770,7 +770,7 @@ def calc_W_pool_mpi_split(
         M00_right = cp.asarray(mr_e0)
         M01_right = cp.asarray(mr_e1)
         M10_right = cp.asarray(mr_e2)
-        dmr, dxr_ed_gpu, condR, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+        dmr, dxr_ed_gpu, condR, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
         assert not any(np.isnan(cond) for cond in condR)
         dxr_ed_gpu.get(out=dxr_ed)
         dmr_ed -= dmr.get()
@@ -948,7 +948,7 @@ def calc_W_pool_mpi_split(
 
     input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    energy_batchsize = 7
+    energy_batchsize = 4
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     for ie in energy_batch:
