@@ -179,9 +179,9 @@ def rgf_batched_GPU(
     dlg_gpu = cp.empty(
         (num_blocks - 1, batch_size, block_size, block_size), dtype=dtype
     )  # Greater boundary self-energy
-    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
+    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(dosw, np.ndarray) else dosw
+    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nEw, np.ndarray) else nEw
+    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nPw, np.ndarray) else nPw
     # idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype)
 
     XR_gpu = cp.empty(
@@ -209,9 +209,9 @@ def rgf_batched_GPU(
         (1, batch_size, block_size, block_size), dtype=dtype
     )  # Greater (right)
 
-    WR_compressed = cp.zeros_like(wr_host)
-    WL_compressed = cp.zeros_like(wl_host)
-    WG_compressed = cp.zeros_like(wg_host)
+    WR_compressed = cp.zeros_like(wr_host) if isinstance(wr_host, np.ndarray) else wr_host
+    WL_compressed = cp.zeros_like(wl_host) if isinstance(wl_host, np.ndarray) else wl_host
+    WG_compressed = cp.zeros_like(wg_host) if isinstance(wg_host, np.ndarray) else wg_host
 
     mr_dev = cp.empty_like(mr_host) if isinstance(mr_host, np.ndarray) else None
     ll_dev = cp.empty_like(ll_host) if isinstance(ll_host, np.ndarray) else None
@@ -850,8 +850,10 @@ def rgf_batched_GPU(
             num_blocks - 1,
             WG_compressed,
         )
-        WL_compressed.get(out=wl_host)
-        WG_compressed.get(out=wg_host)
+        if isinstance(wl_host, np.ndarray):
+            WL_compressed.get(out=wl_host)
+        if isinstance(wg_host, np.ndarray):
+            WG_compressed.get(out=wg_host)
     _store_compressed(
         map_diag_mm_dev,
         map_upper_mm_dev,
@@ -861,12 +863,14 @@ def rgf_batched_GPU(
         num_blocks - 1,
         WR_compressed,
     )
-    WR_compressed.get(out=wr_host)
+    if isinstance(wr_host, np.ndarray):
+        WR_compressed.get(out=wr_host)
 
     computation_stream.synchronize()
-    DOS_gpu.get(out=dosw)
-    nE_gpu.get(out=nEw)
-    nP_gpu.get(out=nPw)
+    if isinstance(dosw, np.ndarray):
+        DOS_gpu.get(out=dosw)
+        nE_gpu.get(out=nEw)
+        nP_gpu.get(out=nPw)
     input_stream.synchronize()
     computation_stream.synchronize()
 

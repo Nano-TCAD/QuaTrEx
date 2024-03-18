@@ -5,7 +5,9 @@ With transposition through network.
 This application is for a tight-binding InAs nanowire. 
 See the different GW step folders for more explanations.
 """
-import sys
+# import sys
+import time
+print(f"Start date and time: {time.asctime()}", flush=True)
 import numpy as np
 import cupyx as cpx
 import cupy as cp
@@ -13,12 +15,12 @@ import numpy.typing as npt
 import os
 import argparse
 import pickle
-import mpi4py
+# import mpi4py
 from scipy import sparse
-import time
+# import time
 
-mpi4py.rc.initialize = False  # do not initialize MPI automatically
-mpi4py.rc.finalize = False  # do not finalize MPI automatically
+# mpi4py.rc.initialize = False  # do not initialize MPI automatically
+# mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
@@ -26,7 +28,7 @@ from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
 # from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
 # from quatrex.GW.screenedinteraction.kernel import p2w_cpu
-from quatrex.GreensFunction import calc_GF_pool
+# from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.utils import change_format
@@ -34,21 +36,34 @@ from quatrex.utils import utils_gpu
 from quatrex.utils.matrix_creation import get_number_connected_blocks
 from quatrex.Phonon import electron_phonon_selfenergy
 
-if utils_gpu.gpu_avail():
-    try:
-        from quatrex.GreensFunction import calc_GF_pool_GPU_memopt_2
-        from quatrex.GW.screenedinteraction.kernel import p2w_gpu_improved_2
-        from quatrex.GW.polarization.kernel import g2p_gpu
-        from quatrex.GW.selfenergy.kernel import gw2s_gpu
-    except ImportError:
-        print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
+# if utils_gpu.gpu_avail():
+#     try:
+#         from quatrex.GreensFunction import calc_GF_pool_GPU_memopt_2
+#         from quatrex.GW.screenedinteraction.kernel import p2w_gpu_improved_2
+#         from quatrex.GW.polarization.kernel import g2p_gpu
+#         from quatrex.GW.selfenergy.kernel import gw2s_gpu
+#     except ImportError:
+#         print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
 if __name__ == "__main__":
-    MPI.Init_thread(required=MPI.THREAD_FUNNELED)
+    # MPI.Init_thread(required=MPI.THREAD_FUNNELED)
     comm = MPI.COMM_WORLD
     size = comm.Get_size()
     rank = comm.Get_rank()
+
+    if rank == 0:
+        print(f"Started main at : {time.asctime()}", flush=True)
     name = MPI.Get_processor_name()
+
+    if utils_gpu.gpu_avail(rank):
+        try:
+            from quatrex.GreensFunction import calc_GF_pool_GPU_memopt_2
+            from quatrex.GW.screenedinteraction.kernel import p2w_gpu_improved_2
+            from quatrex.GW.polarization.kernel import g2p_gpu
+            from quatrex.GW.selfenergy.kernel import gw2s_gpu
+        except ImportError:
+            if rank == 0:
+                print("GPU import error, make sure you have the right GPU driver and CUDA version installed", flush=True)
 
     # assume every rank has enough memory to read the initial data
     # path to solution
@@ -70,16 +85,16 @@ if __name__ == "__main__":
     parser.add_argument("-nt", "--net_transpose", default=False, type=bool, required=False)
     parser.add_argument("-p", "--pool", default=True, type=bool, required=False)
     args = parser.parse_args()
-    # check if gpu is available
-    if args.type in ("gpu"):
-        if not utils_gpu.gpu_avail():
-            print("No gpu available")
-            sys.exit(1)
-    # print chosen implementation
-    if args.type in ("cpu"):
-        if rank == 0:
-            print("Only GPU implementation for this sample", flush=True)
-        sys.exit(1)
+    # # check if gpu is available
+    # if args.type in ("gpu"):
+    #     if not utils_gpu.gpu_avail():
+    #         print("No gpu available")
+    #         sys.exit(1)
+    # # print chosen implementation
+    # if args.type in ("cpu"):
+    #     if rank == 0:
+    #         print("Only GPU implementation for this sample", flush=True)
+    #     sys.exit(1)
     if(rank == 0):
         print(f"Using {args.type} implementation", flush = True)
 
@@ -89,7 +104,7 @@ if __name__ == "__main__":
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-5, 1, 61, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-5, 1, 64 * size, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -106,14 +121,52 @@ if __name__ == "__main__":
     bmin = hamiltonian_obj.Bmin - 1
 
     #reading reference solution
-    energy_in, rows, columns, gg_gold, gl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "g")
-    energy_in, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x_optimized(solution_path_gw, "p")
-    energy_in, rows_w, columns_w, wg_gold, wl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "w")
-    energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x_optimized(solution_path_gw, "s")
-    energy_in, rows_sph, columns_sph, sphg_gold, sphl_gold, sphr_gold = read_solution.load_x_optimized(solution_path_gw, "sph")
-    rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
-    rowsRefH, columnsRefH, H_gold = read_solution.load_v(solution_path_H)
-    rowsRefS, columnsRefS, S_gold = read_solution.load_v(solution_path_S)
+    size_buf = np.empty(3, dtype=np.int32)
+    if rank == 0:
+        energy_in, rows, columns, gg_gold, gl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "g")
+        energy_in, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x_optimized(solution_path_gw, "p")
+        energy_in, rows_w, columns_w, wg_gold, wl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "w")
+        energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x_optimized(solution_path_gw, "s")
+        energy_in, rows_sph, columns_sph, sphg_gold, sphl_gold, sphr_gold = read_solution.load_x_optimized(solution_path_gw, "sph")
+        rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
+        rowsRefH, columnsRefH, H_gold = read_solution.load_v(solution_path_H)
+        rowsRefS, columnsRefS, S_gold = read_solution.load_v(solution_path_S)
+
+        for buf in (rows, columns, rows_p, columns_p, rows_w, columns_w, rows_s, columns_s,
+                    rowsRef, columnsRef, rowsRefH, columnsRefH, rowsRefS, columnsRefS):
+            print(f"Shape: {buf.shape}, Size: {buf.size}, Type: {buf.dtype}", flush = True)
+            size_buf[0] = len(buf.shape)
+            for i, s in enumerate(buf.shape):
+                size_buf[i + 1] = s
+            comm.Bcast(size_buf, root=0)
+            comm.Bcast(buf, root=0)
+        for buf in (vh_gold, H_gold, S_gold):
+            print(f"Shape: {buf.shape}, Size: {buf.size}, Type: {buf.dtype}", flush = True)
+            size_buf[0] = len(buf.shape)
+            for i, s in enumerate(buf.shape):
+                size_buf[i + 1] = s
+            comm.Bcast(size_buf, root=0)
+            comm.Bcast(buf, root=0)
+    else:
+        buffers = []
+        for i in range(14):
+            comm.Bcast(size_buf, root=0)
+            ndims = size_buf[0]
+            shape = size_buf[1:ndims + 1]
+            buf = np.empty(shape, dtype=np.int32)
+            comm.Bcast(buf, root=0)
+            buffers.append(buf)
+        (rows, columns, rows_p, columns_p, rows_w, columns_w, rows_s, columns_s,
+         rowsRef, columnsRef, rowsRefH, columnsRefH, rowsRefS, columnsRefS) = buffers
+        buffers2 = []
+        for i in range(3):
+            comm.Bcast(size_buf, root=0)
+            ndims = size_buf[0]
+            shape = size_buf[1:ndims + 1]
+            buf = np.empty(shape, dtype=np.complex128)
+            comm.Bcast(buf, root=0)
+            buffers2.append(buf)
+        (vh_gold, H_gold, S_gold) = buffers2
 
     ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy: npt.NDArray[np.double] = energy[1] - energy[0]
@@ -192,7 +245,11 @@ if __name__ == "__main__":
     assert np.allclose(rows_s, rows)
     assert np.allclose(columns, columns_s)
 
-    assert pg_gold.shape[0] == rows.shape[0]
+    pg_gold_shape_0 = np.empty(1, dtype=np.int32)
+    if rank == 0:
+        pg_gold_shape_0[0] = pg_gold.shape[0]
+    comm.Bcast(pg_gold_shape_0, root=0)
+    assert pg_gold_shape_0 == rows.shape[0]
 
     if rank == 0:
         # print size of data
@@ -469,9 +526,12 @@ if __name__ == "__main__":
     gr_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
-    wg_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    wl_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    wr_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # wg_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # wl_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    # wr_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
+    wg_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    wl_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    wr_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.75
@@ -504,6 +564,9 @@ if __name__ == "__main__":
     mapping_diag_dev = cp.asarray(mapping_diag)
     mapping_upper_dev = cp.asarray(mapping_upper)
     mapping_lower_dev = cp.asarray(mapping_lower)
+    rows_dev = cp.asarray(rows)
+    columns_dev = cp.asarray(columns)
+    ij2ji_dev = cp.asarray(ij2ji)
 
     hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
     overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
@@ -560,6 +623,28 @@ if __name__ == "__main__":
     # current per energy
     ide = cpx.empty_pinned(shape=(ne, nb), dtype=np.complex128)
 
+    # # density of states
+    # dos = cp.empty(shape=(ne, nb), dtype=np.complex128)
+    # dosw = cp.empty(shape=(ne, nb // nbc), dtype=np.complex128)
+
+    # # occupied states/unoccupied states
+    # nE = cp.empty(shape=(ne, nb), dtype=np.complex128)
+    # nP = cp.empty(shape=(ne, nb), dtype=np.complex128)
+
+    # # occupied screening/unoccupied screening
+    # nEw = cp.empty(shape=(ne, nb // nbc), dtype=np.complex128)
+    # nPw = cp.empty(shape=(ne, nb // nbc), dtype=np.complex128)
+
+    # # current per energy
+    # ide = cp.empty(shape=(ne, nb), dtype=np.complex128)
+
+    # H blocks
+    H = hamiltonian_obj.Hamiltonian['H_4']
+    LBsize = bmax[0] - bmin[0] + 1
+    H00 = cp.asarray(H[:LBsize, :LBsize].toarray())
+    H01 = cp.asarray(H[:LBsize, LBsize:2 * LBsize].toarray())
+    H10 = cp.asarray(H[LBsize:2 * LBsize, :LBsize].toarray())
+
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
@@ -572,7 +657,7 @@ if __name__ == "__main__":
         sl_rgf_dev[:] = sl_h2g
         sg_rgf_dev[:] = sg_h2g
         sr_rgf_dev[:] = sr_h2g
-        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn, sg_phn, sr_phn, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn, sg_phn, sr_phn, rows_dev, columns_dev, ij2ji_dev)
 
         comm.Barrier()
         finish_symmetrization = time.perf_counter()
@@ -581,14 +666,19 @@ if __name__ == "__main__":
         
         start_band_edge = time.perf_counter()
 
-        sr_rgf = cp.asnumpy(sr_rgf_dev)
+        # sr_rgf = cp.asnumpy(sr_rgf_dev)
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
+        # TODO: Fix on GPU
         (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
-                                                    hamiltonian_obj.Hamiltonian['H_4'],
-                                                    sr_rgf,
+                                                    # hamiltonian_obj.Hamiltonian['H_4'],
+                                                    (H00, H01, H10),
+                                                    # hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
+                                                    # overlap_diag, overlap_upper, overlap_lower,
+                                                    # sr_rgf,
+                                                    sr_rgf_dev,
                                                     ind_ek,
                                                     bmin,
                                                     bmax,
@@ -598,7 +688,8 @@ if __name__ == "__main__":
                                                     count,
                                                     disp,
                                                     'left',
-                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+                                                    # mapping_diag, mapping_upper, mapping_lower, ij2ji)
+                                                    mapping_diag_dev, mapping_upper_dev, mapping_lower_dev, ij2ji_dev)
         
         comm.Barrier()
         finish_band_edge = time.perf_counter()
@@ -615,65 +706,38 @@ if __name__ == "__main__":
         EFR_vec[iter_num + 1] = energy_fr
         
         # calculate the green's function at every rank------------------------------
-        if args.type in ("cpu"):
-            gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper, sigRBl, sigRBr = calc_GF_pool.calc_GF_pool_mpi_split(
-                hamiltonian_obj,
-                energy_loc,
-                sr_h2g_vec,
-                sl_h2g_vec,
-                sg_h2g_vec,
-                sr_ephn_h2g_vec,
-                sl_ephn_h2g_vec,
-                sg_ephn_h2g_vec,
-                energy_fl,
-                energy_fr,
-                temp,
-                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                factor_g_loc,
-                comm,
-                rank,
-                size,
-                homogenize=False,
-                return_sigma_boundary=True,
-                NCpSC=NCpSC,
-                mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads)
-        elif args.type in ("gpu"):
-            calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
-                hamiltonian_obj,
-                hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
-                overlap_diag, overlap_upper, overlap_lower,
-                energy_loc,
-                sr_rgf_dev,
-                sl_rgf_dev,
-                sg_rgf_dev,
-                gr_h2g,
-                gl_h2g,
-                gg_h2g,
-                mapping_diag_dev,
-                mapping_upper_dev,
-                mapping_lower_dev,
-                # rows,
-                # columns,
-                # ij2ji,
-                energy_fl,
-                energy_fr,
-                temp,
-                dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                factor_g_loc,
-                comm,
-                rank,
-                size,
-                homogenize=False,
-                NCpSC=NCpSC,
-                mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads)
+        calc_GF_pool_GPU_memopt_2.calc_GF_pool_mpi_split_memopt(
+            hamiltonian_obj,
+            hamiltonian_diag, hamiltonian_upper, hamiltonian_lower,
+            overlap_diag, overlap_upper, overlap_lower,
+            energy_loc,
+            sr_rgf_dev,
+            sl_rgf_dev,
+            sg_rgf_dev,
+            gr_h2g,
+            gl_h2g,
+            gg_h2g,
+            mapping_diag_dev,
+            mapping_upper_dev,
+            mapping_lower_dev,
+            # rows,
+            # columns,
+            # ij2ji,
+            energy_fl,
+            energy_fr,
+            temp,
+            dos[disp[1, rank]:disp[1, rank] + count[1, rank]],
+            nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
+            nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
+            ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+            factor_g_loc,
+            comm,
+            rank,
+            size,
+            homogenize=False,
+            NCpSC=NCpSC,
+            mkl_threads=gf_mkl_threads,
+            worker_num=gf_worker_threads)
 
         comm.Barrier()
         start_g2p_comm = time.perf_counter()
@@ -787,10 +851,10 @@ if __name__ == "__main__":
                 map_upper_l,
                 map_lower_l,
                 # P indices
-                rows,
-                columns,
+                rows_dev,
+                columns_dev,
                 # P transposition indices.
-                ij2ji,
+                ij2ji_dev,
                 # M and L indices.
                 rows_m,
                 columns_m,
@@ -863,14 +927,6 @@ if __name__ == "__main__":
         #     energy_contiguous=False)[memory_mask] + mem_w * wr_p2w[memory_mask]
 
         # distribute screened interaction according to gw2s step--------------------
-
-        wr_host = wr_p2w
-        wg_host = wg_p2w
-        wl_host = wl_p2w
-
-        wr_p2w = cp.asarray(wr_p2w)
-        wg_p2w = cp.asarray(wg_p2w)
-        wl_p2w = cp.asarray(wl_p2w)
         
         comm.Barrier()
         start_w2s_comm = time.perf_counter()
@@ -895,38 +951,18 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"W2S communication time: {finish_w2s_comm - start_w2s_comm}", flush = True)
             print("Finish p2w", flush=True)
-
-        wr_p2w = wr_host
-        wg_p2w = wg_host
-        wl_p2w = wl_host
         
         start_s_computation = time.perf_counter()
 
         # tod optimize and not load two time green's function to gpu and do twice the fft
-        if args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
-                                                                           wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            
-        elif args.type in ("gpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
-                                                                           wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-        else:
-            raise ValueError("Argument error, input type not possible")
+        sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                        wg_gw2s, wl_gw2s,
+                                                                        wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         
         comm.Barrier()
         finish_s_computation = time.perf_counter()
         if rank == 0:
             print(f"Sigma computation time: {finish_s_computation - start_s_computation}", flush = True)
-
-        sr_host = sg_gw2s
-        sl_host = sl_gw2s
-        sg_host = sr_gw2s
-
-        sg_gw2s = cp.asarray(sg_gw2s)
-        sl_gw2s = cp.asarray(sl_gw2s)
-        sr_gw2s = cp.asarray(sr_gw2s)
 
         start_s2g_comm = time.perf_counter()
 
@@ -941,10 +977,6 @@ if __name__ == "__main__":
         finish_s2g_comm = time.perf_counter()
         if rank == 0:
             print(f"S2G communication time: {finish_s2g_comm - start_s2g_comm}", flush = True)
-
-        sg_gw2s = sr_host
-        sl_gw2s = sl_host
-        sr_gw2s = sg_host
 
         start_sigma_mem_update = time.perf_counter()
 
@@ -1009,6 +1041,7 @@ if __name__ == "__main__":
         finish_observables = time.perf_counter()
         if rank == 0:
             print(f"Observables reduction time: {finish_observables - start_observables}", flush = True)
+            print(f"Finish iteration {iter_num}, time: {finish_observables - start_symmetrization}", flush = True)
 
         # if rank == 0:
         # np.savetxt(parent_path + folder + 'E.dat', energy)
@@ -1017,140 +1050,145 @@ if __name__ == "__main__":
     # if rank == 0:
     # np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
     # np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+    cp.cuda.get_current_stream().synchronize()
     if rank == 0:
         time_start += time.perf_counter()
         print("Finish iteration", flush=True)
         print(f"Time: {time_start:.2f} s", flush=True)
-        # create buffers at master
-        gg_mpi = np.empty_like(gg_gold)
-        gl_mpi = np.empty_like(gg_gold)
-        gr_mpi = np.empty_like(gg_gold)
-        pg_mpi = np.empty_like(gg_gold)
-        pl_mpi = np.empty_like(gg_gold)
-        pr_mpi = np.empty_like(gg_gold)
-        wg_mpi = np.empty_like(gg_gold)
-        wl_mpi = np.empty_like(gg_gold)
-        wr_mpi = np.empty_like(gg_gold)
-        sg_mpi = np.empty_like(gg_gold)
-        sl_mpi = np.empty_like(gg_gold)
-        sr_mpi = np.empty_like(gg_gold)
-        sphg_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
-        sphl_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
-        sphr_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
+    
+    # MPI.Finalize()
+    exit(0)
 
-        gather_master(gg_h2g, gg_mpi, transpose_net=args.net_transpose)
-        gather_master(gl_h2g, gl_mpi, transpose_net=args.net_transpose)
-        gather_master(gr_h2g, gr_mpi, transpose_net=args.net_transpose)
-        gather_master(pg_p2w, pg_mpi, transpose_net=args.net_transpose)
-        gather_master(pl_p2w, pl_mpi, transpose_net=args.net_transpose)
-        gather_master(pr_p2w, pr_mpi, transpose_net=args.net_transpose)
-        gather_master(wg_p2w, wg_mpi, transpose_net=args.net_transpose)
-        gather_master(wl_p2w, wl_mpi, transpose_net=args.net_transpose)
-        gather_master(wr_p2w, wr_mpi, transpose_net=args.net_transpose)
-        gather_master(sg_h2g, sg_mpi, transpose_net=args.net_transpose)
-        gather_master(sl_h2g, sl_mpi, transpose_net=args.net_transpose)
-        gather_master(sr_h2g, sr_mpi, transpose_net=args.net_transpose)
+    #     # create buffers at master
+    #     gg_mpi = np.empty_like(gg_gold)
+    #     gl_mpi = np.empty_like(gg_gold)
+    #     gr_mpi = np.empty_like(gg_gold)
+    #     pg_mpi = np.empty_like(gg_gold)
+    #     pl_mpi = np.empty_like(gg_gold)
+    #     pr_mpi = np.empty_like(gg_gold)
+    #     wg_mpi = np.empty_like(gg_gold)
+    #     wl_mpi = np.empty_like(gg_gold)
+    #     wr_mpi = np.empty_like(gg_gold)
+    #     sg_mpi = np.empty_like(gg_gold)
+    #     sl_mpi = np.empty_like(gg_gold)
+    #     sr_mpi = np.empty_like(gg_gold)
+    #     sphg_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
+    #     sphl_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
+    #     sphr_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
 
-        gather_master(sg_phn, sphg_mpi, transpose_net=args.net_transpose)
-        gather_master(sl_phn, sphl_mpi, transpose_net=args.net_transpose)
-        gather_master(sr_phn, sphr_mpi, transpose_net=args.net_transpose)
-    else:
-        # send time to master
-        dummy_array = np.empty((nao, data_shape[1]), dtype=np.complex128)
-        gather_master(gg_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(gl_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(gr_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(pg_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(pl_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(pr_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(wg_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(wl_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(wr_p2w, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sg_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sl_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sr_h2g, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sg_phn, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sl_phn, dummy_array, transpose_net=args.net_transpose)
-        gather_master(sr_phn, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(gg_h2g, gg_mpi, transpose_net=args.net_transpose)
+    #     gather_master(gl_h2g, gl_mpi, transpose_net=args.net_transpose)
+    #     gather_master(gr_h2g, gr_mpi, transpose_net=args.net_transpose)
+    #     gather_master(pg_p2w, pg_mpi, transpose_net=args.net_transpose)
+    #     gather_master(pl_p2w, pl_mpi, transpose_net=args.net_transpose)
+    #     gather_master(pr_p2w, pr_mpi, transpose_net=args.net_transpose)
+    #     gather_master(wg_p2w, wg_mpi, transpose_net=args.net_transpose)
+    #     gather_master(wl_p2w, wl_mpi, transpose_net=args.net_transpose)
+    #     gather_master(wr_p2w, wr_mpi, transpose_net=args.net_transpose)
+    #     gather_master(sg_h2g, sg_mpi, transpose_net=args.net_transpose)
+    #     gather_master(sl_h2g, sl_mpi, transpose_net=args.net_transpose)
+    #     gather_master(sr_h2g, sr_mpi, transpose_net=args.net_transpose)
 
-    # test against gold solution------------------------------------------------
+    #     gather_master(sg_phn, sphg_mpi, transpose_net=args.net_transpose)
+    #     gather_master(sl_phn, sphl_mpi, transpose_net=args.net_transpose)
+    #     gather_master(sr_phn, sphr_mpi, transpose_net=args.net_transpose)
+    # else:
+    #     # send time to master
+    #     dummy_array = np.empty((nao, data_shape[1]), dtype=np.complex128)
+    #     gather_master(gg_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(gl_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(gr_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(pg_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(pl_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(pr_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(wg_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(wl_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(wr_p2w, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sg_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sl_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sr_h2g, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sg_phn, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sl_phn, dummy_array, transpose_net=args.net_transpose)
+    #     gather_master(sr_phn, dummy_array, transpose_net=args.net_transpose)
 
-    if rank == 0:
-        # print difference to given solution
-        # use Frobenius norm
-        diff_gg = np.linalg.norm(gg_gold - gg_mpi)
-        diff_gl = np.linalg.norm(gl_gold - gl_mpi)
-        #diff_gr = np.linalg.norm(gr_gold - gr_mpi)
-        diff_pg = np.linalg.norm(pg_gold - pg_mpi)
-        diff_pl = np.linalg.norm(pl_gold - pl_mpi)
-        diff_pr = np.linalg.norm(pr_gold - pr_mpi)
-        diff_wg = np.linalg.norm(wg_gold - wg_mpi)
-        diff_wl = np.linalg.norm(wl_gold - wl_mpi)
-        #diff_wr = np.linalg.norm(wr_gold - wr_mpi)
-        diff_sg = np.linalg.norm(sg_gold - sg_mpi)
-        diff_sl = np.linalg.norm(sl_gold - sl_mpi)
-        diff_sr = np.linalg.norm(sr_gold - sr_mpi)
-        diff_sphg = np.linalg.norm(sphg_gold - sphg_mpi)
-        diff_sphl = np.linalg.norm(sphl_gold - sphl_mpi)
-        diff_sphr = np.linalg.norm(sphr_gold - sphr_mpi)
-        print(f"Green's Function differences to Gold Solution g/l/r:  {diff_gg:.4f}, {diff_gl:.4f}")
-        print(f"Polarization differences to Gold Solution g/l/r:  {diff_pg:.4f}, {diff_pl:.4f}, {diff_pr:.4f}")
-        print(f"Screened interaction differences to Gold Solution g/l/r:  {diff_wg:.4f}, {diff_wl:.4f}")
-        print(f"Screened self-energy differences to Gold Solution g/l/r:  {diff_sg:.4f}, {diff_sl:.4f}, {diff_sr:.4f}")
-        print(f"E-PH self-energy differences to Gold Solution g/l/r:  {diff_sphg:.4f}, {diff_sphl:.4f}, {diff_sphr:.4f}")
-
-        # assert solution close to real solution
-        abstol = 1e-2
-        reltol = 1e-1
-        assert diff_gg <= abstol + reltol * np.max(np.abs(gg_gold))
-        assert diff_gl <= abstol + reltol * np.max(np.abs(gl_gold))
-        #assert diff_gr <= abstol + reltol * np.max(np.abs(gr_gold))
-        assert diff_pg <= abstol + reltol * np.max(np.abs(pg_gold))
-        assert diff_pl <= abstol + reltol * np.max(np.abs(pl_gold))
-        #assert diff_pr <= abstol + reltol * np.max(np.abs(pr_gold))
-        assert diff_wg <= abstol + reltol * np.max(np.abs(wg_gold))
-        assert diff_wl <= abstol + reltol * np.max(np.abs(wl_gold))
-        #assert diff_wr <= abstol + reltol * np.max(np.abs(wr_gold))
-        assert diff_sg <= abstol + reltol * np.max(np.abs(sg_gold))
-        assert diff_sl <= abstol + reltol * np.max(np.abs(sl_gold))
-        assert diff_sr <= abstol + reltol * np.max(np.abs(sr_gold))
-        assert np.allclose(gg_gold, gg_mpi, atol=1e-5, rtol=1e-5)
-        assert np.allclose(gl_gold, gl_mpi, atol=1e-5, rtol=1e-5)
-        #assert np.allclose(gr_gold, gr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(pg_gold, pg_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(pl_gold, pl_mpi, atol=1e-6, rtol=1e-6)
-        #assert np.allclose(pr_gold, pr_mpi, atol=1e-6, rtol=1e-6)
-        #assert np.allclose(wg_gold, wg_mpi, rtol=1e-6, atol=1e-6)
-        assert np.allclose(wg_gold, wg_mpi, rtol=1e-3, atol=1e-3)
-        assert np.allclose(wl_gold, wl_mpi, atol=1e-6, rtol=1e-6)
-        #assert np.allclose(wr_gold, wr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sg_gold, sg_mpi, atol=1e-5, rtol=1e-5)
-        assert np.allclose(sl_gold, sl_mpi, atol=1e-5, rtol=1e-5)
-        assert np.allclose(sr_gold, sr_mpi, atol=1e-6, rtol=1e-6)
-        assert np.allclose(sphg_gold, sphg_mpi, atol=1e-5, rtol=1e-5)
-        assert np.allclose(sphl_gold, sphl_mpi, atol=1e-5, rtol=1e-5)
-        assert np.allclose(sphr_gold, sphr_mpi, atol=1e-5, rtol=1e-5)
-        print("The mpi implementation is correct")
-
-    # free datatypes------------------------------------------------------------
-
-    MPI.Datatype.Free(COLUMN_RIZ)
-    MPI.Datatype.Free(COLUMN)
-    MPI.Datatype.Free(ROW_RIZ)
-    MPI.Datatype.Free(ROW)
-    MPI.Datatype.Free(G2P_S_RIZ)
-    MPI.Datatype.Free(G2P_S)
-    MPI.Datatype.Free(P2G_S_RIZ)
-    MPI.Datatype.Free(P2G_S)
-    for i in range(size):
-        MPI.Datatype.Free(G2P_R_RIZ[i])
-        MPI.Datatype.Free(G2P_R[i])
-        MPI.Datatype.Free(P2G_R_RIZ[i])
-        MPI.Datatype.Free(P2G_R[i])
-
-    # finalize
-    MPI.Finalize()
+    # # test against gold solution------------------------------------------------
 
     # if rank == 0:
-    #     time_start += time.perf_counter()
-    #     print(f"Time: {time_start:.2f} s")
+    #     # print difference to given solution
+    #     # use Frobenius norm
+    #     diff_gg = np.linalg.norm(gg_gold - gg_mpi)
+    #     diff_gl = np.linalg.norm(gl_gold - gl_mpi)
+    #     #diff_gr = np.linalg.norm(gr_gold - gr_mpi)
+    #     diff_pg = np.linalg.norm(pg_gold - pg_mpi)
+    #     diff_pl = np.linalg.norm(pl_gold - pl_mpi)
+    #     diff_pr = np.linalg.norm(pr_gold - pr_mpi)
+    #     diff_wg = np.linalg.norm(wg_gold - wg_mpi)
+    #     diff_wl = np.linalg.norm(wl_gold - wl_mpi)
+    #     #diff_wr = np.linalg.norm(wr_gold - wr_mpi)
+    #     diff_sg = np.linalg.norm(sg_gold - sg_mpi)
+    #     diff_sl = np.linalg.norm(sl_gold - sl_mpi)
+    #     diff_sr = np.linalg.norm(sr_gold - sr_mpi)
+    #     diff_sphg = np.linalg.norm(sphg_gold - sphg_mpi)
+    #     diff_sphl = np.linalg.norm(sphl_gold - sphl_mpi)
+    #     diff_sphr = np.linalg.norm(sphr_gold - sphr_mpi)
+    #     print(f"Green's Function differences to Gold Solution g/l/r:  {diff_gg:.4f}, {diff_gl:.4f}")
+    #     print(f"Polarization differences to Gold Solution g/l/r:  {diff_pg:.4f}, {diff_pl:.4f}, {diff_pr:.4f}")
+    #     print(f"Screened interaction differences to Gold Solution g/l/r:  {diff_wg:.4f}, {diff_wl:.4f}")
+    #     print(f"Screened self-energy differences to Gold Solution g/l/r:  {diff_sg:.4f}, {diff_sl:.4f}, {diff_sr:.4f}")
+    #     print(f"E-PH self-energy differences to Gold Solution g/l/r:  {diff_sphg:.4f}, {diff_sphl:.4f}, {diff_sphr:.4f}")
+
+    #     # assert solution close to real solution
+    #     abstol = 1e-2
+    #     reltol = 1e-1
+    #     assert diff_gg <= abstol + reltol * np.max(np.abs(gg_gold))
+    #     assert diff_gl <= abstol + reltol * np.max(np.abs(gl_gold))
+    #     #assert diff_gr <= abstol + reltol * np.max(np.abs(gr_gold))
+    #     assert diff_pg <= abstol + reltol * np.max(np.abs(pg_gold))
+    #     assert diff_pl <= abstol + reltol * np.max(np.abs(pl_gold))
+    #     #assert diff_pr <= abstol + reltol * np.max(np.abs(pr_gold))
+    #     assert diff_wg <= abstol + reltol * np.max(np.abs(wg_gold))
+    #     assert diff_wl <= abstol + reltol * np.max(np.abs(wl_gold))
+    #     #assert diff_wr <= abstol + reltol * np.max(np.abs(wr_gold))
+    #     assert diff_sg <= abstol + reltol * np.max(np.abs(sg_gold))
+    #     assert diff_sl <= abstol + reltol * np.max(np.abs(sl_gold))
+    #     assert diff_sr <= abstol + reltol * np.max(np.abs(sr_gold))
+    #     assert np.allclose(gg_gold, gg_mpi, atol=1e-5, rtol=1e-5)
+    #     assert np.allclose(gl_gold, gl_mpi, atol=1e-5, rtol=1e-5)
+    #     #assert np.allclose(gr_gold, gr_mpi, atol=1e-6, rtol=1e-6)
+    #     assert np.allclose(pg_gold, pg_mpi, atol=1e-6, rtol=1e-6)
+    #     assert np.allclose(pl_gold, pl_mpi, atol=1e-6, rtol=1e-6)
+    #     #assert np.allclose(pr_gold, pr_mpi, atol=1e-6, rtol=1e-6)
+    #     #assert np.allclose(wg_gold, wg_mpi, rtol=1e-6, atol=1e-6)
+    #     assert np.allclose(wg_gold, wg_mpi, rtol=1e-3, atol=1e-3)
+    #     assert np.allclose(wl_gold, wl_mpi, atol=1e-6, rtol=1e-6)
+    #     #assert np.allclose(wr_gold, wr_mpi, atol=1e-6, rtol=1e-6)
+    #     assert np.allclose(sg_gold, sg_mpi, atol=1e-5, rtol=1e-5)
+    #     assert np.allclose(sl_gold, sl_mpi, atol=1e-5, rtol=1e-5)
+    #     assert np.allclose(sr_gold, sr_mpi, atol=1e-6, rtol=1e-6)
+    #     assert np.allclose(sphg_gold, sphg_mpi, atol=1e-5, rtol=1e-5)
+    #     assert np.allclose(sphl_gold, sphl_mpi, atol=1e-5, rtol=1e-5)
+    #     assert np.allclose(sphr_gold, sphr_mpi, atol=1e-5, rtol=1e-5)
+    #     print("The mpi implementation is correct")
+
+    # # free datatypes------------------------------------------------------------
+
+    # MPI.Datatype.Free(COLUMN_RIZ)
+    # MPI.Datatype.Free(COLUMN)
+    # MPI.Datatype.Free(ROW_RIZ)
+    # MPI.Datatype.Free(ROW)
+    # MPI.Datatype.Free(G2P_S_RIZ)
+    # MPI.Datatype.Free(G2P_S)
+    # MPI.Datatype.Free(P2G_S_RIZ)
+    # MPI.Datatype.Free(P2G_S)
+    # for i in range(size):
+    #     MPI.Datatype.Free(G2P_R_RIZ[i])
+    #     MPI.Datatype.Free(G2P_R[i])
+    #     MPI.Datatype.Free(P2G_R_RIZ[i])
+    #     MPI.Datatype.Free(P2G_R[i])
+
+    # # finalize
+    # MPI.Finalize()
+
+    # # if rank == 0:
+    # #     time_start += time.perf_counter()
+    # #     print(f"Time: {time_start:.2f} s")

@@ -1,5 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
+import cupy as cp
 import numpy as np
 from scipy.sparse import csc_array
 
@@ -10,6 +11,7 @@ mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 import os
 import pickle
+import time
 import typing
 import numpy.typing as npt
 
@@ -255,34 +257,71 @@ def get_band_edge_mpi_interpol_2(ECmin_DFT,
                       mapdiag, mapupper, maplower, ij2ji):
     nao = Bmax[-1] + 1
     nnz = SigmaR_GW.shape[1]
-    SigmaR_GW_vec = np.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
+    # SigmaR_GW_vec = np.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
+    SigmaR_GW_vec = cp.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
 
     # First step: get a first estimate of the CB edge
+    # start = time.perf_counter()
     (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(ECmin_DFT, E, comm, rank, size, count, disp)
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'get_send_ranks_interpol took {finish-start} seconds', flush=True)
+    # start = time.perf_counter()
     send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec,send_rank_1, send_rank_2, min_ind, rank, comm, disp,  SigmaR_GW, nnz)
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'send_sigmas_GWRGL_PHNR_to_root_2 took {finish-start} seconds', flush=True)
+    # start = time.perf_counter()
     SigmaR_GW_vec[:] = (SigmaR_GW_vec + SigmaR_GW_vec[:, ij2ji]) / 2
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'average took {finish-start} seconds', flush=True)
     if rank == 0:
+        # start = time.perf_counter()
         Ek = calc_bandstructure_mpi_interpol_2(E, S, H, ECmin_DFT, SigmaR_GW_vec, min_ind, Bmin, Bmax, side, mapdiag, mapupper, maplower)
+        # finish = time.perf_counter()
+        # print(f'calc_bandstructure_mpi_interpol_2 took {finish-start} seconds', flush=True)
+        # start = time.perf_counter()
         if(ind_ek_plus == -1):
             ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
         ECmin_int = Ek[ind_ek_plus]
         # broadcasting the band edge (this is actually not necessary, but it is done for consistency), non-root nodes will not use it in get_send_ranks_interpol 
         comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
+        # finish = time.perf_counter()
+        # print(f'broadcasting took {finish-start} seconds', flush=True)
     else:   
         ECmin_int = np.empty(1, dtype=np.float64)
         comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
         ECmin_int = ECmin_int[0]
 
     # Second step: refine the position of the CB edge
+    # start = time.perf_counter()
     (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(ECmin_int, E, comm, rank, size, count, disp)
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'get_send_ranks_interpol took {finish-start} seconds', flush=True)
+    # start = time.perf_counter()
     send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, nnz)
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'send_sigmas_GWRGL_PHNR_to_root_2 took {finish-start} seconds', flush=True)
+    # start = time.perf_counter()
     SigmaR_GW_vec[:] = (SigmaR_GW_vec + SigmaR_GW_vec[:, ij2ji]) / 2
+    # finish = time.perf_counter()
+    # if rank == 0:
+    #     print(f'average took {finish-start} seconds', flush=True)
     if rank == 0:
+        # start = time.perf_counter()
         Ek = calc_bandstructure_mpi_interpol_2(E, S, H, ECmin_int, SigmaR_GW_vec, min_ind, Bmin, Bmax, side, mapdiag, mapupper, maplower)
+        # finish = time.perf_counter()
+        # print(f'calc_bandstructure_mpi_interpol_2 took {finish-start} seconds', flush=True)
+        # start = time.perf_counter()
         # ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
         ECmin = Ek[ind_ek_plus]
         # broadcasting the band edge
         comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        # finish = time.perf_counter()
+        # print(f'broadcasting took {finish-start} seconds', flush=True)
         print("send rank 1 was: " + str(send_rank_1) + " send rank 2 was: " + str(send_rank_2) + " new band edge: " + str(ECmin))
     else:   
         ECmin = np.empty(1, dtype=np.float64)
@@ -449,68 +488,35 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
     if rank == 0:
         if send_rank_1 == 0:
             SigmaR_GW_vec[0] = SigmaR_GW[min_ind - disp[1, rank]]
-            # SigmaL_GW_vec[0] = SigmaL_GW[min_ind - disp[1, rank]]   
-            # SigmaG_GW_vec[0] = SigmaG_GW[min_ind - disp[1, rank]]
-            # SigmaR_PHN_vec[0] = SigmaR_PHN[min_ind - disp[1, rank]]
-
         else:
-            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sr_phn_buf = np.empty(nnz, dtype=np.complex128)
+            # sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            sr_gw_buf = cp.empty(nnz, dtype=np.complex128)
+            cp.cuda.get_current_stream().synchronize()
             comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=0)
-            # comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=1)
-            # comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=2)
-            # comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=3)
-
             SigmaR_GW_vec[0] = sr_gw_buf
-            # SigmaL_GW_vec[0] = sl_gw_buf
-            # SigmaG_GW_vec[0] = sg_gw_buf
-            # SigmaR_PHN_vec[0] = sr_phn_buf
 
     else:
         if send_rank_1 == rank:
             sr_gw_buf = SigmaR_GW[min_ind - disp[1, rank]]
-            # sl_gw_buf = SigmaL_GW[min_ind - disp[1, rank]]
-            # sg_gw_buf = SigmaG_GW[min_ind - disp[1, rank]]
-            # sr_phn_buf = SigmaR_PHN[min_ind - disp[1, rank]]
+            cp.cuda.get_current_stream().synchronize()
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            # comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
-            # comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
-            # comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
 
     
     if rank == 0:
         if send_rank_2 == 0:
             SigmaR_GW_vec[1] = SigmaR_GW[min_ind + 1 - disp[1, rank]]
-            # SigmaL_GW_vec[1] = SigmaL_GW[min_ind + 1 - disp[1, rank]]
-            # SigmaG_GW_vec[1] = SigmaG_GW[min_ind + 1 - disp[1, rank]]
-            # SigmaR_PHN_vec[1] = SigmaR_PHN[min_ind + 1 - disp[1, rank]]
         else:
-            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
-            # sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
+            # sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            sr_gw_buf = cp.empty(nnz, dtype=np.complex128)
+            cp.cuda.get_current_stream().synchronize()
             comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=0)
-            # comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=1)
-            # comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=2)
-            # comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=3)
-
             SigmaR_GW_vec[1] = sr_gw_buf
-            # SigmaL_GW_vec[1] = sl_gw_buf
-            # SigmaG_GW_vec[1] = sg_gw_buf
-            # SigmaR_PHN_vec[1] = sr_phn_buf
 
     else:
         if send_rank_2 == rank:
             sr_gw_buf = SigmaR_GW[min_ind + 1 - disp[1, rank]]
-            # sl_gw_buf = SigmaL_GW[min_ind + 1 - disp[1, rank]]
-            # sg_gw_buf = SigmaG_GW[min_ind + 1 - disp[1, rank]]
-            # sr_phn_buf = SigmaR_PHN[min_ind + 1 - disp[1, rank]]
+            cp.cuda.get_current_stream().synchronize()
             comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            # comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
-            # comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
-            # comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
 
 
 if __name__ == '__main__':

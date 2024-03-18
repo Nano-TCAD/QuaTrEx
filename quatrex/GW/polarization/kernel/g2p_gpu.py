@@ -219,9 +219,12 @@ def g2p_fft_mpi_gpu_batched_nopr(
     no = gg.shape[0]
 
     batches = no // batch_size
+    if batches == 0:
+        batch_size = no
+        batches = 1
 
-    pg = np.empty((no, ne), dtype=np.complex128)
-    pl = np.empty((no, ne), dtype=np.complex128)
+    pg = cp.empty((no, ne), dtype=np.complex128)
+    pl = cp.empty((no, ne), dtype=np.complex128)
 
 
     # load data to gpu and compute----------------------------------------------
@@ -263,8 +266,8 @@ def g2p_fft_mpi_gpu_batched_nopr(
 
         # load data to cpu----------------------------------------------------------
 
-        pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start].get()
-        pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start].get()
+        pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start]
+        pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start]
 
     return (pg, pl)
 
@@ -368,7 +371,9 @@ def g2p_fft_mpi_gpu_batched_streams(pre_factor: np.complex128, gg: npt.NDArray[n
     # batch over no
     batches = no // batch_size
     if batches == 0:
-        print("Too large batch size")
+        # print("Too large batch size")
+        batch_size = no
+        batches = 1
 
     # load data to gpu and compute----------------------------------------------
     # allocate gpu memory

@@ -550,11 +550,13 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
     # batch over no
     batches = no // batch_size
     if batches == 0:
-        print("Too large batch size")
+        # print("Too large batch size")
+        batch_size = no
+        batches = 1
 
-    sg = np.empty((no, ne), dtype=np.complex128)
-    sl = np.empty((no, ne), dtype=np.complex128)
-    sr_principale = np.empty((no, ne), dtype=np.complex128)
+    sg = cp.empty((no, ne), dtype=np.complex128)
+    sl = cp.empty((no, ne), dtype=np.complex128)
+    sr_principale = cp.empty((no, ne), dtype=np.complex128)
 
     
     # load data to gpu and compute----------------------------------------------------
@@ -568,7 +570,7 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
 
     #Calculating the truncated fock part
     #vh1d = np.asarray(vh[rows, cols].reshape(-1))
-    gl_density = np.imag(np.sum(gl, axis = 1))
+    gl_density = cp.imag(cp.sum(gl, axis = 1))
     rSigmaRF = -cp.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
     #rSigmaRF = np.tile(rSigmaRF, (1,ne))
     rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
@@ -582,8 +584,8 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
     # one_div_by_E[NE-1] = 0
     # one_div_by_E_t = np.fft.fft(one_div_by_E)
     one_div_by_E = np.concatenate((-1.0/(Evec[-1:0:-1]), np.array([0.0], dtype = np.float64), 1/(Evec[1:]), np.array([1/(Evec[-1] + dE)], dtype = np.float64)))
-    one_div_by_E_t = np.fft.fft(one_div_by_E)
-    one_div_by_E_t_gpu = cp.asarray(one_div_by_E_t)
+    one_div_by_E_t = cp.fft.fft(cp.asarray(one_div_by_E))
+    one_div_by_E_t_gpu = one_div_by_E_t
 
     for batch in range(batches):
         batch_start = batch * batch_size
@@ -658,12 +660,12 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
         rSigmaR_gpu = cp.fft.ifft(rSigmaR_t_gpu, axis = 1)[:, ne-1:-1].astype(np.complex128)
         cp.multiply(rSigmaR_gpu, 2*pre_factor, out=rSigmaR_gpu)
         # sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2)[0:batch_end - batch_start,:].astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :].get()
-        sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2).astype(np.complex128)).get() + rSigmaRF[batch_start:batch_end, :].get()
+        sr_principale[batch_start:batch_end] = (rSigmaR_gpu/2 + (1j*cp.imag(sg_gpu-sl_gpu)/2).astype(np.complex128)) + rSigmaRF[batch_start:batch_end, :]
 
         # load data to cpu----------------------------------------------------------
 
-        sg[batch_start:batch_end] = sg_gpu[0:batch_end - batch_start].get()
-        sl[batch_start:batch_end] = sl_gpu[0:batch_end - batch_start].get()
+        sg[batch_start:batch_end] = sg_gpu[0:batch_end - batch_start]
+        sl[batch_start:batch_end] = sl_gpu[0:batch_end - batch_start]
         
 
     return (sg, sl, sr_principale)
@@ -834,7 +836,9 @@ def gw2s_fft_mpi_gpu_batched_streams(
     # batch over no
     batches = no // batch_size
     if batches == 0:
-        print("Too large batch size")
+        # print("Too large batch size")
+        batch_size = no
+        batches = 1
 
     # load data to gpu and compute----------------------------------------------------
     gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)

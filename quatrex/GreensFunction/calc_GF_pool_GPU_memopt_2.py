@@ -342,20 +342,24 @@ def calc_GF_pool_mpi_split_memopt(
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
     buf_recv_r = np.empty((DOS.shape[1]), dtype=np.complex128)
-    buf_send_r = np.empty((DOS.shape[1]), dtype=np.complex128)
+    # buf_send_r = np.empty((DOS.shape[1]), dtype=np.complex128)
     buf_recv_l = np.empty((DOS.shape[1]), dtype=np.complex128)
-    buf_send_l = np.empty((DOS.shape[1]), dtype=np.complex128)
+    # buf_send_l = np.empty((DOS.shape[1]), dtype=np.complex128)
     if size > 1:
         if rank == 0:
-            buf_send_r[:] = DOS[ne - 1, :]
+            # buf_send_r[:] = DOS[ne - 1, :]
+            buf_send_r = DOS[ne - 1, :]
             comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
 
         elif rank == size - 1:
-            buf_send_l[:] = DOS[0, :]
+            # buf_send_l[:] = DOS[0, :]
+            buf_send_l = DOS[0, :]
             comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
         else:
-            buf_send_r[:] = DOS[ne - 1, :]
-            buf_send_l[:] = DOS[0, :]
+            # buf_send_r[:] = DOS[ne - 1, :]
+            # buf_send_l[:] = DOS[0, :]
+            buf_send_r = DOS[ne - 1, :]
+            buf_send_l = DOS[0, :]
             comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
             comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
 

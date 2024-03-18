@@ -114,10 +114,10 @@ def calc_W_pool_mpi_split(
     map_upper_l,
     map_lower_l,
     # P indices
-    rows,
-    columns,
+    rows_dev,
+    columns_dev,
     # P transposition
-    ij2ji,
+    ij2ji_dev,
     # M and L indices.
     rows_m,
     columns_m,
@@ -392,10 +392,7 @@ def calc_W_pool_mpi_split(
     # lg_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
     # ll_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
 
-    ij2ji_dev = cp.asarray(ij2ji)
-    rows_dev = cp.asarray(rows)
-    columns_dev = cp.asarray(columns)
-    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows, columns, ij2ji, NCpSC, bmin, bmax, homogenize)
+    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
 
     nao = vh.shape[0]
     vh_dev = cp.sparse.csr_matrix(vh)
@@ -458,11 +455,11 @@ def calc_W_pool_mpi_split(
             pl_dev = cp.sparse.csr_matrix((cp.asarray(pl_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
         else:
             pr_tmp = cp.asarray(pr_rgf[ie])
-            pr_dev.data[:] = pr_tmp[ij2ji]
+            pr_dev.data[:] = pr_tmp[ij2ji_dev]
             pg_tmp = cp.asarray(pg_rgf[ie])
-            pg_dev.data[:] = pg_tmp[ij2ji]
+            pg_dev.data[:] = pg_tmp[ij2ji_dev]
             pl_tmp = cp.asarray(pl_rgf[ie])
-            pl_dev.data[:] = pl_tmp[ij2ji]
+            pl_dev.data[:] = pl_tmp[ij2ji_dev]
          
         # pr_dev = cp.asarray(pr_rgf[ie])
         # pg_dev = cp.asarray(pg_rgf[ie])
@@ -820,24 +817,28 @@ def calc_W_pool_mpi_split(
     F2 = np.max(np.abs(dosw - (new + npw)) / (np.abs(new + npw) + 1e-6), axis=1)
 
     buf_recv_r = np.empty((dosw.shape[1]), dtype=np.complex128)
-    buf_send_r = np.empty((dosw.shape[1]), dtype=np.complex128)
+    # buf_send_r = np.empty((dosw.shape[1]), dtype=np.complex128)
     buf_recv_l = np.empty((dosw.shape[1]), dtype=np.complex128)
-    buf_send_l = np.empty((dosw.shape[1]), dtype=np.complex128)
+    # buf_send_l = np.empty((dosw.shape[1]), dtype=np.complex128)
     if size > 1:
         if rank == 0:
-            buf_send_r[:] = dosw[ne - 1, :]
+            # buf_send_r[:] = dosw[ne - 1, :]
+            buf_send_r = dosw[ne - 1, :]
             comm.Sendrecv(
                 sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1
             )
 
         elif rank == size - 1:
-            buf_send_l[:] = dosw[0, :]
+            # buf_send_l[:] = dosw[0, :]
+            buf_send_l = dosw[0, :]
             comm.Sendrecv(
                 sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1
             )
         else:
-            buf_send_r[:] = dosw[ne - 1, :]
-            buf_send_l[:] = dosw[0, :]
+            # buf_send_r[:] = dosw[ne - 1, :]
+            # buf_send_l[:] = dosw[0, :]
+            buf_send_r = dosw[ne - 1, :]
+            buf_send_l = dosw[0, :]
             comm.Sendrecv(
                 sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1
             )
@@ -977,31 +978,31 @@ def calc_W_pool_mpi_split(
         wl_p2w[index, :] = 0
         wg_p2w[index, :] = 0
 
-    if np.sum(np.isnan(wr_p2w)) == 0:
-        ind_zeros_w = np.array([], dtype = int)
-    else:
-        print("There are still nans inside wr", flush = True)
-        ind_zeros_w = np.argwhere(np.isnan(wr_p2w)).T[0]
-        ind_unique = np.unique(ind_zeros_w)
-        wr_p2w[ind_unique, :] = 0.0
+    # if np.sum(np.isnan(wr_p2w)) == 0:
+    #     ind_zeros_w = np.array([], dtype = int)
+    # else:
+    #     print("There are still nans inside wr", flush = True)
+    #     ind_zeros_w = np.argwhere(np.isnan(wr_p2w)).T[0]
+    #     ind_unique = np.unique(ind_zeros_w)
+    #     wr_p2w[ind_unique, :] = 0.0
 
-    if np.sum(np.isnan(wl_p2w)) == 0:
-        ind_zeros_w = np.array([], dtype = int)
-    else:
-        print("There are still nans inside wl", flush = True)
-        ind_zeros_w = np.argwhere(np.isnan(wl_p2w)).T[0]
-        ind_unique = np.unique(ind_zeros_w)
-        wl_p2w[ind_unique, :] = 0.0
+    # if np.sum(np.isnan(wl_p2w)) == 0:
+    #     ind_zeros_w = np.array([], dtype = int)
+    # else:
+    #     print("There are still nans inside wl", flush = True)
+    #     ind_zeros_w = np.argwhere(np.isnan(wl_p2w)).T[0]
+    #     ind_unique = np.unique(ind_zeros_w)
+    #     wl_p2w[ind_unique, :] = 0.0
 
-    if np.sum(np.isnan(wg_p2w)) == 0:
-        ind_zeros_w = np.array([], dtype = int)
-    else:
-        print("There are still nans inside wg", flush = True)
-        ind_zeros_w = np.argwhere(np.isnan(wg_p2w)).T[0]
-        ind_unique = np.unique(ind_zeros_w)
-        wg_p2w[ind_unique, :] = 0.0
+    # if np.sum(np.isnan(wg_p2w)) == 0:
+    #     ind_zeros_w = np.array([], dtype = int)
+    # else:
+    #     print("There are still nans inside wg", flush = True)
+    #     ind_zeros_w = np.argwhere(np.isnan(wg_p2w)).T[0]
+    #     ind_unique = np.unique(ind_zeros_w)
+    #     wg_p2w[ind_unique, :] = 0.0
 
-    assert((np.sum(np.isnan(wr_p2w)) + np.sum(np.isnan(wl_p2w)) + np.sum(np.isnan(wg_p2w))) == 0)
+    # assert((np.sum(np.isnan(wr_p2w)) + np.sum(np.isnan(wl_p2w)) + np.sum(np.isnan(wg_p2w))) == 0)
 
     comm.Barrier()
     if rank == 0:

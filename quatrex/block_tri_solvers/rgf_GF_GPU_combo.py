@@ -282,10 +282,10 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     gG_gpu = cp.empty((num_blocks, batch_size, block_size, block_size), dtype=dtype)  # Greater (right)
     SigLB_gpu = cp.empty((num_blocks-1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
     SigGB_gpu = cp.empty((num_blocks-1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
-    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype)
+    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(DOS, np.ndarray) else DOS
+    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nE, np.ndarray) else nE
+    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nP, np.ndarray) else nP
+    idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype) if isinstance(idE, np.ndarray) else idE
 
     GR_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
     GRnn1_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
@@ -781,10 +781,11 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     _store_compressed(map_diag_dev, map_upper_dev, map_lower_dev, GR, None, num_blocks - 1, GR_compressed)
     if isinstance(GR_host, np.ndarray):
         GR_compressed.get(out=GR_host)
-    DOS_gpu.get(out=DOS)
-    nE_gpu.get(out=nE)
-    nP_gpu.get(out=nP)
-    idE_gpu.get(out=idE)
+    if isinstance(DOS, np.ndarray):
+        DOS_gpu.get(out=DOS)
+        nE_gpu.get(out=nE)
+        nP_gpu.get(out=nP)
+        idE_gpu.get(out=idE)
     input_stream.synchronize()
     computation_stream.synchronize()
 
