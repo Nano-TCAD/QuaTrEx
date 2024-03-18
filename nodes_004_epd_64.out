@@ -1,0 +1,290 @@
+rocm-smi found, AMD GPU available
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Using gpu implementation
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (485632,), Size: 485632, Type: complex128
+Shape: (3798080,), Size: 3798080, Type: complex128
+Shape: (5408,), Size: 5408, Type: complex128
+#Energy: 2048 #nnz: 491040
+Rank: 7 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 3 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 6 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 15 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 1 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 27 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 2 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 17 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 9 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 5 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 26 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 4 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 10 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 18 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 31 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 23 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 14 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 25 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 11 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 22 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 19 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 30 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 13 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 29 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 21 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 12 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 0 #Energy/rank: 64 #nnz/rank: 15345 nid006718
+Rank: 20 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 28 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Rank: 8 #Energy/rank: 64 #nnz/rank: 15345 nid006719
+Rank: 16 #Energy/rank: 64 #nnz/rank: 15345 nid006720
+Rank: 24 #Energy/rank: 64 #nnz/rank: 15345 nid006721
+Symmetrization time: 0.18355527520179749
+send rank 1 was: 15 send rank 2 was: 15 new band edge: -2.0750420609773443
+Band edge time: 0.4510445650666952
+ECmin: -2.0750420609773443
+Time for pre-processing OBC: 11.380 s
+Time for OBC: 9.585 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.251 s
+Time for post-processing: 0.004 s
+G2P communication time: 2.5721492003649473
+Green's function calculated
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_op_CI_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Error: failed to store code object for fft_rtc_fwd_len4096_dp_ip_CI_unitstride_sbrr_CB
+Polarization computation time: 14.811622131615877
+P2W communication time: 1.3113917782902718
+Polarization calculated
+Time for pre-processing OBC: 1.230 s
+OBC-W region
+    Time for overall spgemm loop: 1.201 s
+        Time for copy in: 0.081 s
+        Time for spgemm: 0.757 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.300 s
+    Time for obc mm: 1.075 s
+    Time for beyn w: 3.340 s
+    Time for obc l: 1.788 s
+Time for OBC: 7.419 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.084 s
+Time for W: 3.681 s
+Time for post-processing: 0.029 s
+W2S communication time: 3.2530152425169945
+Finish p2w
+Sigma computation time: 0.18760545551776886
+S2G communication time: 1.4398535452783108
+Sigma memory update time: 0.00039628706872463226
+SEPHN computation time: 0.014852887019515038
+Observables reduction time: 0.01274954155087471
+Finish iteration 0, time: 61.95065884292126
+Symmetrization time: 0.02513705939054489
+send rank 1 was: 14 send rank 2 was: 14 new band edge: -2.2169931386133785
+Band edge time: 0.3055661730468273
+ECmin: -2.2169931386133785
+Time for pre-processing OBC: 0.151 s
+Time for OBC: 3.352 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.038 s
+Time for post-processing: 0.011 s
+G2P communication time: 1.7281167153269053
+Green's function calculated
+Polarization computation time: 0.023331522941589355
+P2W communication time: 0.8450868017971516
+Polarization calculated
+Time for pre-processing OBC: 0.209 s
+OBC-W region
+    Time for overall spgemm loop: 0.911 s
+        Time for copy in: 0.021 s
+        Time for spgemm: 0.757 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.099 s
+    Time for obc mm: 1.053 s
+    Time for beyn w: 3.018 s
+    Time for obc l: 1.666 s
+Time for OBC: 6.663 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.049 s
+Time for W: 3.663 s
+Time for post-processing: 0.002 s
+W2S communication time: 1.9497753642499447
+Finish p2w
+Sigma computation time: 0.0923663079738617
+S2G communication time: 0.839676832780242
+Sigma memory update time: 0.00040220655500888824
+SEPHN computation time: 0.015519412234425545
+Observables reduction time: 0.0037558432668447495
+Finish iteration 1, time: 24.01538592390716
+Symmetrization time: 0.025054046884179115
+send rank 1 was: 13 send rank 2 was: 13 new band edge: -2.4054282076397477
+Band edge time: 0.2875678576529026
+ECmin: -2.4054282076397477
+Time for pre-processing OBC: 0.150 s
+Time for OBC: 3.316 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 3.990 s
+Time for post-processing: 0.002 s
+G2P communication time: 1.65720434486866
+Green's function calculated
+Polarization computation time: 0.022298738360404968
+P2W communication time: 0.8423667438328266
+Polarization calculated
+Time for pre-processing OBC: 0.208 s
+OBC-W region
+    Time for overall spgemm loop: 0.911 s
+        Time for copy in: 0.020 s
+        Time for spgemm: 0.758 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.098 s
+    Time for obc mm: 1.057 s
+    Time for beyn w: 3.058 s
+    Time for obc l: 1.632 s
+Time for OBC: 6.674 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.048 s
+Time for W: 3.655 s
+Time for post-processing: 0.002 s
+W2S communication time: 2.097023831680417
+Finish p2w
+Sigma computation time: 0.09173848293721676
+S2G communication time: 0.8503124341368675
+Sigma memory update time: 0.00038471445441246033
+SEPHN computation time: 0.014799362048506737
+Observables reduction time: 0.003327755257487297
+Finish iteration 2, time: 23.986397275701165
+Finish iteration
+Time: 110.08 s

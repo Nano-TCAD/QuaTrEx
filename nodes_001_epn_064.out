@@ -1,0 +1,161 @@
+pthread_mutex_unlock: No such file or directory
+rocm-smi found, AMD GPU available
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Using gpu implementation
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (485632,), Size: 485632, Type: complex128
+Shape: (3798080,), Size: 3798080, Type: complex128
+Shape: (5408,), Size: 5408, Type: complex128
+#Energy: 512 #nnz: 491040
+Rank: 2 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 6 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 1 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 0 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 3 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 7 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 4 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Rank: 5 #Energy/rank: 64 #nnz/rank: 61380 nid006917
+Symmetrization time: 0.2044323137961328
+send rank 1 was: 3 send rank 2 was: 3 new band edge: -2.0750420609773443
+Band edge time: 0.4618688994087279
+ECmin: -2.0750420609773443
+Time for pre-processing OBC: 1.960 s
+Time for OBC: 9.201 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.261 s
+Time for post-processing: 0.002 s
+G2P communication time: 3.2160200346261263
+Green's function calculated
+Polarization computation time: 0.08281993912532926
+P2W communication time: 0.2210125783458352
+Polarization calculated
+Time for pre-processing OBC: 1.180 s
+OBC-W region
+    Time for overall spgemm loop: 1.145 s
+        Time for copy in: 0.094 s
+        Time for spgemm: 0.793 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.252 s
+    Time for obc mm: 1.068 s
+    Time for beyn w: 3.267 s
+    Time for obc l: 1.732 s
+Time for OBC: 7.228 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.083 s
+Time for W: 3.687 s
+Time for post-processing: 0.001 s
+W2S communication time: 3.4171359380707145
+Finish p2w
+Sigma computation time: 0.1446373751387
+S2G communication time: 0.22856164909899235
+Sigma memory update time: 0.0002589300274848938
+SEPHN computation time: 0.01286348095163703
+Observables reduction time: 0.0012361090630292892
+Finish iteration 0, time: 35.63955339184031
+Symmetrization time: 0.025110492017120123
+send rank 1 was: 3 send rank 2 was: 3 new band edge: -2.1677236688548907
+Band edge time: 0.3022669618949294
+ECmin: -2.1677236688548907
+Time for pre-processing OBC: 0.125 s
+Time for OBC: 3.341 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.098 s
+Time for post-processing: 0.001 s
+G2P communication time: 3.2006991831585765
+Green's function calculated
+Polarization computation time: 0.030266501009464264
+P2W communication time: 0.19665993796661496
+Polarization calculated
+Time for pre-processing OBC: 0.208 s
+OBC-W region
+    Time for overall spgemm loop: 0.912 s
+        Time for copy in: 0.021 s
+        Time for spgemm: 0.792 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.097 s
+    Time for obc mm: 1.042 s
+    Time for beyn w: 3.039 s
+    Time for obc l: 1.610 s
+Time for OBC: 6.618 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.049 s
+Time for W: 3.678 s
+Time for post-processing: 0.001 s
+W2S communication time: 1.7279379181563854
+Finish p2w
+Sigma computation time: 0.10365951713174582
+S2G communication time: 0.19555620523169637
+Sigma memory update time: 0.0002574683167040348
+SEPHN computation time: 0.012704906985163689
+Observables reduction time: 0.00125056691467762
+Finish iteration 1, time: 23.96232335967943
+Symmetrization time: 0.02506325300782919
+send rank 1 was: 3 send rank 2 was: 3 new band edge: -2.3379682894532117
+Band edge time: 0.29792357329279184
+ECmin: -2.3379682894532117
+Time for pre-processing OBC: 0.147 s
+Time for OBC: 3.305 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.114 s
+Time for post-processing: 0.001 s
+G2P communication time: 2.1888364437036216
+Green's function calculated
+Polarization computation time: 0.030658456962555647
+P2W communication time: 0.19916876824572682
+Polarization calculated
+Time for pre-processing OBC: 0.173 s
+OBC-W region
+    Time for overall spgemm loop: 0.911 s
+        Time for copy in: 0.020 s
+        Time for spgemm: 0.791 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.097 s
+    Time for obc mm: 1.047 s
+    Time for beyn w: 3.019 s
+    Time for obc l: 1.649 s
+Time for OBC: 6.642 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.048 s
+Time for W: 3.670 s
+Time for post-processing: 0.001 s
+W2S communication time: 3.204269646666944
+Finish p2w
+Sigma computation time: 0.10254896897822618
+S2G communication time: 0.19493376277387142
+Sigma memory update time: 0.0002618958242237568
+SEPHN computation time: 0.01267579896375537
+Observables reduction time: 0.0010065361857414246
+Finish iteration 2, time: 24.407591859344393
+Finish iteration
+Time: 84.05 s

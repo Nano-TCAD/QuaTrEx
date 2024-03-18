@@ -1,0 +1,393 @@
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:16 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:18 2024
+Start date and time: Sun Mar 17 18:00:19 2024
+Start date and time: Sun Mar 17 18:00:19 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Start date and time: Sun Mar 17 18:00:27 2024
+Started main at : Sun Mar 17 18:00:52 2024
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+rocm-smi found, AMD GPU available
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Using gpu implementation
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+/LUMI_TYKKY_lpQ1Wtj/miniconda/envs/env1/lib/python3.12/site-packages/cupyx/jit/_interface.py:173: FutureWarning: cupyx.jit.rawkernel is experimental. The interface can change in the future.
+  cupy._util.experimental('cupyx.jit.rawkernel')
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (491040,), Size: 491040, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 485632), Size: 485632, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 3798080), Size: 3798080, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (1, 5408), Size: 5408, Type: int32
+Shape: (485632,), Size: 485632, Type: complex128
+Shape: (3798080,), Size: 3798080, Type: complex128
+Shape: (5408,), Size: 5408, Type: complex128
+#Energy: 4096 #nnz: 491040
+Rank: 39 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 6 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 63 #Energy/rank: 64 #nnz/rank: 7704 nid007663
+Rank: 59 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 11 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 57 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 15 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 46 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 9 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 18 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 62 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 2 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 45 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 42 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 49 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 61 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 7 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 30 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 54 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 51 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 23 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 17 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 47 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 14 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 33 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 43 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 19 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 34 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 26 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 3 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 44 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 41 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 31 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 22 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 4 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 38 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 35 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 27 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 25 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 50 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 1 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 10 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 5 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Rank: 20 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 60 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 28 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 58 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 55 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 29 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 36 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 13 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 52 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 37 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 56 #Energy/rank: 64 #nnz/rank: 7672 nid007663
+Rank: 48 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 21 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 40 #Energy/rank: 64 #nnz/rank: 7672 nid007661
+Rank: 8 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 24 #Energy/rank: 64 #nnz/rank: 7672 nid007659
+Rank: 53 #Energy/rank: 64 #nnz/rank: 7672 nid007662
+Rank: 12 #Energy/rank: 64 #nnz/rank: 7672 nid006732
+Rank: 16 #Energy/rank: 64 #nnz/rank: 7672 nid006733
+Rank: 32 #Energy/rank: 64 #nnz/rank: 7672 nid007660
+Rank: 0 #Energy/rank: 64 #nnz/rank: 7672 nid006731
+Symmetrization time: 0.2182901632040739
+send rank 1 was: 31 send rank 2 was: 31 new band edge: -2.0750420609773443
+Band edge time: 0.42669366486370564
+ECmin: -2.0750420609773443
+Time for pre-processing OBC: 19.122 s
+Time for OBC: 9.555 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 4.132 s
+Time for post-processing: 0.006 s
+G2P communication time: 2.2116444017738104
+Green's function calculated
+Polarization computation time: 0.1591847985982895
+P2W communication time: 1.1744590029120445
+Polarization calculated
+Time for pre-processing OBC: 1.225 s
+OBC-W region
+    Time for overall spgemm loop: 1.126 s
+        Time for copy in: 0.102 s
+        Time for spgemm: 0.756 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.257 s
+    Time for obc mm: 1.066 s
+    Time for beyn w: 3.298 s
+    Time for obc l: 1.853 s
+Time for OBC: 7.359 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.086 s
+Time for W: 3.570 s
+Time for post-processing: 0.005 s
+W2S communication time: 2.664687018841505
+Finish p2w
+Sigma computation time: 0.14323411509394646
+S2G communication time: 1.2402998246252537
+Sigma memory update time: 0.00041021406650543213
+SEPHN computation time: 0.016111915931105614
+Observables reduction time: 0.0072373561561107635
+Finish iteration 0, time: 53.37279511988163
+Symmetrization time: 0.024609040468931198
+send rank 1 was: 28 send rank 2 was: 28 new band edge: -2.2153643718138727
+Band edge time: 0.28674317710101604
+ECmin: -2.2153643718138727
+Time for pre-processing OBC: 0.150 s
+Time for OBC: 3.290 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 3.983 s
+Time for post-processing: 0.004 s
+G2P communication time: 1.1455811522901058
+Green's function calculated
+Polarization computation time: 0.023285219445824623
+P2W communication time: 0.4752068966627121
+Polarization calculated
+Time for pre-processing OBC: 0.210 s
+OBC-W region
+    Time for overall spgemm loop: 0.878 s
+        Time for copy in: 0.020 s
+        Time for spgemm: 0.757 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.100 s
+    Time for obc mm: 1.059 s
+    Time for beyn w: 3.037 s
+    Time for obc l: 1.695 s
+Time for OBC: 6.685 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.050 s
+Time for W: 3.550 s
+Time for post-processing: 0.004 s
+W2S communication time: 1.3171885833144188
+Finish p2w
+Sigma computation time: 0.10526002012193203
+S2G communication time: 0.47671749629080296
+Sigma memory update time: 0.0003416091203689575
+SEPHN computation time: 0.016155783087015152
+Observables reduction time: 0.005303030833601952
+Finish iteration 1, time: 21.850169751793146
+Symmetrization time: 0.024632582440972328
+send rank 1 was: 26 send rank 2 was: 27 new band edge: -2.406000700114371
+Band edge time: 0.29152287170290947
+ECmin: -2.406000700114371
+Time for pre-processing OBC: 0.149 s
+Time for OBC: 3.282 s
+Time for GF transformation: 0.000 s
+Time for SE subtraction: 0.000 s
+Time for GF: 3.993 s
+Time for post-processing: 0.004 s
+G2P communication time: 1.0833069272339344
+Green's function calculated
+Polarization computation time: 0.023425880819559097
+P2W communication time: 0.47880021296441555
+Polarization calculated
+Time for pre-processing OBC: 0.210 s
+OBC-W region
+    Time for overall spgemm loop: 0.880 s
+        Time for copy in: 0.020 s
+        Time for spgemm: 0.756 s
+        Time for copy out: 0.000 s
+        Time for dense: 0.100 s
+    Time for obc mm: 1.053 s
+    Time for beyn w: 3.062 s
+    Time for obc l: 1.665 s
+Time for OBC: 6.675 s
+Time for spgemm: 0.000 s
+Time for W transformation: 0.050 s
+Time for W: 3.549 s
+Time for post-processing: 0.004 s
+W2S communication time: 1.484569588676095
+Finish p2w
+Sigma computation time: 0.10547175817191601
+S2G communication time: 0.47615818306803703
+Sigma memory update time: 0.0003601144999265671
+SEPHN computation time: 0.015779145061969757
+Observables reduction time: 0.005965033546090126
+Finish iteration 2, time: 21.954339765012264
+Finish iteration
+Time: 97.18 s
