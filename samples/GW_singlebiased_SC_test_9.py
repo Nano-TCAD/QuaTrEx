@@ -108,98 +108,53 @@ if __name__ == "__main__":
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = 4)
+
+
+    comm.Barrier()
+    if rank == 0:
+        print("Starting Hamiltonian read-in", flush = True)
+        time_pickle = -time.perf_counter()
+    
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 13, rank = rank, layer_matrix = '/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
+
+    comm.Barrier()
+    if rank ==0:
+        time_pickle += time.perf_counter()
+        print("Time for Hamiltonian read-in: %.3f s" % time_pickle, flush = True)
     # Extract neighbor indices
-    rows_g = hamiltonian_obj.rows
-    columns_g = hamiltonian_obj.columns
+    #exit(0)
+    rows = hamiltonian_obj.rows
+    columns = hamiltonian_obj.columns
+
+    #Only keep diagonals of P and Sigma
+    #rows = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+    #columns = np.arange(hamiltonian_obj.NH, dtype = np.int32)
+
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
     bmin = hamiltonian_obj.Bmin - 1
 
-    #reading reference solution
-    size_buf = np.empty(3, dtype=np.int32)
-    if rank == 0:
-        energy_in, rows, columns, gg_gold, gl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "g")
-        energy_in, rows_p, columns_p, pg_gold, pl_gold, pr_gold = read_solution.load_x_optimized(solution_path_gw, "p")
-        energy_in, rows_w, columns_w, wg_gold, wl_gold, _ = read_solution.load_x_optimized(solution_path_gw, "w")
-        energy_in, rows_s, columns_s, sg_gold, sl_gold, sr_gold = read_solution.load_x_optimized(solution_path_gw, "s")
-        energy_in, rows_sph, columns_sph, sphg_gold, sphl_gold, sphr_gold = read_solution.load_x_optimized(solution_path_gw, "sph")
-        rowsRef, columnsRef, vh_gold = read_solution.load_v(solution_path_vh)
-        rowsRefH, columnsRefH, H_gold = read_solution.load_v(solution_path_H)
-        rowsRefS, columnsRefS, S_gold = read_solution.load_v(solution_path_S)
+    ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
+    denergy:    npt.NDArray[np.double]  = energy[1] - energy[0]
+    ne:         np.int32                = np.int32(energy.shape[0])
+    no:         np.int32                = np.int32(columns.shape[0])
+    pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
+    nao:        np.int64                = np.max(bmax) + 1
 
-        for buf in (rows, columns, rows_p, columns_p, rows_w, columns_w, rows_s, columns_s,
-                    rowsRef, columnsRef, rowsRefH, columnsRefH, rowsRefS, columnsRefS):
-            print(f"Shape: {buf.shape}, Size: {buf.size}, Type: {buf.dtype}", flush = True)
-            size_buf[0] = len(buf.shape)
-            for i, s in enumerate(buf.shape):
-                size_buf[i + 1] = s
-            comm.Bcast(size_buf, root=0)
-            comm.Bcast(buf, root=0)
-        for buf in (vh_gold, H_gold, S_gold):
-            print(f"Shape: {buf.shape}, Size: {buf.size}, Type: {buf.dtype}", flush = True)
-            size_buf[0] = len(buf.shape)
-            for i, s in enumerate(buf.shape):
-                size_buf[i + 1] = s
-            comm.Bcast(size_buf, root=0)
-            comm.Bcast(buf, root=0)
-    else:
-        buffers = []
-        for i in range(14):
-            comm.Bcast(size_buf, root=0)
-            ndims = size_buf[0]
-            shape = size_buf[1:ndims + 1]
-            buf = np.empty(shape, dtype=np.int32)
-            comm.Bcast(buf, root=0)
-            buffers.append(buf)
-        (rows, columns, rows_p, columns_p, rows_w, columns_w, rows_s, columns_s,
-         rowsRef, columnsRef, rowsRefH, columnsRefH, rowsRefS, columnsRefS) = buffers
-        buffers2 = []
-        for i in range(3):
-            comm.Bcast(size_buf, root=0)
-            ndims = size_buf[0]
-            shape = size_buf[1:ndims + 1]
-            buf = np.empty(shape, dtype=np.complex128)
-            comm.Bcast(buf, root=0)
-            buffers2.append(buf)
-        (vh_gold, H_gold, S_gold) = buffers2
-
-    ij2ji: npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
-    denergy: npt.NDArray[np.double] = energy[1] - energy[0]
-    ne: np.int32 = np.int32(energy.shape[0])
-    no: np.int32 = np.int32(columns.shape[0])
-    pre_factor: np.complex128 = -1.0j * denergy / (np.pi)
-    nao: np.int64 = np.max(bmax) + 1
-
-    vh = sparse.coo_array((vh_gold, (np.squeeze(rowsRef), np.squeeze(columnsRef))),
-                          shape=(nao, nao),
-                          dtype=np.complex128).tocsr()
-    H_in = sparse.coo_array((H_gold, (np.squeeze(rowsRefH), np.squeeze(columnsRefH))),
-                            shape=(nao, nao),
-                            dtype=np.complex128).tocsr()
-    S_in = sparse.coo_array((S_gold, (np.squeeze(rowsRefS), np.squeeze(columnsRefS))),
-                            shape=(nao, nao),
-                            dtype=np.complex128).tocsr()
     data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
 
-    # Creating the mask for the energy range of the deleted W elements given by the reference solution
-    w_mask = np.ndarray(shape=(energy.shape[0], ), dtype=bool)
-
-    # wr_mask = np.sum(np.abs(wr_gold), axis=0) > 1e-10
-    # wl_mask = np.sum(np.abs(wl_gold), axis=0) > 1e-10
-    # wg_mask = np.sum(np.abs(wg_gold), axis=0) > 1e-10
-    # w_mask = np.logical_or(np.logical_or(wr_mask, wl_mask), wg_mask)
-
-    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns, bmax, bmin)
+    map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns,
+                                                                    bmax, bmin)
 
     # number of blocks
     nb = hamiltonian_obj.Bmin.shape[0]
+    #nbc = 2
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
-    bmax_mm = bmax[nbc - 1:nb:nbc]
+    bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
     map_diag_mm, map_upper_mm, map_lower_mm = change_format.map_block2sparse_alt(rows, columns, bmax_mm, bmin_mm)
@@ -238,19 +193,6 @@ if __name__ == "__main__":
         rows_l, columns_l, bmax_mm, bmin_mm
     )
 
-    assert np.allclose(rows_p, rows)
-    assert np.allclose(columns, columns_p)
-    assert np.allclose(rows_w, rows)
-    assert np.allclose(columns, columns_w)
-    assert np.allclose(rows_s, rows)
-    assert np.allclose(columns, columns_s)
-
-    pg_gold_shape_0 = np.empty(1, dtype=np.int32)
-    if rank == 0:
-        pg_gold_shape_0[0] = pg_gold.shape[0]
-    comm.Bcast(pg_gold_shape_0, root=0)
-    assert pg_gold_shape_0 == rows.shape[0]
-
     if rank == 0:
         # print size of data
         print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}", flush = True)
@@ -258,10 +200,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 8
+    w_worker_threads = 6
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 8
+    gf_mkl_threads_gpu = 1
+    gf_worker_threads = 6
 
     # physical parameter -----------
 
@@ -272,13 +215,13 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 2.0
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
     # Phyiscal Constants -----------
 
-    e = 1.6022e-19
+    e   = 1.6022e-19
     eps0 = 8.854e-12
     hbar = 1.0546e-34
 
@@ -286,33 +229,33 @@ if __name__ == "__main__":
     dEfL_EC = energy_fl - ECmin
     dEfR_EC = energy_fr - ECmin
 
-    # create the corresponding factor to mask
+    # create the corresponding factor to mask 
     # number of points to smooth the edges of the Green's Function
     dnp = 50
     factor_w = np.ones(ne)
-    #factor_w[ne - dnp - 1:ne] = (np.cos(np.pi * np.linspace(0, 1, dnp + 1)) + 1) / 2
+    #factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # create factor for the Green's Function
     factor_g = np.ones(ne)
-    #factor_g[ne - dnp - 1:ne] = (np.cos(np.pi * np.linspace(0, 1, dnp + 1)) + 1) / 2
-    #factor_g[0:dnp + 1] = (np.cos(np.pi * np.linspace(1, 0, dnp + 1)) + 1) / 2
+    #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
+    #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    V_sparse = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag=False, orb_uniform = True)
-    vh1d = cp.asarray(np.asarray(vh[rows, columns].reshape(-1)))
+    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
+    #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    vh1d = cp.asarray(np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1))))
 
-    assert np.allclose(V_sparse.toarray(), vh.toarray())
-    assert np.allclose(H_in.toarray(), hamiltonian_obj.Hamiltonian['H_4'].toarray())
-    assert np.allclose(S_in.toarray(), hamiltonian_obj.Overlap['H_4'].toarray())
-
-    # calculation of data distribution per rank---------------------------------
+     # calculation of data distribution per rank---------------------------------
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
+    remainders = data_shape % size
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
-    count[:, size - 1] += data_shape % size
+    count[0, :remainders[0]] += 1
+    count[1, :remainders[1]] += 1
+    # count[:, size-1] += data_shape % size
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
@@ -326,10 +269,11 @@ if __name__ == "__main__":
     factor_g_loc = factor_g[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
     # print rank distribution
-    print(f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", name, flush = True)
-
+    print(
+    f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", name, flush=True)
+    #exit(0)
     # adding checks
-    assert energy_loc.size == count[1, rank]
+    assert energy_loc.size == count[1,rank]
 
     # create needed data types--------------------------------------------------
 
@@ -644,6 +588,9 @@ if __name__ == "__main__":
     H00 = cp.asarray(H[:LBsize, :LBsize].toarray())
     H01 = cp.asarray(H[:LBsize, LBsize:2 * LBsize].toarray())
     H10 = cp.asarray(H[LBsize:2 * LBsize, :LBsize].toarray())
+
+    cp.cuda.get_current_stream().synchronize()
+    comm.Barrier()
 
     if rank == 0:
         time_start = -time.perf_counter()

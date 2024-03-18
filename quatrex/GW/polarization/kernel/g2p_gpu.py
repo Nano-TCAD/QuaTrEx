@@ -218,10 +218,21 @@ def g2p_fft_mpi_gpu_batched_nopr(
     ne = gg.shape[1]
     no = gg.shape[0]
 
-    batches = no // batch_size
-    if batches == 0:
-        batch_size = no
-        batches = 1
+    # Assuming FFT space is complexity is O(NlogN), where N is ne (above)
+    total_space = 2 * ne * int(np.log2(ne)) * no
+    # The following is an assumption for LUMI
+    max_energies = 64 * 8 * 64
+    max_orbitals = 500
+    max_space = 2 * max_energies * int(np.log2(max_energies)) * max_orbitals
+    batch_size = max_space
+    batches = int(np.ceil(total_space / max_space))
+    # print("Total space: ", total_space, ", Max space: ", max_space, ", Batches: ", batches, flush=True)
+
+
+    # batches = no // batch_size
+    # if batches == 0:
+    #     batch_size = no
+    #     batches = 1
 
     pg = cp.empty((no, ne), dtype=np.complex128)
     pl = cp.empty((no, ne), dtype=np.complex128)

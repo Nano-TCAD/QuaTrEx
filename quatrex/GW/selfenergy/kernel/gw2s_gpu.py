@@ -545,14 +545,24 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
     ne: int = gg.shape[1]
     no: int = gg.shape[0]
 
+    # Assuming FFT space is complexity is O(NlogN), where N is ne (above)
+    total_space = 2 * ne * int(np.log2(ne)) * no
+    # The following is an assumption for LUMI
+    max_energies = 64 * 8 * 64
+    max_orbitals = 500
+    max_space = 2 * max_energies * int(np.log2(max_energies)) * max_orbitals
+    batch_size = max_space
+    batches = int(np.ceil(total_space / max_space))
+    if rank == 0:
+        print("Total space: ", total_space, ", Max space: ", max_space, ", Batches: ", batches, flush=True)
 
-    # determine number of batches
-    # batch over no
-    batches = no // batch_size
-    if batches == 0:
-        # print("Too large batch size")
-        batch_size = no
-        batches = 1
+    # # determine number of batches
+    # # batch over no
+    # batches = no // batch_size
+    # if batches == 0:
+    #     # print("Too large batch size")
+    #     batch_size = no
+    #     batches = 1
 
     sg = cp.empty((no, ne), dtype=np.complex128)
     sl = cp.empty((no, ne), dtype=np.complex128)
