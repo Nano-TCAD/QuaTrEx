@@ -527,3 +527,90 @@ def obc_w_gpu_beynonly(dxr_sd: npt.NDArray[np.complex128],
     if np.isnan(cond_r) or sancho_flag:
         dxr_ed[:, :], dmr, dvh_ed[:, :], cond_r = sancho.open_boundary_conditions(mr_e[0], mr_e[1], mr_e[2], vh_e)
         dmr_ed -= dmr
+
+
+def obc_w_gpu_beynonly_2(dxr_sd: npt.NDArray[np.complex128],
+                          dxr_ed: npt.NDArray[np.complex128],
+                          dvh_sd: npt.NDArray[np.complex128],
+                          dvh_ed: npt.NDArray[np.complex128],
+                          dmr_sd: npt.NDArray[np.complex128],
+                          dmr_ed: npt.NDArray[np.complex128],
+                          mr_s0, mr_s1, mr_s2: npt.NDArray[np.complex128],
+                          mr_e0, mr_e1, mr_e2: npt.NDArray[np.complex128],
+                          vh_s: npt.NDArray[np.complex128],
+                          vh_e: npt.NDArray[np.complex128],
+                          mb00: npt.NDArray[np.complex128],
+                          mbNN: npt.NDArray[np.complex128],
+                          nbc: np.int32,
+                          NCpSC: np.int32 = 1,
+                          block_inv: bool = False,
+                          use_dace: bool = False,
+                          validate_dace: bool = False,
+                          ref_flag: bool = False,
+                          sancho_flag: bool = False):
+    
+    beyn = beyn_new_gpu.beyn_new_mix
+    if use_dace:
+        # from OBC.beyn_dace import beyn, contour_integral_dace, sort_k_dace
+        # contour_integral, _ = contour_integral_dace.load_precompiled_sdfg(f'.dacecache/{contour_integral_dace.name}')
+        # sortk, _ = sort_k_dace.load_precompiled_sdfg(f'.dacecache/{sort_k_dace.name}')
+        # beyn = partial(beyn, contour_integral=contour_integral, sortk=sortk)
+        from OBC.beyn_dace import beyn as beyn_dace
+        beyn = partial(beyn_dace, validate=validate_dace)
+
+    # limit for beyn
+    imag_lim = 1e-4
+    # todo find out what rr/R is
+    # (R only is against the style guide)
+    #todo, compare with matlab
+    rr = 1e4
+    # boundary correction calculations
+    cond_l = 0.0
+    cond_r = 0.0
+
+    dxr_sd_gpu = cp.empty_like(dxr_sd)
+    dxr_ed_gpu = cp.empty_like(dxr_ed)
+
+    # correction for first block
+    if not sancho_flag:
+        dmr, dxr_sd_gpu, cond_l, min_dEkL = beyn(nbc * NCpSC, cp.asarray(mb00), cp.asarray(mr_s0), cp.asarray(mr_s1), cp.asarray(mr_s2), imag_lim, rr, "L")
+        dxr_sd[:, :] = dxr_sd_gpu.get()
+        if not np.isnan(cond_l):
+            dmr_sd -= dmr.get()
+            dvh_sd[:, :] = mr_s2 @ dxr_sd @ vh_s
+
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_l, dxr_sd, dmr, min_dEkL = beyn_cpu.beyn_old(
+    #                                             mr_s[0],
+    #                                             mr_s[1],
+    #                                             mr_s[2],
+    #                                             imag_lim, rr, "L")
+
+    #     if not np.isnan(cond_l):
+    #         dmr_sd -= dmr
+    #         dvh_sd = mr_s[2] @ dxr_sd @ vh_s[0]
+
+    if np.isnan(cond_l) or sancho_flag:
+        dxr_sd[:, :], dmr, dvh_sd[:, :], cond_l = sancho.open_boundary_conditions(mr_s0, mr_s2, mr_s1, vh_s)
+        dmr_sd -= dmr
+    # correction for last block
+    if not sancho_flag:
+        dmr, dxr_ed_gpu, cond_r, min_dEkR = beyn(nbc * NCpSC, cp.asarray(mbNN), cp.asarray(mr_e0), cp.asarray(mr_e1), cp.asarray(mr_e2), imag_lim, rr, "R")
+        dxr_ed[:, :] = dxr_ed_gpu.get()
+        if not np.isnan(cond_r):
+            dmr_ed -= dmr.get()
+            dvh_ed[:, :] = mr_e1 @ dxr_ed @ vh_e
+    # old wrong version
+    # if not sancho_flag:
+    #     _, cond_r, dxr_ed, dmr, min_dEkR = beyn_cpu.beyn_old(
+    #                                             mr_e[0],
+    #                                             mr_e[1],
+    #                                             mr_e[2],
+    #                                             imag_lim, rr, "R")
+    #     if not np.isnan(cond_r):
+    #         dmr_ed -= dmr
+    #         dvh_ed = mr_e[1] @ dxr_ed @ vh_e[1]
+    if np.isnan(cond_r) or sancho_flag:
+        dxr_ed[:, :], dmr, dvh_ed[:, :], cond_r = sancho.open_boundary_conditions(mr_e0, mr_e1, mr_e2, vh_e)
+        dmr_ed -= dmr

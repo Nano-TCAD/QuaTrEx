@@ -39,7 +39,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
                 out[bid, j - scol] = data[i]
 
 
-def spgemm(A, B, rows: int = 2048):
+def spgemm(A, B, rows: int = 512):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -51,7 +51,7 @@ def spgemm(A, B, rows: int = 2048):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 2048):
+def spgemm_direct(A, B, C, rows: int = 512):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -714,67 +714,67 @@ def calc_W_pool_mpi_split(
             )
 
     else:
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        #     # results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-        #     executor.map(
-        #         obc_w_gpu.obc_w_gpu_beynonly,
-        #         dxr_sd,
-        #         dxr_ed,
-        #         dvh_sd,
-        #         dvh_ed,
-        #         dmr_sd,
-        #         dmr_ed,
-        #         mr_s,
-        #         mr_e,
-        #         vh_s,
-        #         vh_e,
-        #         mb00,
-        #         mbNN,
-        #         repeat(nbc),
-        #         repeat(NCpSC),
-        #         repeat(block_inv),
-        #         repeat(use_dace),
-        #         repeat(validate_dace),
-        #         repeat(ref_flag),
-        #     )
-
         comm.Barrier()
         start_beyn_w = time.perf_counter()
 
-        imag_lim = 1e-4
-        R = 1e4
-        matrix_blocks_left = cp.asarray(mb00)
-        # M00_left = cp.empty((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-        # M01_left = cp.empty_like(M00_left)
-        # M10_left = cp.empty_like(M00_left)
-        # for ie in range(ne):
-        #     M00_left[ie].set(mr_s[ie][0])
-        #     M01_left[ie].set(mr_s[ie][1])
-        #     M10_left[ie].set(mr_s[ie][2])
-        M00_left = cp.asarray(mr_s0)
-        M01_left = cp.asarray(mr_s1)
-        M10_left = cp.asarray(mr_s2)
-        dmr, dxr_sd_gpu, condL, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
-        assert not any(np.isnan(cond) for cond in condL)
-        dxr_sd_gpu.get(out=dxr_sd)
-        dmr_sd -= dmr.get()
-        (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s)).get(out=dvh_sd)
-        matrix_blocks_right = cp.asarray(mbNN)
-        # M00_right = cp.empty((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-        # M01_right = cp.empty_like(M00_right)
-        # M10_right = cp.empty_like(M00_right)
-        # for ie in range(ne):
-        #     M00_right[ie].set(mr_e[ie][0])
-        #     M01_right[ie].set(mr_e[ie][1])
-        #     M10_right[ie].set(mr_e[ie][2])
-        M00_right = cp.asarray(mr_e0)
-        M01_right = cp.asarray(mr_e1)
-        M10_right = cp.asarray(mr_e2)
-        dmr, dxr_ed_gpu, condR, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
-        assert not any(np.isnan(cond) for cond in condR)
-        dxr_ed_gpu.get(out=dxr_ed)
-        dmr_ed -= dmr.get()
-        (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            # results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
+            executor.map(
+                obc_w_gpu.obc_w_gpu_beynonly_2,
+                dxr_sd,
+                dxr_ed,
+                dvh_sd,
+                dvh_ed,
+                dmr_sd,
+                dmr_ed,
+                mr_s0, mr_s1, mr_s2,
+                mr_e0, mr_e1, mr_e2,
+                vh_s,
+                vh_e,
+                mb00,
+                mbNN,
+                repeat(nbc),
+                repeat(NCpSC),
+                repeat(block_inv),
+                repeat(use_dace),
+                repeat(validate_dace),
+                repeat(ref_flag),
+            )
+
+        # imag_lim = 1e-4
+        # R = 1e4
+        # matrix_blocks_left = cp.asarray(mb00)
+        # # M00_left = cp.empty((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
+        # # M01_left = cp.empty_like(M00_left)
+        # # M10_left = cp.empty_like(M00_left)
+        # # for ie in range(ne):
+        # #     M00_left[ie].set(mr_s[ie][0])
+        # #     M01_left[ie].set(mr_s[ie][1])
+        # #     M10_left[ie].set(mr_s[ie][2])
+        # M00_left = cp.asarray(mr_s0)
+        # M01_left = cp.asarray(mr_s1)
+        # M10_left = cp.asarray(mr_s2)
+        # dmr, dxr_sd_gpu, condL, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+        # assert not any(np.isnan(cond) for cond in condL)
+        # dxr_sd_gpu.get(out=dxr_sd)
+        # dmr_sd -= dmr.get()
+        # (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s)).get(out=dvh_sd)
+        # matrix_blocks_right = cp.asarray(mbNN)
+        # # M00_right = cp.empty((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
+        # # M01_right = cp.empty_like(M00_right)
+        # # M10_right = cp.empty_like(M00_right)
+        # # for ie in range(ne):
+        # #     M00_right[ie].set(mr_e[ie][0])
+        # #     M01_right[ie].set(mr_e[ie][1])
+        # #     M10_right[ie].set(mr_e[ie][2])
+        # M00_right = cp.asarray(mr_e0)
+        # M01_right = cp.asarray(mr_e1)
+        # M10_right = cp.asarray(mr_e2)
+        # dmr, dxr_ed_gpu, condR, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+        # assert not any(np.isnan(cond) for cond in condR)
+        # dxr_ed_gpu.get(out=dxr_ed)
+        # dmr_ed -= dmr.get()
+        # (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
 
         comm.Barrier()
         finish_beyn_w = time.perf_counter()
@@ -948,7 +948,7 @@ def calc_W_pool_mpi_split(
 
     input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    energy_batchsize = 4
+    energy_batchsize = 2
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     for ie in energy_batch:

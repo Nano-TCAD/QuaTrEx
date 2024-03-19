@@ -247,29 +247,29 @@ def calc_GF_pool_mpi_split_memopt(
         print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
         time_OBC = -time.perf_counter()
                 
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
-    #        fL,
-    #        fR,
-    #        SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
-    #        repeat(bmin),
-    #        repeat(bmax),
-    #        repeat(NCpSC))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
+           fL,
+           fR,
+           SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
+           repeat(bmin),
+           repeat(bmax),
+           repeat(NCpSC))
     
-    imag_lim = 5e-4
-    R = 1000
-    SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
-    assert not any(np.isnan(cond) for cond in condL)
-    GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
-    (1j * fL * GammaL).get(out=SigLBL)
-    (1j * (fL - 1) * GammaL).get(out=SigGBL)
-    SigRBL_gpu.get(out=SigRBL)
-    SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
-    assert not any(np.isnan(cond) for cond in condR)
-    GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
-    (1j * fR * GammaR).get(out=SigLBR)
-    (1j * (fR - 1) * GammaR).get(out=SigGBR)
-    SigRBR_gpu.get(out=SigRBR)
+    # imag_lim = 5e-4
+    # R = 1000
+    # SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    # assert not any(np.isnan(cond) for cond in condL)
+    # GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
+    # (1j * fL * GammaL).get(out=SigLBL)
+    # (1j * (fL - 1) * GammaL).get(out=SigGBL)
+    # SigRBL_gpu.get(out=SigRBL)
+    # SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    # assert not any(np.isnan(cond) for cond in condR)
+    # GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
+    # (1j * fR * GammaR).get(out=SigLBR)
+    # (1j * (fR - 1) * GammaR).get(out=SigGBR)
+    # SigRBR_gpu.get(out=SigRBR)
     
     comm.Barrier()
     if rank == 0:
