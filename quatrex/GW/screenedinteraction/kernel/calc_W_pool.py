@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse
 import mkl
 
-from utils.matrix_creation import initialize_block_G, mat_assembly_fullG
+from utilities.matrix_creation import initialize_block_G, mat_assembly_fullG
 from GreensFunction.fermi import fermi_function
 from block_tri_solvers.rgf_W import rgf_W
 from operator import mul

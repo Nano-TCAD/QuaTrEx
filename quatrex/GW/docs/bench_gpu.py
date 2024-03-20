@@ -14,7 +14,7 @@ parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
 from GW.polarization.initialization import gf_init
-from quatrex.utils import change_format
+from quatrex.utilities import change_format
 from GW.polarization.kernel import g2p_gpu
 
 if __name__ == "__main__":

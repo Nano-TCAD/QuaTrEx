@@ -31,10 +31,10 @@ from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V
 from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
-from quatrex.utils import change_format
-from quatrex.utils import utils_gpu
-from quatrex.utils.bsr import bsr_matrix
-from quatrex.utils.matrix_creation import get_number_connected_blocks
+from quatrex.utilities import change_format
+from quatrex.utilities import utils_gpu
+from quatrex.utilities.bsr import bsr_matrix
+from quatrex.utilities.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
     from quatrex.GW.polarization.kernel import g2p_gpu

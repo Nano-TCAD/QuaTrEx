@@ -8,7 +8,7 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
+from quatrex.utilities.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 
 def self_energy_preprocess(SigL: npt.ArrayLike, SigG: npt.ArrayLike, SigR: npt.ArrayLike, SigL_ephn: npt.ArrayLike,

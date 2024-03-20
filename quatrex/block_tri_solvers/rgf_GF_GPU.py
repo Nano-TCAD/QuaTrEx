@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import sparse
-from quatrex.utils.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
+from quatrex.utilities.matrix_creation import create_matrices_H, initialize_block_G, mat_assembly_fullG
 from quatrex.OBC.beyn_new import beyn
 from quatrex.OBC.sancho import open_boundary_conditions
 from functools import partial

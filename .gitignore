@@ -150,6 +150,8 @@ gmon.out
 samples/testing.ipynb
 tests/test/*.pkl
 tests/test/generator_testing.ipynb
+*testing*
+
 
 # notes
 notes.ipynb

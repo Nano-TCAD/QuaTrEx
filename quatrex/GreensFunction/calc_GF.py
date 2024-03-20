@@ -3,7 +3,7 @@
 import numpy as np
 from scipy import sparse
 
-from utils.matrix_creation import initialize_block_G, mat_assembly_fullG
+from utilities.matrix_creation import initialize_block_G, mat_assembly_fullG
 from GreensFunction.fermi import fermi_function
 from block_tri_solvers.rgf_GF import *
 

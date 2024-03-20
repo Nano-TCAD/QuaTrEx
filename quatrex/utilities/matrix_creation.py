@@ -8,7 +8,7 @@ import numpy.typing as npt
 import typing
 
 #from quatrex.OMEN_structure_matrices import OMENHamClass
-from quatrex.utils import change_format
+from quatrex.utilities import change_format
 
 
 class NumpyArrayEncoder(JSONEncoder):

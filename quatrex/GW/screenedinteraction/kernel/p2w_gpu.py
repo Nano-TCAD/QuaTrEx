@@ -9,10 +9,10 @@ from scipy import sparse
 from cupyx.scipy import sparse as cusparse
 import mkl
 import typing
-from quatrex.utils import change_format
-from quatrex.utils import change_format_gpu
-from quatrex.utils import matrix_creation
-from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
+from quatrex.utilities import change_format
+from quatrex.utilities import change_format_gpu
+from quatrex.utilities import matrix_creation
+from quatrex.utilities.matrix_creation import homogenize_matrix_Rnosym, \
                                             extract_small_matrix_blocks, \
                                             initialize_block_sigma
 #from quatrex.utils.matrix_creation_gpu import initialize_block_sigma_batched

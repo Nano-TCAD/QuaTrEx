@@ -1,6 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-from quatrex.utils import change_format
+from quatrex.utilities import change_format
 from quatrex.bandstructure.calc_contact_bs import calc_bandstructure, calc_bandstructure_interpol, calc_bandstructure_mpi, calc_bandstructure_mpi_interpol
 from quatrex.OMEN_structure_matrices import OMENHamClass
 import numpy.typing as npt

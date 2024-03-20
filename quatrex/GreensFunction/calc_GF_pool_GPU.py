@@ -10,8 +10,8 @@ import numpy.typing as npt
 from scipy import sparse
 import mkl
 
-from quatrex.utils import change_format
-from quatrex.utils.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
+from quatrex.utilities import change_format
+from quatrex.utilities.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
                                             initialize_block_sigma, \
                                             mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks

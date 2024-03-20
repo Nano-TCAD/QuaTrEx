@@ -8,8 +8,8 @@ import matplotlib.pylab as plt
 from scipy.interpolate import griddata
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
-from quatrex.utils.read_utils import *
-from quatrex.utils.matrix_creation import extract_small_matrix_blocks, homogenize_matrix_Rnosym
+from quatrex.utilities.read_utils import *
+from quatrex.utilities.matrix_creation import extract_small_matrix_blocks, homogenize_matrix_Rnosym
 
 
 def matlab_fread(fid, nelements, dtype):
@@ -50,7 +50,7 @@ class Hamiltonian:
     kp = None
     
     
-    def __init__(self,sim_folder, no_orb, Nk, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', rank = 0):
+    def __init__(self,sim_folder, no_orb, Nk, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize=False, rank = 0):
         if(not rank):
             self.no_orb = no_orb # Number orbitals per atom type
             self.sim_folder = sim_folder

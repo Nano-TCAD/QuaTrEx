@@ -29,10 +29,10 @@ from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices.OMENHamClass_mod import Matrices
-from quatrex.utils import change_format
-from quatrex.utils import utils_gpu
-from quatrex.utils.bsr import bsr_matrix
-from quatrex.utils.matrix_creation import get_number_connected_blocks
+from quatrex.utilities import change_format
+from quatrex.utilities import utils_gpu
+from quatrex.utilities.bsr import bsr_matrix
+from quatrex.utilities.matrix_creation import get_number_connected_blocks
 from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     nkpts:      np.int32 = np.int32(np.prod(num_kpoints))
     ne:         np.int32 = np.int32(energy.shape[0])
     no:         np.int32 = np.int32(columns.shape[0])
-    pre_factor: np.complex128 = -1.0j * denergy / (np.pi)
+    pre_factor: np.complex128 = -1.0j * denergy / (np.pi)  # What about k-points? Should also be divided by nkpts?
     nao:        np.int64 = np.max(bmax) + 1
 
     # Combine k and E

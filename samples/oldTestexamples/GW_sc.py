@@ -27,8 +27,8 @@ from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
 from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
-from quatrex.utils import change_format
-from quatrex.utils import utils_gpu
+from quatrex.utilities import change_format
+from quatrex.utilities import utils_gpu
 
 if utils_gpu.gpu_avail():
     from quatrex.GW.polarization.kernel import g2p_gpu

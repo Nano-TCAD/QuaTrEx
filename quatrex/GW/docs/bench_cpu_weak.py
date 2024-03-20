@@ -13,7 +13,7 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", ".."))
 sys.path.append(parent_path)
 
-from quatrex.utils import change_format
+from quatrex.utilities import change_format
 from GW.polarization.kernel import g2p_cpu
 from GW.selfenergy.kernel import gw2s_cpu
 from GW.polarization.initialization import gf_init

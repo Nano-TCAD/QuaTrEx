@@ -5,7 +5,7 @@ import cupyx as cpx
 import typing
 from scipy import sparse
 
-from quatrex.utils.bsr import bsr_matrix
+from quatrex.utilities.bsr import bsr_matrix
 
 def sparse2block_energy_gpu(S, out_diag: npt.NDArray[np.complex128],
                         out_upper: npt.NDArray[np.complex128], out_lower: npt.NDArray[np.complex128], bmax: np.ndarray,

@@ -1,13 +1,14 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 """ Functions to calculate the self-energies on the cpu. See README for more information. """
 
-from quatrex.utils import linalg_cpu
+from quatrex.utilities import linalg_cpu
 import numpy as np
 import numpy.typing as npt
 import typing
 import sys
 import os
 import numba
+from gpaw.response import HilbertTransform
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
@@ -706,13 +707,16 @@ def gw2s_fft_cpu_kpoint(
     disp: npt.NDArray[np.int32],
     count: npt.NDArray[np.int32]
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
-    """Calculate the self energy with fft on the cpu.
-        The inputs are the pre factor, the Green's Functions
-        and the screened interactions.
-        Takes into account the energy grid cutoff
-        MPI version, needs additionally the transposed as a input.
-        
-        Includes k-points. Need prefactor for k-points...
+    """
+    This is an attempt at a simplified version of the self-energy calculation including k-points. Currently underway...
+
+    Trying to use the Hilbert transform from GPAW.
+
+    Calculate the self energy with fft on the cpu.
+    
+    Takes into account the energy grid cutoff
+    
+    Includes k-points. Need prefactor for k-points...
 
     Args:
         pre_factor      (np.complex128): pre_factor, multiplied at the end (here it is 1j * dE/(2*pi))

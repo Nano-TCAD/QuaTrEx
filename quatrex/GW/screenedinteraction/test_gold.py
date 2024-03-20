@@ -16,7 +16,7 @@ from GW.gold_solution import read_solution
 from GW.screenedinteraction.kernel import p2w_cpu
 # todo if gpu avail
 from GW.screenedinteraction.kernel import p2w_gpu
-from quatrex.utils import change_format
+from quatrex.utilities import change_format
 from OMEN_structure_matrices import OMENHamClass
 from kernel import calc_W_pool
 
