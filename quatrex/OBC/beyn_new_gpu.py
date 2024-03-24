@@ -753,12 +753,16 @@ def beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iter
     T = cp.empty_like(M00)
     min_dEk = np.zeros(batch_size, dtype=np.float64)
     for i in range(batch_size):
-        ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
-        T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
-        ind = np.where(abs(dEk_dk))
-        if len(ind[0]) > 0:
-            min_dEk[i] = np.min(abs(dEk_dk[ind]))
+        if kL[i] is not None:
+            ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
+            T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
+            ind = np.where(abs(dEk_dk))
+            if len(ind[0]) > 0:
+                min_dEk[i] = np.min(abs(dEk_dk[ind]))
+            else:
+                min_dEk[i] = 1e8
         else:
+            T[i] = cp.identity(M00.shape[1])
             min_dEk[i] = 1e8
 
     gR = cp.linalg.inv(M00 + second @ T)

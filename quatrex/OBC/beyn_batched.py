@@ -475,13 +475,23 @@ def beyn_new_batched_gpu_3(factor: int,
 
         P0 = P0C1 + P0C2
         LP0 = cp.asnumpy(P0@YL[idx])
-        LV, LS, LW = np.linalg.svd(LP0,  full_matrices=False)
-        Lind = np.where(np.abs(LS) > eps_lim)[0]
-        if len(Lind) != N:
+        try:
+            LV, LS, LW = np.linalg.svd(LP0,  full_matrices=False)
+            Lind = np.where(np.abs(LS) > eps_lim)[0]
+            len_Lind = len(Lind)
+        except:
+            len_Lind = N
+
+        if len_Lind != N:
             RP0 = cp.asnumpy(YR[idx]@P0)
-            RV, RS, RW = np.linalg.svd(RP0, full_matrices=False)
-            Rind = np.where(np.abs(RS) > eps_lim)[0]
-            len_Rind = len(Rind)
+            try:
+                # print("Running RPO = YR @ (P0C1 + P0C2)", flush=True)
+                # raise np.linalg.LinAlgError
+                RV, RS, RW = np.linalg.svd(RP0, full_matrices=False)
+                Rind = np.where(np.abs(RS) > eps_lim)[0]
+                len_Rind = len(Rind)
+            except:
+                len_Rind = N
         else:
             len_Rind = N
         
@@ -499,6 +509,8 @@ def beyn_new_batched_gpu_3(factor: int,
             RP0 = cp.asnumpy(YR[idx]@P0)
             RP1 = cp.asnumpy(YR[idx]@P1)
 
+            # print("Running LPO = (P0C1 + P0C3) @ YL", flush=True)
+            # raise np.linalg.LinAlgError
 
             LV, LS, LW = np.linalg.svd(LP0, full_matrices=False)
             Lind = np.where(np.abs(LS) > eps_lim)[0]
@@ -552,9 +564,13 @@ def beyn_new_batched_gpu_3(factor: int,
     phiR = [None for _ in range(batch_size)]
     for i, f in enumerate(futures):
         # start_i = time.time()
-        LV, Lu, Llambda, RW, Ru, Rlambda = f.result()
-        # mid_i = time.time()
-        kL[i], kR[i], phiL[i], phiR[i] = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, side)
+        try:
+            LV, Lu, Llambda, RW, Ru, Rlambda = f.result()
+            # mid_i = time.time()
+            kL[i], kR[i], phiL[i], phiR[i] = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, side)
+        except:
+            # print(f"Failed for {i}th svd-eig", flush=True)
+            cond[i] = np.nan
         # finish_i = time.time()
         # print(f"Time for {i}th svd-eig: {mid_i - start_i}, phi: {finish_i - mid_i}", flush=True)
     # finish = time.time()

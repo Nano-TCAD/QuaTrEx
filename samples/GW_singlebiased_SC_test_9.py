@@ -50,26 +50,41 @@ if __name__ == "__main__":
     comm = MPI.COMM_WORLD
     size = comm.Get_size()
     rank = comm.Get_rank()
-
-    if rank == 0:
-        print(f"Started main at : {time.asctime()}", flush=True)
     name = MPI.Get_processor_name()
 
-    if utils_gpu.gpu_avail(rank):
-        try:
-            from quatrex.GreensFunction import calc_GF_pool_GPU_memopt_2
-            from quatrex.GW.screenedinteraction.kernel import p2w_gpu_improved_2
-            from quatrex.GW.polarization.kernel import g2p_gpu
-            from quatrex.GW.selfenergy.kernel import gw2s_gpu
-        except ImportError:
-            if rank == 0:
-                print("GPU import error, make sure you have the right GPU driver and CUDA version installed", flush=True)
+    print(f"Rank {rank} on {name} started main at : {time.asctime()}", flush=True)
+
+    if rank == 0:
+        import_start = time.perf_counter()
+
+    comm.Barrier()
+
+    for i in range(8):
+        if rank % 8 == i:
+            print(f"Rank {rank} on {name} importing GPU-related submodules at {time.asctime()} ...", flush=True)
+            if utils_gpu.gpu_avail(rank):
+                try:
+                    from quatrex.GreensFunction import calc_GF_pool_GPU_memopt_2
+                    from quatrex.GW.screenedinteraction.kernel import p2w_gpu_improved_2
+                    from quatrex.GW.polarization.kernel import g2p_gpu
+                    from quatrex.GW.selfenergy.kernel import gw2s_gpu
+                except ImportError:
+                    if rank == 0:
+                        print("GPU import error, make sure you have the right GPU driver and CUDA version installed", flush=True)
+            print(f"Rank {rank} on {name} done importing GPU-related submodules at {time.asctime()}", flush=True)
+        comm.Barrier()
+    
+    if rank == 0:
+        import_finish = time.perf_counter()
+        print(f"Finished importing GPU-related submodules at : {time.asctime()} ({import_finish - import_start} seconds)", flush=True)
+
 
     # assume every rank has enough memory to read the initial data
     # path to solution
     # scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     scratch_path = "/scratch/project_465000929/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire/")
+    # solution_path = os.path.join(scratch_path, "Si_Nanowire/")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire_18/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_sinwNBC1_0V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "data_Vh_CF_SINW_0v.mat")
@@ -104,7 +119,8 @@ if __name__ == "__main__":
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-5, 1, 64 * size, endpoint=True, dtype=float)  # Energy Vector
+    # energy = np.linspace(-5, 1, 61 * size, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-50, 40, 32 * size, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -449,6 +465,8 @@ if __name__ == "__main__":
     sg_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
     sl_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = cp.zeros((count[1,rank], nao), dtype=np.complex128)
+    gg_diag_band = cp.empty((count[1, rank], nao), dtype=np.complex128)
+    gl_diag_band = cp.empty((count[1, rank], nao), dtype=np.complex128)
 
     # # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
@@ -473,9 +491,18 @@ if __name__ == "__main__":
     # wg_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
     # wl_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
     # wr_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    wg_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
-    wl_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
-    wr_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    # wg_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    # wl_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    # wr_p2w = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    wg_p2w = gg_h2g
+    wl_p2w = gl_h2g
+    wr_p2w = gr_h2g
+
+    pg_g2p = cp.empty((count[0, rank], ne), dtype=np.complex128)
+    pl_g2p = cp.empty((count[0, rank], ne), dtype=np.complex128)
+    sg_gw2s = pg_g2p
+    sl_gw2s = pl_g2p
+    sr_gw2s = cp.empty((count[0, rank], ne), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
     mem_s = 0.75
@@ -528,12 +555,17 @@ if __name__ == "__main__":
         pr_p2w = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
         wg_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
         wl_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
-        wr_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
-        wg_transposed_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
-        wl_transposed_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
-        sg_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
-        sl_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
-        sr_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        # wr_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        # wg_transposed_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        # wl_transposed_gw2s = cp.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
+        wg_transposed_gw2s = gr_g2p
+        wl_transposed_gw2s = gl_transposed_g2p
+        # sg_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        # sl_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        # sr_h2g_buf = cp.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        sg_h2g_buf = pg_p2w
+        sl_h2g_buf = pl_p2w
+        sr_h2g_buf = pr_p2w
     else:
         gg_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
         gl_g2p = np.empty((count[0, rank], data_shape[1]), dtype=np.complex128, order="C")
@@ -685,6 +717,10 @@ if __name__ == "__main__":
             NCpSC=NCpSC,
             mkl_threads=gf_mkl_threads,
             worker_num=gf_worker_threads)
+        
+        # Extract diagonal bands
+        gg_diag_band[:] = gg_h2g[:, rows == columns]
+        gl_diag_band[:] = gl_h2g[:, rows == columns]
 
         comm.Barrier()
         start_g2p_comm = time.perf_counter()
@@ -710,7 +746,13 @@ if __name__ == "__main__":
         start_p_computation = time.perf_counter()
 
         # calculate the polarization at every rank----------------------------------
-        pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+        # pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+        #                                     pre_factor,
+        #                                     gg_g2p,
+        #                                     gl_g2p,
+        #                                     gl_transposed_g2p)
+        
+        g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(pg_g2p, pl_g2p,
                                             pre_factor,
                                             gg_g2p,
                                             gl_g2p,
@@ -889,7 +931,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_g2p(wg_p2w, wg_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
         alltoall_g2p(wl_p2w, wl_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
-        alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
         alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
         alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
 
@@ -902,7 +944,12 @@ if __name__ == "__main__":
         start_s_computation = time.perf_counter()
 
         # tod optimize and not load two time green's function to gpu and do twice the fft
-        sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
+        # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
+        #                                                                 wg_gw2s, wl_gw2s,
+        #                                                                 wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+
+        gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(sg_gw2s, sl_gw2s, sr_gw2s,
+            -pre_factor / 2, gg_g2p, gl_g2p,
                                                                         wg_gw2s, wl_gw2s,
                                                                         wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
         
@@ -944,9 +991,9 @@ if __name__ == "__main__":
         
         start_sephn = time.perf_counter()
 
-        # Extract diagonal bands
-        gg_diag_band = gg_h2g[:, rows == columns]
-        gl_diag_band = gl_h2g[:, rows == columns]
+        # # Extract diagonal bands
+        # gg_diag_band = gg_h2g[:, rows == columns]
+        # gl_diag_band = gl_h2g[:, rows == columns]
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!

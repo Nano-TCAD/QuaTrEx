@@ -42,10 +42,29 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
         num_threads = cpx.jit.blockDim.x
         sidx = indptr[row]
         eidx = indptr[row + 1]
-        for i in range(sidx + tid, eidx, num_threads):
+        block_size = ecol - scol
+
+        buf = cpx.jit.shared_memory(cp.complex128, 832)
+        for i in range(tid, block_size, num_threads):
+            buf[i] = 0
+        cpx.jit.syncthreads()
+
+        # for i in range(sidx + tid, eidx, num_threads):
+        #     j = indices[i]
+        #     if j >= scol and j < ecol:
+        #         out[bid, j - scol] = data[i]
+        # cpx.jit.syncthreads()
+
+        i = sidx + tid
+        while i < eidx:
             j = indices[i]
             if j >= scol and j < ecol:
-                out[bid, j - scol] = data[i]
+                buf[j - scol] = data[i]
+            i += num_threads
+        cpx.jit.syncthreads()
+
+        for i in range(tid, block_size, num_threads):
+            out[bid, i] = buf[i]
 
 
 def spgemm(A, B, rows: int = 8192):
@@ -157,11 +176,17 @@ def calc_W_pool_mpi_split(
 
     """
 
+    mempool = cp.get_default_memory_pool()
+
     comm.Barrier()
     if rank == 0:
         time_pre_OBC = -time.perf_counter()
+        print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        print(f"Total bytes: {mempool.total_bytes()}", flush=True)
 
     # --- Preprocessing ------------------------------------------------
+
+    input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
     # Number of energy points.
     ne = energy.shape[0]
@@ -190,552 +215,6 @@ def calc_W_pool_mpi_split(
     lb_start_mm = lb_vec_mm[0]
     lb_end_mm = lb_vec_mm[nb_mm - 1]
 
-    # Pinned memory buffers for the OBC.
-    dxr_sd = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    dxr_ed = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    dvh_sd = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    dvh_ed = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    dmr_sd = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    dmr_ed = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    dlg_sd = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    dlg_ed = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    dll_sd = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    dll_ed = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    condl = np.zeros((ne), dtype=np.float64)
-    condr = np.zeros((ne), dtype=np.float64)
-
-    # Dense buffers for the OBC matmul.
-    # mr_s = np.ndarray((ne,), dtype=object)
-    # mr_e = np.ndarray((ne,), dtype=object)
-    # lg_s = np.ndarray((ne,), dtype=object)
-    # lg_e = np.ndarray((ne,), dtype=object)
-    # ll_s = np.ndarray((ne,), dtype=object)
-    # ll_e = np.ndarray((ne,), dtype=object)
-    mr_s0 = cpx.empty_like_pinned(dmr_sd)
-    mr_s1 = cpx.empty_like_pinned(dmr_sd)
-    mr_s2 = cpx.empty_like_pinned(dmr_sd)
-    mr_e0 = cpx.empty_like_pinned(dmr_ed)
-    mr_e1 = cpx.empty_like_pinned(dmr_ed)
-    mr_e2 = cpx.empty_like_pinned(dmr_ed)
-    lg_s0 = cpx.empty_like_pinned(dlg_sd)
-    lg_s1 = cpx.empty_like_pinned(dlg_sd)
-    lg_e0 = cpx.empty_like_pinned(dlg_ed)
-    lg_e1 = cpx.empty_like_pinned(dlg_ed)
-    ll_s0 = cpx.empty_like_pinned(dll_sd)
-    ll_s1 = cpx.empty_like_pinned(dll_sd)
-    ll_e0 = cpx.empty_like_pinned(dll_ed)
-    ll_e1 = cpx.empty_like_pinned(dll_ed)
-    vh_s = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    vh_e = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    mb00 = np.ndarray(
-        (
-            ne,
-            2 * nbc * NCpSC + 1,
-            lb_start_mm // (nbc * NCpSC),
-            lb_start_mm // (nbc * NCpSC),
-        ),
-        dtype=np.complex128,
-    )
-    mbNN = np.ndarray(
-        (
-            ne,
-            2 * nbc * NCpSC + 1,
-            lb_start_mm // (nbc * NCpSC),
-            lb_start_mm // (nbc * NCpSC),
-        ),
-        dtype=np.complex128,
-    )
-
-    # dvh_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # dvh_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    # dmr_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # dmr_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    # dlg_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # dlg_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-    # dll_sd_ref = cpx.zeros_pinned((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # dll_ed_ref = cpx.zeros_pinned((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-
-    # # Dense buffers for the OBC matmul.
-    # mr_s_ref = np.ndarray((ne,), dtype=object)
-    # mr_e_ref = np.ndarray((ne,), dtype=object)
-    # lg_s_ref = np.ndarray((ne,), dtype=object)
-    # lg_e_ref = np.ndarray((ne,), dtype=object)
-    # ll_s_ref = np.ndarray((ne,), dtype=object)
-    # ll_e_ref = np.ndarray((ne,), dtype=object)
-    # vh_s_ref = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # vh_e_ref = np.ndarray((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-    # mb00_ref = np.ndarray(
-    #     (
-    #         ne,
-    #         2 * nbc * NCpSC + 1,
-    #         lb_start_mm // (nbc * NCpSC),
-    #         lb_start_mm // (nbc * NCpSC),
-    #     ),
-    #     dtype=np.complex128,
-    # )
-    # mbNN_ref = np.ndarray(
-    #     (
-    #         ne,
-    #         2 * nbc * NCpSC + 1,
-    #         lb_start_mm // (nbc * NCpSC),
-    #         lb_start_mm // (nbc * NCpSC),
-    #     ),
-    #     dtype=np.complex128,
-    # )
-
-    # for ie in range(ne):
-    #     # Anti-Hermitian symmetrizing of PL and PG
-    #     # pl[ie] = 1j * np.imag(pl[ie])
-    #     pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
-
-    #     # pg[ie] = 1j * np.imag(pg[ie])
-    #     pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
-
-    #     # PR has to be derived from PL and PG and then has to be symmetrized
-    #     pr[ie] = (pg[ie] - pl[ie]) / 2
-    #     # pr[ie] = (pr[ie] + pr[ie].T) / 2
-    #     if homogenize:
-    #         (PR00, PR01, PR10, _) = extract_small_matrix_blocks(
-    #             pr[ie][bmin[0] : bmax[0] + 1, bmin[0] : bmax[0] + 1],
-    #             pr[ie][bmin[0] : bmax[0] + 1, bmin[1] : bmax[1] + 1],
-    #             pr[ie][bmin[1] : bmax[1] + 1, bmin[0] : bmax[0] + 1],
-    #             NCpSC,
-    #             "L",
-    #         )
-    #         pr[ie] = homogenize_matrix_Rnosym(PR00, PR01, PR10, len(bmax))
-    #         (PL00, PL01, PL10, _) = extract_small_matrix_blocks(
-    #             pl[ie][bmin[0] : bmax[0] + 1, bmin[0] : bmax[0] + 1],
-    #             pl[ie][bmin[0] : bmax[0] + 1, bmin[1] : bmax[1] + 1],
-    #             pl[ie][bmin[1] : bmax[1] + 1, bmin[0] : bmax[0] + 1],
-    #             NCpSC,
-    #             "L",
-    #         )
-    #         pl[ie] = homogenize_matrix_Rnosym(PL00, PL01, PL10, len(bmax))
-    #         (PG00, PG01, PG10, _) = extract_small_matrix_blocks(
-    #             pg[ie][bmin[0] : bmax[0] + 1, bmin[0] : bmax[0] + 1],
-    #             pg[ie][bmin[0] : bmax[0] + 1, bmin[1] : bmax[1] + 1],
-    #             pg[ie][bmin[1] : bmax[1] + 1, bmin[0] : bmax[0] + 1],
-    #             NCpSC,
-    #             "L",
-    #         )
-    #         pg[ie] = homogenize_matrix_Rnosym(PG00, PG01, PG10, len(bmax))
-
-    # Create a process pool with num_worker workers
-    comm.Barrier()
-    if rank == 0:
-        time_pre_OBC += time.perf_counter()
-        print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush=True)
-        time_OBC = -time.perf_counter()
-
-    # --- Boundary conditions ------------------------------------------
-
-    ref_flag = False
-    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-    #     #results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-    #     executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-    #                            pg, pl, pr,
-    #                            repeat(bmax), repeat(bmin),
-    #                            dvh_sd, dvh_ed,
-    #                            dmr_sd, dmr_ed,
-    #                            dlg_sd, dlg_ed,
-    #                            dll_sd, dll_ed,
-    #                            repeat(nbc),
-    #                            repeat(NCpSC),
-    #                            repeat(block_inv),
-    #                            repeat(use_dace),
-    #                            repeat(validate_dace),repeat(ref_flag)
-    #                             )
-    #     # for idx, res in enumerate(results):
-    #     #     condl[idx] = res[0]
-    #     #     condr[idx] = res[1]
-
-    # for ie in range(ne):
-    #     mr_s[ie] = tuple(
-    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
-    #     )
-    #     mr_e[ie] = tuple(
-    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(3)
-    #     )
-    #     lg_s[ie] = tuple(
-    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-    #     )
-    #     lg_e[ie] = tuple(
-    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-    #     )
-    #     ll_s[ie] = tuple(
-    #         np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-    #     )
-    #     ll_e[ie] = tuple(
-    #         np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-    #     )
-
-        # mr_s_ref[ie] = tuple(
-        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(3)
-        # )
-        # mr_e_ref[ie] = tuple(
-        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(3)
-        # )
-        # lg_s_ref[ie] = tuple(
-        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-        # )
-        # lg_e_ref[ie] = tuple(
-        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-        # )
-        # ll_s_ref[ie] = tuple(
-        #     np.zeros((lb_start_mm, lb_start_mm), dtype=np.complex128) for __ in range(2)
-        # )
-        # ll_e_ref[ie] = tuple(
-        #     np.zeros((lb_end_mm, lb_end_mm), dtype=np.complex128) for __ in range(2)
-        # )
-
-    # mr_host = cpx.empty_pinned((ne, len(rows_m)), dtype = np.complex128)
-    # lg_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
-    # ll_host = cpx.empty_pinned((ne, len(rows_l)), dtype = np.complex128)
-
-    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
-
-    nao = vh.shape[0]
-    vh_dev = cp.sparse.csr_matrix(vh)
-    vh_ct_dev = vh_dev.T.conj(copy=False)
-    identity = cp.sparse.identity(nao)
-
-    mr_dev = cp.empty((ne, len(rows_m)), dtype=np.complex128)
-    lg_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
-    ll_dev = cp.empty((ne, len(rows_l)), dtype=np.complex128)
-    mr_host = mr_dev
-    lg_host = lg_dev
-    ll_host = ll_dev
-
-    # slice block start diagonal and slice block start off diagonal
-    slb_sd = slice(0, lb_start)
-    slb_so = slice(lb_start, 2 * lb_start)
-    # slice block end diagonal and slice block end off diagonal
-    slb_ed = slice(nao - lb_end, nao)
-    slb_eo = slice(nao - 2 * lb_end, nao - lb_end)
-
-    vh_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    vh_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pg_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pg_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pl_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pl_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pr_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pr_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-    pr_s3 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
-
-    vh_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    vh_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pg_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pg_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pl_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pl_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pr_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pr_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-    pr_e3 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
-
-    pr_dev = None
-    pg_dev = None
-    pl_dev = None
-
-    comm.Barrier()
-
-    start_spgemm = time.perf_counter()
-    time_copy_in = 0
-    time_spgemm = 0
-    time_copy_out = 0
-    time_dense = 0
-
-    for ie in range(ne):
-
-        time_copy_in -= time.perf_counter()
-
-        if pr_dev is None:
-            pr_dev = cp.sparse.csr_matrix((cp.asarray(pr_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-            pg_dev = cp.sparse.csr_matrix((cp.asarray(pg_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-            pl_dev = cp.sparse.csr_matrix((cp.asarray(pl_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
-        else:
-            pr_tmp = cp.asarray(pr_rgf[ie])
-            pr_dev.data[:] = pr_tmp[ij2ji_dev]
-            pg_tmp = cp.asarray(pg_rgf[ie])
-            pg_dev.data[:] = pg_tmp[ij2ji_dev]
-            pl_tmp = cp.asarray(pl_rgf[ie])
-            pl_dev.data[:] = pl_tmp[ij2ji_dev]
-         
-        # pr_dev = cp.asarray(pr_rgf[ie])
-        # pg_dev = cp.asarray(pg_rgf[ie])
-        # pl_dev = cp.asarray(pl_rgf[ie])
-        # pr_dev = cp.sparse.csr_matrix((pr_dev, (rows_dev, columns_dev)), shape = (nao, nao))
-        # pg_dev = cp.sparse.csr_matrix((pg_dev, (rows_dev, columns_dev)), shape = (nao, nao))
-        # pl_dev = cp.sparse.csr_matrix((pl_dev, (rows_dev, columns_dev)), shape = (nao, nao))
-            
-        time_copy_in += time.perf_counter()
-
-        time_spgemm -= time.perf_counter()
-
-        cp.cuda.Stream.null.synchronize()
-
-        mr_dev[ie] = (identity - spgemm(vh_dev, pr_dev)).data
-        spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[ie])
-        spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[ie])
-
-        time_spgemm += time.perf_counter()
-
-        # #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-        # sp_mm_gpu(pr_rgf[ie], pg_rgf[ie], pl_rgf[ie], rows_dev, columns_dev, vh_dev, mr_dev[0], lg_dev[0], ll_dev[0], nao)
-    
-        time_copy_out -= time.perf_counter()
-        
-        # mr_host[ie, :] = cp.asnumpy(mr_dev[0])
-        # lg_host[ie, :] = cp.asnumpy(lg_dev[0])
-        # ll_host[ie, :] = cp.asnumpy(ll_dev[0])
-
-        time_copy_out += time.perf_counter()
-
-        # vh_s1[ie] = cp.ascontiguousarray(vh_dev[slb_sd, slb_sd].toarray(order="C"))
-        # vh_s2[ie] = cp.ascontiguousarray(vh_dev[slb_sd, slb_so].toarray(order="C"))
-        # pg_s1[ie] = cp.ascontiguousarray(pg_dev[slb_sd, slb_sd].toarray(order="C"))
-        # pg_s2[ie] = cp.ascontiguousarray(pg_dev[slb_sd, slb_so].toarray(order="C"))
-        # pl_s1[ie] = cp.ascontiguousarray(pl_dev[slb_sd, slb_sd].toarray(order="C"))
-        # pl_s2[ie] = cp.ascontiguousarray(pl_dev[slb_sd, slb_so].toarray(order="C"))
-        # pr_s1[ie] = cp.ascontiguousarray(pr_dev[slb_sd, slb_sd].toarray(order="C"))
-        # pr_s2[ie] = cp.ascontiguousarray(pr_dev[slb_sd, slb_so].toarray(order="C"))
-        # pr_s3[ie] = cp.ascontiguousarray(pr_dev[slb_so, slb_sd].toarray(order="C"))
-
-        # vh_e1[ie] = cp.ascontiguousarray(vh_dev[slb_ed, slb_ed].toarray(order="C"))
-        # vh_e2[ie] = cp.ascontiguousarray(vh_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
-        # pg_e1[ie] = cp.ascontiguousarray(pg_dev[slb_ed, slb_ed].toarray(order="C"))
-        # pg_e2[ie] = cp.ascontiguousarray(-pg_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
-        # pl_e1[ie] = cp.ascontiguousarray(pl_dev[slb_ed, slb_ed].toarray(order="C"))
-        # pl_e2[ie] = cp.ascontiguousarray(-pl_dev[slb_ed, slb_eo].conjugate().transpose().toarray(order="C"))
-        # pr_e1[ie] = cp.ascontiguousarray(pr_dev[slb_ed, slb_ed].toarray(order="C"))
-        # pr_e2[ie] = cp.ascontiguousarray(pr_dev[slb_eo, slb_ed].toarray(order="C"))
-        # pr_e3[ie] = cp.ascontiguousarray(pr_dev[slb_ed, slb_eo].toarray(order="C"))
-
-        time_dense -= time.perf_counter()
-
-        num_threads = min(1024, lb_start)
-        num_thread_blocks = lb_start
-        _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_s1[ie], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
-        _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_s2[ie], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
-        _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_s1[ie], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
-        _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_s2[ie], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
-        _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_s1[ie], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
-        _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_s2[ie], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s1[ie], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s2[ie], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s3[ie], slb_so.start, slb_so.stop, slb_sd.start, slb_sd.stop)
-
-        # vh_s1[ie] = vh_dev[slb_sd, slb_sd].toarray()
-        # vh_s2[ie] = vh_dev[slb_sd, slb_so].toarray()
-        # pg_s1[ie] = pg_dev[slb_sd, slb_sd].toarray()
-        # pg_s2[ie] = pg_dev[slb_sd, slb_so].toarray()
-        # pl_s1[ie] = pl_dev[slb_sd, slb_sd].toarray()
-        # pl_s2[ie] = pl_dev[slb_sd, slb_so].toarray()
-        # pr_s1[ie] = pr_dev[slb_sd, slb_sd].toarray()
-        # pr_s2[ie] = pr_dev[slb_sd, slb_so].toarray()
-        # pr_s3[ie] = pr_dev[slb_so, slb_sd].toarray()
-
-        num_threads = min(1024, lb_end)
-        num_thread_blocks = lb_end
-        _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_e1[ie], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
-        _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_e2[ie], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
-        _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_e1[ie], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
-        _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_e2[ie], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
-        _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_e1[ie], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
-        _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_e2[ie], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e1[ie], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e2[ie], slb_eo.start, slb_eo.stop, slb_ed.start, slb_ed.stop)
-        _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e3[ie], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
-
-        vh_e2[ie] = vh_e2[ie].T.conj()
-        pg_e2[ie] = -pg_e2[ie].T.conj()
-        pl_e2[ie] = -pl_e2[ie].T.conj()
-
-        # vh_e1[ie] = vh_dev[slb_ed, slb_ed].toarray()
-        # vh_e2[ie] = vh_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
-        # pg_e1[ie] = pg_dev[slb_ed, slb_ed].toarray()
-        # pg_e2[ie] = -pg_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
-        # pl_e1[ie] = pl_dev[slb_ed, slb_ed].toarray()
-        # pl_e2[ie] = -pl_dev[slb_ed, slb_eo].conjugate().transpose().toarray()
-        # pr_e1[ie] = pr_dev[slb_ed, slb_ed].toarray()
-        # pr_e2[ie] = pr_dev[slb_eo, slb_ed].toarray()
-        # pr_e3[ie] = pr_dev[slb_ed, slb_eo].toarray()
-
-        time_dense += time.perf_counter()
-    
-    comm.Barrier()
-    finish_spgemm = time.perf_counter()
-    if rank == 0:
-        print("OBC-W region", flush=True)
-        print("    Time for overall spgemm loop: %.3f s" % (finish_spgemm - start_spgemm), flush=True)
-        print("        Time for copy in: %.3f s" % time_copy_in, flush=True)
-        print("        Time for spgemm: %.3f s" % time_spgemm, flush=True)
-        print("        Time for copy out: %.3f s" % time_copy_out, flush=True)
-        print("        Time for dense: %.3f s" % time_dense, flush=True)
-    
-    start_obc_mm = time.perf_counter()
-
-    obc_w_gpu.obc_w_mm_batched_gpu(vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3,
-                                   vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3,
-                                   dmr_sd, dmr_ed, dlg_sd, dlg_ed, dll_sd, dll_ed,
-                                #    mr_s, mr_e, lg_s, lg_e, ll_s, ll_e,
-                                   mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
-                                   vh_s, vh_e, mb00, mbNN, nbc, NCpSC)
-    comm.Barrier()
-    finish_obc_mm = time.perf_counter()
-    if rank == 0:
-        print("    Time for obc mm: %.3f s" % (finish_obc_mm - start_obc_mm), flush=True)
-    
-    def _norm(val, ref):
-        return np.linalg.norm(val - ref) / np.linalg.norm(ref)
-
-    if compute_mode == 0:
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-            # results = executor.map(obc_w_cpu.obc_w_cpu, repeat(vh),
-            executor.map(
-                obc_w_cpu.obc_w_cpu_excludingmm,
-                repeat(vh),
-                pg,
-                pl,
-                pr,
-                repeat(bmax),
-                repeat(bmin),
-                dvh_sd,
-                dvh_ed,
-                dmr_sd,
-                dmr_ed,
-                dlg_sd,
-                dlg_ed,
-                dll_sd,
-                dll_ed,
-                mr_s,
-                mr_e,
-                lg_s,
-                lg_e,
-                ll_s,
-                ll_e,
-                vh_s,
-                vh_e,
-                mb00,
-                mbNN,
-                repeat(nbc),
-                repeat(NCpSC),
-                repeat(block_inv),
-                repeat(use_dace),
-                repeat(validate_dace),
-                repeat(ref_flag),
-            )
-
-    else:
-
-        comm.Barrier()
-        start_beyn_w = time.perf_counter()
-
-        imag_lim = 1e-4
-        R = 1e4
-        matrix_blocks_left = cp.asarray(mb00)
-        # M00_left = cp.empty((ne, lb_start_mm, lb_start_mm), dtype=np.complex128)
-        # M01_left = cp.empty_like(M00_left)
-        # M10_left = cp.empty_like(M00_left)
-        # for ie in range(ne):
-        #     M00_left[ie].set(mr_s[ie][0])
-        #     M01_left[ie].set(mr_s[ie][1])
-        #     M10_left[ie].set(mr_s[ie][2])
-        M00_left = cp.asarray(mr_s0)
-        M01_left = cp.asarray(mr_s1)
-        M10_left = cp.asarray(mr_s2)
-        dmr, dxr_sd_gpu, condL, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
-        assert not any(np.isnan(cond) for cond in condL)
-        dxr_sd_gpu.get(out=dxr_sd)
-        dmr_sd -= dmr.get()
-        (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s)).get(out=dvh_sd)
-        matrix_blocks_right = cp.asarray(mbNN)
-        # M00_right = cp.empty((ne, lb_end_mm, lb_end_mm), dtype=np.complex128)
-        # M01_right = cp.empty_like(M00_right)
-        # M10_right = cp.empty_like(M00_right)
-        # for ie in range(ne):
-        #     M00_right[ie].set(mr_e[ie][0])
-        #     M01_right[ie].set(mr_e[ie][1])
-        #     M10_right[ie].set(mr_e[ie][2])
-        M00_right = cp.asarray(mr_e0)
-        M01_right = cp.asarray(mr_e1)
-        M10_right = cp.asarray(mr_e2)
-        dmr, dxr_ed_gpu, condR, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
-        assert not any(np.isnan(cond) for cond in condR)
-        dxr_ed_gpu.get(out=dxr_ed)
-        dmr_ed -= dmr.get()
-        (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
-
-        comm.Barrier()
-        finish_beyn_w = time.perf_counter()
-        if rank == 0:
-            print("    Time for beyn w: %.3f s" % (finish_beyn_w - start_beyn_w), flush=True)
-
-
-        # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        #     executor.map(obc_w_gpu.obc_w_L_lg,
-        #         dlg_sd,
-        #         dlg_ed,
-        #         dll_sd,
-        #         dll_ed,
-        #         mr_s,
-        #         mr_e,
-        #         lg_s,
-        #         lg_e,
-        #         ll_s,
-        #         ll_e,
-        #         dxr_sd,
-        #         dxr_ed,
-        #     )
-            
-        comm.Barrier()
-        start_obc_l = time.perf_counter()
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-            executor.map(obc_w_gpu.obc_w_L_lg_2,
-                dlg_sd,
-                dlg_ed,
-                dll_sd,
-                dll_ed,
-                mr_s0, mr_s1, mr_s2,
-                mr_e0, mr_e1, mr_e2,
-                lg_s0, lg_s1,
-                lg_e0, lg_e1,
-                ll_s0, ll_s1,
-                ll_e0, ll_e1,
-                dxr_sd,
-                dxr_ed,
-            )
-        
-        comm.Barrier()
-        finish_obc_l = time.perf_counter()
-        if rank == 0:
-            print("    Time for obc l: %.3f s" % (finish_obc_l - start_obc_l), flush=True)
-
-    l_defect = np.count_nonzero(np.isnan(condl))
-    r_defect = np.count_nonzero(np.isnan(condr))
-
-    if l_defect > 0 or r_defect > 0:
-        print(
-            "Warning: %d left and %d right boundary conditions are not satisfied."
-            % (l_defect, r_defect)
-        )
-
-    comm.Barrier()
-    if rank == 0:
-        time_OBC += time.perf_counter()
-        print("Time for OBC: %.3f s" % time_OBC, flush=True)
-        time_spmm = -time.perf_counter()
-
-    comm.Barrier()
-    if rank == 0:
-        time_spmm += time.perf_counter()
-        print("Time for spgemm: %.3f s" % time_spmm, flush=True)
-        time_GF_trafo = -time.perf_counter()
-
-    # --- Transform L to the (NE, NNZ) format --------------------------
-
     mapping_diag_l = rgf_GF_GPU_combo.map_to_mapping(map_diag_l, nb_mm)
     mapping_upper_l = rgf_GF_GPU_combo.map_to_mapping(map_upper_l, nb_mm - 1)
     mapping_lower_l = rgf_GF_GPU_combo.map_to_mapping(map_lower_l, nb_mm - 1)
@@ -752,23 +231,315 @@ def calc_W_pool_mpi_split(
         vh, bmin_mm, bmax_mm + 1
     )
 
+    obc_w_batchsize = 8
+
+    # Pinned memory buffers for the OBC.
+    # dxr_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dxr_ed = cpx.zeros_pinned((obc_w_batchsize, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dvh_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dvh_ed = cpx.zeros_pinned((obc_w_batchsize, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dmr_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dmr_ed = cpx.zeros_pinned((obc_w_batchsize, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dlg_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dlg_ed = cpx.zeros_pinned((obc_w_batchsize, lb_end_mm, lb_end_mm), dtype=np.complex128)
+    # dll_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # dll_ed = cpx.zeros_pinned((obc_w_batchsize, lb_end_mm, lb_end_mm), dtype=np.complex128)
+
+    # Dense buffers for the OBC matmul.
+    # mr_s0 = cpx.empty_like_pinned(dmr_sd)
+    # mr_s1 = cpx.empty_like_pinned(dmr_sd)
+    # mr_s2 = cpx.empty_like_pinned(dmr_sd)
+    # mr_e0 = cpx.empty_like_pinned(dmr_ed)
+    # mr_e1 = cpx.empty_like_pinned(dmr_ed)
+    # mr_e2 = cpx.empty_like_pinned(dmr_ed)
+    # lg_s0 = cpx.empty_like_pinned(dlg_sd)
+    # lg_s1 = cpx.empty_like_pinned(dlg_sd)
+    # lg_e0 = cpx.empty_like_pinned(dlg_ed)
+    # lg_e1 = cpx.empty_like_pinned(dlg_ed)
+    # ll_s0 = cpx.empty_like_pinned(dll_sd)
+    # ll_s1 = cpx.empty_like_pinned(dll_sd)
+    # ll_e0 = cpx.empty_like_pinned(dll_ed)
+    # ll_e1 = cpx.empty_like_pinned(dll_ed)
+    # vh_s = cpx.empty_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # vh_e = cpx.empty_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
+    # mb00 = cpx.empty_pinned(
+    #     (
+    #         obc_w_batchsize,
+    #         2 * nbc * NCpSC + 1,
+    #         lb_start_mm // (nbc * NCpSC),
+    #         lb_start_mm // (nbc * NCpSC),
+    #     ),
+    #     dtype=np.complex128,
+    # )
+    # mbNN = cpx.empty_pinned(
+    #     (
+    #         obc_w_batchsize,
+    #         2 * nbc * NCpSC + 1,
+    #         lb_start_mm // (nbc * NCpSC),
+    #         lb_start_mm // (nbc * NCpSC),
+    #     ),
+    #     dtype=np.complex128,
+    # )
+
     comm.Barrier()
     if rank == 0:
-        time_GF_trafo += time.perf_counter()
-        print("Time for W transformation: %.3f s" % time_GF_trafo, flush=True)
-        # time_GF = -time.perf_counter()
-        time_GF = -time.perf_counter()
+        time_pre_OBC += time.perf_counter()
+        print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush=True)
+        time_OBC = -time.perf_counter()
 
-    # --- Compute screened interaction ---------------------------------
+    # --- Boundary conditions ------------------------------------------
 
-    input_stream = cp.cuda.stream.Stream(non_blocking=True)
+    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
 
-    energy_batchsize = ne
-    energy_batch = np.arange(0, ne, energy_batchsize)
+    nao = vh.shape[0]
+    vh_dev = cp.sparse.csr_matrix(vh)
+    vh_ct_dev = vh_dev.T.conj(copy=False)
+    identity = cp.sparse.identity(nao)
 
-    for ie in energy_batch:
+    # slice block start diagonal and slice block start off diagonal
+    slb_sd = slice(0, lb_start)
+    slb_so = slice(lb_start, 2 * lb_start)
+    # slice block end diagonal and slice block end off diagonal
+    slb_ed = slice(nao - lb_end, nao)
+    slb_eo = slice(nao - 2 * lb_end, nao - lb_end)
+
+    mr_dev = cp.empty((obc_w_batchsize, len(rows_m)), dtype=np.complex128)
+    lg_dev = cp.empty((obc_w_batchsize, len(rows_l)), dtype=np.complex128)
+    ll_dev = cp.empty((obc_w_batchsize, len(rows_l)), dtype=np.complex128)
+    mr_host = mr_dev
+    lg_host = lg_dev
+    ll_host = ll_dev
+
+    print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+    print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+
+    # vh_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # vh_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pg_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pg_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pl_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pl_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pr_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pr_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+    # pr_s3 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
+
+    # vh_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # vh_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pg_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pg_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pl_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pl_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pr_e1 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pr_e2 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+    # pr_e3 = cp.zeros((ne, lb_end, lb_end), dtype=np.complex128)
+
+    vh_s1 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    vh_s2 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pg_s1 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pg_s2 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pl_s1 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pl_s2 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pr_s1 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pr_s2 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+    pr_s3 = cp.empty((obc_w_batchsize, lb_start, lb_start), dtype=np.complex128)
+
+    vh_e1 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    vh_e2 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pg_e1 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pg_e2 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pl_e1 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pl_e2 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pr_e1 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pr_e2 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+    pr_e3 = cp.empty((obc_w_batchsize, lb_end, lb_end), dtype=np.complex128)
+
+    pr_dev = None
+    pg_dev = None
+    pl_dev = None
+
+    condL, condR = [], []
+
+    comm.Barrier()
+
+    start_spgemm = time.perf_counter()
+    time_copy_in = 0
+    time_spgemm = 0
+    time_copy_out = 0
+    time_dense = 0
+    time_obc_mm = 0
+    time_beyn_w = 0
+    time_obc_l = 0
+    time_w = 0
+
+    for i in range(0, ne, obc_w_batchsize):
+        j = min(i + obc_w_batchsize, ne)
+
+        # for ie in range(ne):
+        for ie in range(i, j):
+
+            time_copy_in -= time.perf_counter()
+
+            if pr_dev is None:
+                pr_dev = cp.sparse.csr_matrix((cp.asarray(pr_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+                pg_dev = cp.sparse.csr_matrix((cp.asarray(pg_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+                pl_dev = cp.sparse.csr_matrix((cp.asarray(pl_rgf[ie]), (rows_dev, columns_dev)), shape = (nao, nao))
+            else:
+                pr_tmp = cp.asarray(pr_rgf[ie])
+                pr_dev.data[:] = pr_tmp[ij2ji_dev]
+                pg_tmp = cp.asarray(pg_rgf[ie])
+                pg_dev.data[:] = pg_tmp[ij2ji_dev]
+                pl_tmp = cp.asarray(pl_rgf[ie])
+                pl_dev.data[:] = pl_tmp[ij2ji_dev]
+            
+            time_copy_in += time.perf_counter()
+
+            time_spgemm -= time.perf_counter()
+
+            cp.cuda.Stream.null.synchronize()
+
+            mr_dev[ie-i] = (identity - spgemm(vh_dev, pr_dev)).data
+            spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[ie-i])
+            spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[ie-i])
+
+            time_spgemm += time.perf_counter()
+
+            time_dense -= time.perf_counter()
+
+            num_threads = min(1024, lb_start)
+            num_thread_blocks = lb_start
+            _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_s1[ie-i], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
+            _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_s2[ie-i], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
+            _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_s1[ie-i], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
+            _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_s2[ie-i], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
+            _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_s1[ie-i], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
+            _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_s2[ie-i], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s1[ie-i], slb_sd.start, slb_sd.stop, slb_sd.start, slb_sd.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s2[ie-i], slb_sd.start, slb_sd.stop, slb_so.start, slb_so.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_s3[ie-i], slb_so.start, slb_so.stop, slb_sd.start, slb_sd.stop)
+
+            num_threads = min(1024, lb_end)
+            num_thread_blocks = lb_end
+            _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_e1[ie-i], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
+            _toarray[num_thread_blocks, num_threads](vh_dev.data, vh_dev.indices, vh_dev.indptr, vh_e2[ie-i], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
+            _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_e1[ie-i], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
+            _toarray[num_thread_blocks, num_threads](pg_dev.data, pg_dev.indices, pg_dev.indptr, pg_e2[ie-i], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
+            _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_e1[ie-i], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
+            _toarray[num_thread_blocks, num_threads](pl_dev.data, pl_dev.indices, pl_dev.indptr, pl_e2[ie-i], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e1[ie-i], slb_ed.start, slb_ed.stop, slb_ed.start, slb_ed.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e2[ie-i], slb_eo.start, slb_eo.stop, slb_ed.start, slb_ed.stop)
+            _toarray[num_thread_blocks, num_threads](pr_dev.data, pr_dev.indices, pr_dev.indptr, pr_e3[ie-i], slb_ed.start, slb_ed.stop, slb_eo.start, slb_eo.stop)
+
+            vh_e2[ie-i] = vh_e2[ie-i].T.conj()
+            pg_e2[ie-i] = -pg_e2[ie-i].T.conj()
+            pl_e2[ie-i] = -pl_e2[ie-i].T.conj()
+
+            time_dense += time.perf_counter()
+        
+        
+        # start_obc_mm = time.perf_counter()
+
+        # obc_w_gpu.obc_w_mm_batched_gpu(vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3,
+        #                                vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3,
+        #                                dmr_sd, dmr_ed, dlg_sd, dlg_ed, dll_sd, dll_ed,
+        #                             #    mr_s, mr_e, lg_s, lg_e, ll_s, ll_e,
+        #                                mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
+        #                                vh_s, vh_e, mb00, mbNN, nbc, NCpSC)
+            
+        time_obc_mm -= time.perf_counter()
+
+        # obc_w_gpu.obc_w_mm_batched_gpu(vh_s1[:j-i], vh_s2[:j-i], pg_s1[:j-i], pg_s2[:j-i], pl_s1[:j-i], pl_s2[:j-i], pr_s1[:j-i], pr_s2[:j-i], pr_s3[:j-i],
+        #                             vh_e1[:j-i], vh_e2[:j-i], pg_e1[:j-i], pg_e2[:j-i], pl_e1[:j-i], pl_e2[:j-i], pr_e1[:j-i], pr_e2[:j-i], pr_e3[:j-i],
+        #                             dmr_sd[:j-i], dmr_ed[:j-i], dlg_sd[:j-i], dlg_ed[:j-i], dll_sd[:j-i], dll_ed[:j-i],
+        #                             mr_s0[:j-i], mr_s1[:j-i], mr_s2[:j-i], mr_e0[:j-i], mr_e1[:j-i], mr_e2[:j-i],
+        #                             lg_s0[:j-i], lg_s1[:j-i], lg_e0[:j-i], lg_e1[:j-i], ll_s0[:j-i], ll_s1[:j-i], ll_e0[:j-i], ll_e1[:j-i],
+        #                             vh_s[:j-i], vh_e[:j-i], mb00[:j-i], mbNN[:j-i], nbc, NCpSC)
+        (
+            dmr_sd, dmr_ed, dlg_sd, dlg_ed, dll_sd, dll_ed,
+            mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2,
+            lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
+            vh_s, vh_e, mb00, mbNN
+        ) = obc_w_gpu.obc_w_mm_batched_gpu(vh_s1[:j-i], vh_s2[:j-i], pg_s1[:j-i], pg_s2[:j-i], pl_s1[:j-i], pl_s2[:j-i], pr_s1[:j-i], pr_s2[:j-i], pr_s3[:j-i],
+                                    vh_e1[:j-i], vh_e2[:j-i], pg_e1[:j-i], pg_e2[:j-i], pl_e1[:j-i], pl_e2[:j-i], pr_e1[:j-i], pr_e2[:j-i], pr_e3[:j-i],
+                                    nbc, NCpSC)
+        
+        time_obc_mm += time.perf_counter()
+
+        time_beyn_w -= time.perf_counter()
+
+        imag_lim = 1e-4
+        R = 1e4
+        # matrix_blocks_left = cp.asarray(mb00[:j-i])
+        # M00_left = cp.asarray(mr_s0[:j-i])
+        # M01_left = cp.asarray(mr_s1[:j-i])
+        # M10_left = cp.asarray(mr_s2[:j-i])
+        matrix_blocks_left = mb00
+        M00_left = mr_s0
+        M01_left = mr_s1
+        M10_left = mr_s2
+        dmr, dxr_sd_gpu, condl, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+        # dxr_sd_gpu.get(out=dxr_sd[:j-i])
+        dxr_sd = dxr_sd_gpu
+        # dmr_sd[:j-i] -= dmr.get()
+        dmr_sd -= dmr
+        # (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s[:j-i])).get(out=dvh_sd[:j-i])
+        dvh_sd = M10_left @ dxr_sd_gpu @ vh_s
+        # matrix_blocks_right = cp.asarray(mbNN[:j-i])
+        # M00_right = cp.asarray(mr_e0[:j-i])
+        # M01_right = cp.asarray(mr_e1[:j-i])
+        # M10_right = cp.asarray(mr_e2[:j-i])
+        matrix_blocks_right = mbNN[:j-i]
+        M00_right = mr_e0
+        M01_right = mr_e1
+        M10_right = mr_e2
+        dmr, dxr_ed_gpu, condr, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+        # dxr_ed_gpu.get(out=dxr_ed[:j-i])
+        dxr_ed = dxr_ed_gpu
+        # dmr_ed[:j-i] -= dmr.get()
+        dmr_ed -= dmr
+        # (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e[:j-i])).get(out=dvh_ed[:j-i])
+        dvh_ed = M01_right @ dxr_ed_gpu @ vh_e
+
+        condL.extend(condl)
+        condR.extend(condr)
+
+        time_beyn_w += time.perf_counter()
+
+        time_obc_l -= time.perf_counter()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+            executor.map(obc_w_gpu.obc_w_L_lg_2,
+                dlg_sd[:j-i],
+                dlg_ed[:j-i],
+                dll_sd[:j-i],
+                dll_ed[:j-i],
+                mr_s0[:j-i], mr_s1[:j-i], mr_s2[:j-i],
+                mr_e0[:j-i], mr_e1[:j-i], mr_e2[:j-i],
+                lg_s0[:j-i], lg_s1[:j-i],
+                lg_e0[:j-i], lg_e1[:j-i],
+                ll_s0[:j-i], ll_s1[:j-i],
+                ll_e0[:j-i], ll_e1[:j-i],
+                dxr_sd[:j-i],
+                dxr_ed[:j-i],
+            )
+
+        mr_s0, mr_s1, mr_s2 = None, None, None
+        mr_e0, mr_e1, mr_e2 = None, None, None
+        lg_s0, lg_s1 = None, None
+        lg_e0, lg_e1 = None, None
+        ll_s0, ll_s1 = None, None
+        ll_e0, ll_e1 = None, None
+        dxr_sd, dxr_ed = None, None
+        mb00, mbNN = None, None
+        matrix_blocks_left, matrix_blocks_right = None, None
+        M00_left, M01_left, M10_left = None, None, None
+        M00_right, M01_right, M10_right = None, None, None
+        
+        time_obc_l += time.perf_counter()
+
+        time_w -= time.perf_counter()
+
         rgf_W_GPU_combo.rgf_batched_GPU(
-            energies=energy[ie : ie + energy_batchsize],
+            energies=energy[i:j],
             map_diag_mm=mapping_diag_mm,
             map_upper_mm=mapping_upper_mm,
             map_lower_mm=mapping_lower_mm,
@@ -781,28 +552,218 @@ def calc_W_pool_mpi_split(
             vh_diag_host=vh_diag,
             vh_upper_host=vh_upper,
             vh_lower_host=vh_lower,
-            mr_host=mr_host[ie : ie + energy_batchsize, :],
-            ll_host=ll_host[ie : ie + energy_batchsize, :],
-            lg_host=lg_host[ie : ie + energy_batchsize, :],
-            dvh_left_host=dvh_sd[ie : ie + energy_batchsize, :, :],
-            dvh_right_host=dvh_ed[ie : ie + energy_batchsize, :, :],
-            dmr_left_host=dmr_sd[ie : ie + energy_batchsize, :, :],
-            dmr_right_host=dmr_ed[ie : ie + energy_batchsize, :, :],
-            dlg_left_host=dlg_sd[ie : ie + energy_batchsize, :, :],
-            dlg_right_host=dlg_ed[ie : ie + energy_batchsize, :, :],
-            dll_left_host=dll_sd[ie : ie + energy_batchsize, :, :],
-            dll_right_host=dll_ed[ie : ie + energy_batchsize, :, :],
-            wr_host=wr_p2w[ie : ie + energy_batchsize, :],
-            wl_host=wl_p2w[ie : ie + energy_batchsize, :],
-            wg_host=wg_p2w[ie : ie + energy_batchsize, :],
-            dosw=dosw[ie : ie + energy_batchsize, :],
-            nEw=new[ie : ie + energy_batchsize, :],
-            nPw=npw[ie : ie + energy_batchsize, :],
+            mr_host=mr_host[:j-i],
+            ll_host=ll_host[:j-i],
+            lg_host=lg_host[:j-i],
+            dvh_left_host=dvh_sd[:j-i],
+            dvh_right_host=dvh_ed[:j-i],
+            dmr_left_host=dmr_sd[:j-i],
+            dmr_right_host=dmr_ed[:j-i],
+            dlg_left_host=dlg_sd[:j-i],
+            dlg_right_host=dlg_ed[:j-i],
+            dll_left_host=dll_sd[:j-i],
+            dll_right_host=dll_ed[:j-i],
+            wr_host=wr_p2w[i:j],
+            wl_host=wl_p2w[i:j],
+            wg_host=wg_p2w[i:j],
+            dosw=dosw[i:j],
+            nEw=new[i:j],
+            nPw=npw[i:j],
             bmax=bmax_mm,
             bmin=bmin_mm,
             solve=True,
             input_stream=input_stream,
         )
+
+        time_w += time.perf_counter()
+
+        print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+    
+
+    vh_s1 = None
+    vh_s2 = None
+    pg_s1 = None
+    pg_s2 = None
+    pl_s1 = None
+    pl_s2 = None
+    pr_s1 = None
+    pr_s2 = None
+    pr_s3 = None
+
+    vh_e1 = None
+    vh_e2 = None
+    pg_e1 = None
+    pg_e2 = None
+    pl_e1 = None
+    pl_e2 = None
+    pr_e1 = None
+    pr_e2 = None
+    pr_e3 = None
+
+    # comm.Barrier()
+    # finish_obc_mm = time.perf_counter()
+    # if rank == 0:
+    #     print("    Time for obc mm: %.3f s" % (finish_obc_mm - start_obc_mm), flush=True)
+
+    comm.Barrier()
+    finish_spgemm = time.perf_counter()
+    if rank == 0:
+        print("Screened Interaction region", flush=True)
+        print("    Time for overall W loop: %.3f s" % (finish_spgemm - start_spgemm), flush=True)
+        print("        Time for CopyToDevice: %.3f s" % time_copy_in, flush=True)
+        print("        Time for SpGEMM: %.3f s" % time_spgemm, flush=True)
+        print("        Time for CopyToHost: %.3f s" % time_copy_out, flush=True)
+        print("        Time for Densification: %.3f s" % time_dense, flush=True)
+        print("        Time for OBC MM: %.3f s" % time_obc_mm, flush=True)
+        print("        Time for Beyn W: %.3f s" % time_beyn_w, flush=True)
+        print("        Time for OBC L: %.3f s" % time_obc_l, flush=True)
+        print("        Time for RGF W: %.3f s" % time_w, flush=True)
+
+        print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+
+    # comm.Barrier()
+    start_beyn_w = time.perf_counter()
+
+    # imag_lim = 1e-4
+    # R = 1e4
+    # matrix_blocks_left = cp.asarray(mb00)
+    # M00_left = cp.asarray(mr_s0)
+    # M01_left = cp.asarray(mr_s1)
+    # M10_left = cp.asarray(mr_s2)
+    # dmr, dxr_sd_gpu, condL, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_left, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    # dxr_sd_gpu.get(out=dxr_sd)
+    # dmr_sd -= dmr.get()
+    # (M10_left @ dxr_sd_gpu @ cp.asarray(vh_s)).get(out=dvh_sd)
+    # matrix_blocks_right = cp.asarray(mbNN)
+    # M00_right = cp.asarray(mr_e0)
+    # M01_right = cp.asarray(mr_e1)
+    # M10_right = cp.asarray(mr_e2)
+    # dmr, dxr_ed_gpu, condR, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    # dxr_ed_gpu.get(out=dxr_ed)
+    # dmr_ed -= dmr.get()
+    # (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
+
+    comm.Barrier()
+    finish_beyn_w = time.perf_counter()
+    if rank == 0:
+        print("    Time for beyn w: %.3f s" % (finish_beyn_w - start_beyn_w), flush=True)
+        
+    comm.Barrier()
+    start_obc_l = time.perf_counter()
+
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     executor.map(obc_w_gpu.obc_w_L_lg_2,
+    #         dlg_sd,
+    #         dlg_ed,
+    #         dll_sd,
+    #         dll_ed,
+    #         mr_s0, mr_s1, mr_s2,
+    #         mr_e0, mr_e1, mr_e2,
+    #         lg_s0, lg_s1,
+    #         lg_e0, lg_e1,
+    #         ll_s0, ll_s1,
+    #         ll_e0, ll_e1,
+    #         dxr_sd,
+    #         dxr_ed,
+    #     )
+    
+    comm.Barrier()
+    finish_obc_l = time.perf_counter()
+    if rank == 0:
+        print("    Time for obc l: %.3f s" % (finish_obc_l - start_obc_l), flush=True)
+
+    # l_defect = np.count_nonzero(np.isnan(condL))
+    # r_defect = np.count_nonzero(np.isnan(condR))
+
+    # if l_defect > 0 or r_defect > 0:
+    #     print(
+    #         "Warning: %d left and %d right boundary conditions are not satisfied."
+    #         % (l_defect, r_defect)
+    #     )
+
+    comm.Barrier()
+    if rank == 0:
+        time_OBC += time.perf_counter()
+        print("Time for OBC: %.3f s" % time_OBC, flush=True)
+        time_spmm = -time.perf_counter()
+
+    comm.Barrier()
+    if rank == 0:
+        time_spmm += time.perf_counter()
+        print("Time for spgemm: %.3f s" % time_spmm, flush=True)
+        time_GF_trafo = -time.perf_counter()
+
+    # --- Transform L to the (NE, NNZ) format --------------------------
+
+    # mapping_diag_l = rgf_GF_GPU_combo.map_to_mapping(map_diag_l, nb_mm)
+    # mapping_upper_l = rgf_GF_GPU_combo.map_to_mapping(map_upper_l, nb_mm - 1)
+    # mapping_lower_l = rgf_GF_GPU_combo.map_to_mapping(map_lower_l, nb_mm - 1)
+
+    # mapping_diag_m = rgf_GF_GPU_combo.map_to_mapping(map_diag_m, nb_mm)
+    # mapping_upper_m = rgf_GF_GPU_combo.map_to_mapping(map_upper_m, nb_mm - 1)
+    # mapping_lower_m = rgf_GF_GPU_combo.map_to_mapping(map_lower_m, nb_mm - 1)
+
+    # mapping_diag_mm = rgf_GF_GPU_combo.map_to_mapping(map_diag_mm, nb_mm)
+    # mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
+    # mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
+
+    # vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
+    #     vh, bmin_mm, bmax_mm + 1
+    # )
+
+    comm.Barrier()
+    if rank == 0:
+        time_GF_trafo += time.perf_counter()
+        print("Time for W transformation: %.3f s" % time_GF_trafo, flush=True)
+        # time_GF = -time.perf_counter()
+        time_GF = -time.perf_counter()
+
+    # --- Compute screened interaction ---------------------------------
+
+    # input_stream = cp.cuda.stream.Stream(non_blocking=True)
+
+    # energy_batchsize = 16
+    # energy_batch = np.arange(0, ne, energy_batchsize)
+
+    # for ie in energy_batch:
+    #     rgf_W_GPU_combo.rgf_batched_GPU(
+    #         energies=energy[ie : ie + energy_batchsize],
+    #         map_diag_mm=mapping_diag_mm,
+    #         map_upper_mm=mapping_upper_mm,
+    #         map_lower_mm=mapping_lower_mm,
+    #         map_diag_m=mapping_diag_m,
+    #         map_upper_m=mapping_upper_m,
+    #         map_lower_m=mapping_lower_m,
+    #         map_diag_l=mapping_diag_l,
+    #         map_upper_l=mapping_upper_l,
+    #         map_lower_l=mapping_lower_l,
+    #         vh_diag_host=vh_diag,
+    #         vh_upper_host=vh_upper,
+    #         vh_lower_host=vh_lower,
+    #         mr_host=mr_host[ie : ie + energy_batchsize, :],
+    #         ll_host=ll_host[ie : ie + energy_batchsize, :],
+    #         lg_host=lg_host[ie : ie + energy_batchsize, :],
+    #         dvh_left_host=dvh_sd[ie : ie + energy_batchsize, :, :],
+    #         dvh_right_host=dvh_ed[ie : ie + energy_batchsize, :, :],
+    #         dmr_left_host=dmr_sd[ie : ie + energy_batchsize, :, :],
+    #         dmr_right_host=dmr_ed[ie : ie + energy_batchsize, :, :],
+    #         dlg_left_host=dlg_sd[ie : ie + energy_batchsize, :, :],
+    #         dlg_right_host=dlg_ed[ie : ie + energy_batchsize, :, :],
+    #         dll_left_host=dll_sd[ie : ie + energy_batchsize, :, :],
+    #         dll_right_host=dll_ed[ie : ie + energy_batchsize, :, :],
+    #         wr_host=wr_p2w[ie : ie + energy_batchsize, :],
+    #         wl_host=wl_p2w[ie : ie + energy_batchsize, :],
+    #         wg_host=wg_p2w[ie : ie + energy_batchsize, :],
+    #         dosw=dosw[ie : ie + energy_batchsize, :],
+    #         nEw=new[ie : ie + energy_batchsize, :],
+    #         nPw=npw[ie : ie + energy_batchsize, :],
+    #         bmax=bmax_mm,
+    #         bmin=bmin_mm,
+    #         solve=True,
+    #         input_stream=input_stream,
+    #     )
 
     comm.Barrier()
     if rank == 0:
@@ -811,6 +772,15 @@ def calc_W_pool_mpi_split(
         time_post_proc = -time.perf_counter()
 
     # --- Post-processing ----------------------------------------------
+    
+    l_defect = np.count_nonzero(np.isnan(condL))
+    r_defect = np.count_nonzero(np.isnan(condR))
+
+    if l_defect > 0 or r_defect > 0:
+        print(
+            "Warning: %d left and %d right boundary conditions are not satisfied."
+            % (l_defect, r_defect)
+        )
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
@@ -909,64 +879,8 @@ def calc_W_pool_mpi_split(
         )
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)) | (np.isnan(condL) | np.isnan(condR)))[0]
 
-    # if not((np.sum(np.isnan(F1)) == 0) and (np.sum(np.isinf(F1)) == 0)):
-    #     print("encountered invalid value in F1", flush = True)
-    # if not((np.sum(np.isnan(F2)) == 0) and (np.sum(np.isinf(F2))==0)):
-    #     print("encountered invalid value in F2", flush = True)
-    # if not((np.sum(np.isnan(dDOSm)) == 0) and (np.sum(np.isinf(dDOSm)) == 0)):
-    #     print("encountered invalid value in dDOSm", flush = True)
-    # if not((np.sum(np.isnan(dDOSp)) == 0) and (np.sum(np.isinf(dDOSp)) == 0)):
-    #     print("encountered invalid value in dDOSp", flush = True)
-
-    # if np.sum(np.isnan(dosw)) == 0:
-    #     ind_zeros_nan_dosw = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_nan_dosw = np.argwhere(np.isnan(dosw))[0]
-    #     print("encountered nan is dosw", flush = True)
-
-    # ind_zeros = np.concatenate((ind_zeros_nan_dosw, ind_zeros))
-
-    # if np.sum(np.isinf(dosw)) == 0:
-    #     ind_zeros_inf_dosw = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_inf_dosw = np.argwhere(np.isinf(dosw))[0]
-    #     print("encountered inf is dosw", flush = True)
-
-    # ind_zeros = np.concatenate((ind_zeros_inf_dosw, ind_zeros))
-
-    # if np.sum(np.isnan(new)) == 0:
-    #     ind_zeros_nan_new = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_nan_new = np.argwhere(np.isnan(new))[0]
-    #     print("encountered nan in new", flush = True)
-    
-    # ind_zeros = np.concatenate((ind_zeros_nan_new, ind_zeros))
-
-    # if np.sum(np.isinf(new)) == 0:
-    #     ind_zeros_inf_new = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_inf_new = np.argwhere(np.isinf(new))[0]
-    #     print("encountered inf is new", flush = True)
-
-    # ind_zeros = np.concatenate((ind_zeros_inf_new, ind_zeros))
-
-    # if np.sum(np.isnan(npw)) == 0:
-    #     ind_zeros_nan_npw = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_nan_npw = np.argwhere(np.isnan(npw))[0]
-    #     print("encountered nan in npw", flush = True)
-    
-    # ind_zeros = np.concatenate((ind_zeros_nan_npw, ind_zeros))
-
-    # if np.sum(np.isinf(npw)) == 0:
-    #     ind_zeros_inf_npw = np.array([], dtype = int)
-    # else:
-    #     ind_zeros_inf_npw = np.argwhere(np.isinf(npw))[0]
-    #     print("encountered inf is npw", flush = True)
-
-    # ind_zeros = np.concatenate((ind_zeros_inf_npw, ind_zeros))
 
     if idx_e[0] == 0:
         ind_zeros = np.concatenate(([0], ind_zeros))
@@ -978,31 +892,6 @@ def calc_W_pool_mpi_split(
         wl_p2w[index, :] = 0
         wg_p2w[index, :] = 0
 
-    # if np.sum(np.isnan(wr_p2w)) == 0:
-    #     ind_zeros_w = np.array([], dtype = int)
-    # else:
-    #     print("There are still nans inside wr", flush = True)
-    #     ind_zeros_w = np.argwhere(np.isnan(wr_p2w)).T[0]
-    #     ind_unique = np.unique(ind_zeros_w)
-    #     wr_p2w[ind_unique, :] = 0.0
-
-    # if np.sum(np.isnan(wl_p2w)) == 0:
-    #     ind_zeros_w = np.array([], dtype = int)
-    # else:
-    #     print("There are still nans inside wl", flush = True)
-    #     ind_zeros_w = np.argwhere(np.isnan(wl_p2w)).T[0]
-    #     ind_unique = np.unique(ind_zeros_w)
-    #     wl_p2w[ind_unique, :] = 0.0
-
-    # if np.sum(np.isnan(wg_p2w)) == 0:
-    #     ind_zeros_w = np.array([], dtype = int)
-    # else:
-    #     print("There are still nans inside wg", flush = True)
-    #     ind_zeros_w = np.argwhere(np.isnan(wg_p2w)).T[0]
-    #     ind_unique = np.unique(ind_zeros_w)
-    #     wg_p2w[ind_unique, :] = 0.0
-
-    # assert((np.sum(np.isnan(wr_p2w)) + np.sum(np.isnan(wl_p2w)) + np.sum(np.isnan(wg_p2w))) == 0)
 
     comm.Barrier()
     if rank == 0:

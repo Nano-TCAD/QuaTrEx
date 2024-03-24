@@ -343,79 +343,64 @@ def obc_w_mm_gpu_2(vh: sparse.csr_matrix,
     mbNN[:, :, :] = mbNN_loc.get()
 
 
+# def obc_w_mm_batched_gpu(
+#     vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3,
+#     vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3,
+#     dmr_sd: npt.NDArray[np.complex128],
+#     dmr_ed: npt.NDArray[np.complex128],
+#     dlg_sd: npt.NDArray[np.complex128],
+#     dlg_ed: npt.NDArray[np.complex128],
+#     dll_sd: npt.NDArray[np.complex128],
+#     dll_ed: npt.NDArray[np.complex128],
+#     mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
+#     vh_s: npt.NDArray[np.complex128],
+#     vh_e: npt.NDArray[np.complex128],
+#     mb00: npt.NDArray[np.complex128],
+#     mbNN: npt.NDArray[np.complex128],
+#     nbc,
+#     NCpSC: np.int32 = 1):
+
 def obc_w_mm_batched_gpu(
     vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3,
     vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3,
-    dmr_sd: npt.NDArray[np.complex128],
-    dmr_ed: npt.NDArray[np.complex128],
-    dlg_sd: npt.NDArray[np.complex128],
-    dlg_ed: npt.NDArray[np.complex128],
-    dll_sd: npt.NDArray[np.complex128],
-    dll_ed: npt.NDArray[np.complex128],
-    # mr_s: tuple,
-    # mr_e: tuple,
-    # lg_s: tuple,
-    # lg_e: tuple,
-    # ll_s: tuple,
-    # ll_e: tuple,
-    mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
-    vh_s: npt.NDArray[np.complex128],
-    vh_e: npt.NDArray[np.complex128],
-    mb00: npt.NDArray[np.complex128],
-    mbNN: npt.NDArray[np.complex128],
     nbc,
     NCpSC: np.int32 = 1):
-
-    batch_size = vh_s1.shape[0]
 
     mr_s_loc, lg_s_loc, ll_s_loc, dmr_s, dlg_s, dll_s, vh_s_loc, mb00_loc = dL_OBC_eigenmode_gpu.get_mm_obc_dense_batched(
         vh_s1, vh_s2, pg_s1, pg_s2, pl_s1, pl_s2, pr_s1, pr_s2, pr_s3, nbc, NCpSC, 'L')
 
     mr_e_loc, lg_e_loc, ll_e_loc, dmr_e, dlg_e, dll_e, vh_e_loc, mbNN_loc = dL_OBC_eigenmode_gpu.get_mm_obc_dense_batched(
         vh_e1, vh_e2, pg_e1, pg_e2, pl_e1, pl_e2, pr_e1, pr_e2, pr_e3, nbc, NCpSC, 'R')
+    
+    return (
+        dmr_s[0], dmr_e[1],
+        dlg_s[0], dlg_e[1],
+        dll_s[0], dll_e[1],
+        mr_s_loc[0], mr_s_loc[1], mr_s_loc[2],
+        mr_e_loc[0], mr_e_loc[1], mr_e_loc[2],
+        lg_s_loc[0], lg_s_loc[1],
+        lg_e_loc[0], lg_e_loc[2],
+        ll_s_loc[0], ll_s_loc[1],
+        ll_e_loc[0], ll_e_loc[2],
+        vh_s_loc[0], vh_e_loc[1],
+        mb00_loc, mbNN_loc
+    )
 
     # correct first and last block to account for the contacts in multiplication
-    # dmr_sd[:] = dmr_s[0].get()
-    # dmr_ed[:] = dmr_e[1].get()
     dmr_s[0].get(out=dmr_sd)
     dmr_e[1].get(out=dmr_ed)
 
     # correct first and last block to account for the contacts in multiplication
     # first block
     # L^{\lessgtr}_E_00 = V_10*P^{\lessgtr}_E_00*V_01 + V_10*P^{\lessgtr}_E_01*V_00 + V_00*P^{\lessgtr}_E_10*V_01
-    # dlg_sd[:] = dlg_s[0].get()
-    # dll_sd[:] = dll_s[0].get()
     dlg_s[0].get(out=dlg_sd)
     dll_s[0].get(out=dll_sd)
 
     # last block
     # L^{\lessgtr}_E_nn = V_nn*PL_E_n-1n*V_nn-1 + V_n-1n*PL_E_nn-1*V_nn + V_n-1n*PL_E_nn*V_nn-1
-    # dlg_ed[:] = dlg_e[1].get()
-    # dll_ed[:] = dll_e[1].get()
     dlg_e[1].get(out=dlg_ed)
     dll_e[1].get(out=dll_ed)
 
-    # for ie in range(batch_size):
-
-    #     mr_s[ie][0][:] = mr_s_loc[0][ie].get()
-    #     mr_s[ie][1][:] = mr_s_loc[1][ie].get()
-    #     mr_s[ie][2][:] = mr_s_loc[2][ie].get()
-
-    #     mr_e[ie][0][:] = mr_e_loc[0][ie].get()
-    #     mr_e[ie][1][:] = mr_e_loc[1][ie].get()
-    #     mr_e[ie][2][:] = mr_e_loc[2][ie].get()
-
-    #     lg_s[ie][0][:] = lg_s_loc[0][ie].get()
-    #     lg_s[ie][1][:] = lg_s_loc[1][ie].get()
-
-    #     lg_e[ie][0][:] = lg_e_loc[0][ie].get()
-    #     lg_e[ie][1][:] = lg_e_loc[2][ie].get()
-
-    #     ll_s[ie][0][:] = ll_s_loc[0][ie].get()
-    #     ll_s[ie][1][:] = ll_s_loc[1][ie].get()
-
-    #     ll_e[ie][0][:] = ll_e_loc[0][ie].get()
-    #     ll_e[ie][1][:] = ll_e_loc[2][ie].get()
     mr_s_loc[0].get(out=mr_s0)
     mr_s_loc[1].get(out=mr_s1)
     mr_s_loc[2].get(out=mr_s2)
@@ -430,14 +415,8 @@ def obc_w_mm_batched_gpu(
     ll_s_loc[1].get(out=ll_s1)
     ll_e_loc[0].get(out=ll_e0)
     ll_e_loc[2].get(out=ll_e1)
-
-    # vh_s[:] = vh_s_loc[0].get()
-    # vh_e[:] = vh_e_loc[1].get()
     vh_s_loc[0].get(out=vh_s)
     vh_e_loc[1].get(out=vh_e)
-
-    # mb00[:] = mb00_loc.get()
-    # mbNN[:] = mbNN_loc.get()
     mb00_loc.get(out=mb00)
     mbNN_loc.get(out=mbNN)
 

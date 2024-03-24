@@ -31,7 +31,8 @@ def _get_coulomb_batch(
         ir = bid % block_size
 
         # NOTE: The buffer size here should ideally not be hardcoded.
-        buf = cpx.jit.shared_memory(cp.complex128, 416)
+        # buf = cpx.jit.shared_memory(cp.complex128, 416)
+        buf = cpx.jit.shared_memory(cp.complex128, 832)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
@@ -173,12 +174,10 @@ def rgf_batched_GPU(
     wG_gpu = cp.empty(
         (num_blocks, batch_size, block_size, block_size), dtype=dtype
     )  # Greater (right)
-    dll_gpu = cp.empty(
-        (num_blocks - 1, batch_size, block_size, block_size), dtype=dtype
-    )  # Lesser boundary self-energy
-    dlg_gpu = cp.empty(
-        (num_blocks - 1, batch_size, block_size, block_size), dtype=dtype
-    )  # Greater boundary self-energy
+    # dll_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
+    # dlg_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
+    dll_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
+    dlg_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
     DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(dosw, np.ndarray) else dosw
     nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nEw, np.ndarray) else nEw
     nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nPw, np.ndarray) else nPw
@@ -393,8 +392,10 @@ def rgf_batched_GPU(
         wg = wG_gpu[IB]
         pwg = wG_gpu[IB + 1]
         dmr = dmr_dev[IB]
-        dll = dll_gpu[IB]
-        dlg = dlg_gpu[IB]
+        # dll = dll_gpu[IB]
+        # dlg = dlg_gpu[IB]
+        dll = dll_gpu[0]
+        dlg = dlg_gpu[0]
 
         if IB == 0:
             xr = XR_gpu[0]

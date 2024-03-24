@@ -161,7 +161,8 @@ def _get_system_matrix(energies,
 
         energy = energies[ie]
          
-        buf = cpx.jit.shared_memory(cp.complex128, 416)
+        # buf = cpx.jit.shared_memory(cp.complex128, 416)
+        buf = cpx.jit.shared_memory(cp.complex128, 832)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
