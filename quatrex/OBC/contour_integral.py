@@ -1,6 +1,7 @@
 # Copyright 2023-2024 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
+import time
 
 try:
     import cupy as cp
@@ -96,7 +97,7 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
     
 
     @cpx.jit.rawkernel()
-    def contour_combo(T, matrix_blocks, exp_1j_theta, r, factor, z_size, b_size, isL):
+    def contour_combo(T, matrix_blocks, exp_1j_theta, r, factor, z_size, b_size, isL):  # zero):
 
         idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
         if idx < 3 * z_size * b_size * b_size:
@@ -114,15 +115,21 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
             z_i = r[ie] * exp_1j_theta[i]
 
             if isL:
-                for l in range(2 * factor + 1):
+                buf = matrix_blocks[0, j, k] * z_i ** (factor - 0)
+                for l in range(1, 2 * factor + 1):
                     # m_idx = l * b_size * b_size + j * b_size + k
                     # T[t_idx] += matrix_blocks[m_idx] * z_i ** (factor - l)
-                    T[ie, i, j, k] += matrix_blocks[l, j, k] * z_i ** (factor - l)
+                    # T[ie, i, j, k] += matrix_blocks[l, j, k] * z_i ** (factor - l)
+                    buf += matrix_blocks[l, j, k] * z_i ** (factor - l)
             else:
-                for l in range(2 * factor + 1):
+                buf = matrix_blocks[0, j, k] * z_i ** (0 - factor)
+                for l in range(1, 2 * factor + 1):
                     # m_idx = l * b_size * b_size + j * b_size + k
                     # T[t_idx] += matrix_blocks[m_idx] * z_i ** (l - factor)
-                    T[ie, i, j, k] += matrix_blocks[l, j, k] * z_i ** (l - factor)
+                    # T[ie, i, j, k] += matrix_blocks[l, j, k] * z_i ** (l - factor)
+                    buf += matrix_blocks[l, j, k] * z_i ** (l - factor)
+            
+            T[ie, i, j, k] = buf
 
     
     theta_min = 0
@@ -329,8 +336,11 @@ def contour_integral_batched_combo_gpu(N: int,  # Reduced block size, i.e., N = 
     r_dev = cp.asarray(r)
     T = cp.zeros((3, len(global_theta), N, N), dtype=np.complex128)
 
+    # contour_kernel_time = -time.perf_counter()
+
     num_threads = 1024
     num_blocks = (3 * len(global_theta) * N * N + num_threads - 1) // num_threads
+    # zero = cp.complex128(0.0)
     contour_combo[num_blocks, num_threads](T, #.reshape(-1),
                                      matrix_blocks, #.reshape(-1),
                                      global_theta,
@@ -338,39 +348,19 @@ def contour_integral_batched_combo_gpu(N: int,  # Reduced block size, i.e., N = 
                                      factor,
                                      len(global_theta),
                                      N,
-                                     np.bool_(side=='L'),)
+                                     np.bool_(side=='L'))
+                                    #  zero)
     # cp.cuda.Stream.null.synchronize()
-
-    # other_T = cp.zeros((3, len(global_theta), N, N), dtype=np.complex128)
-
-    # num_threads = 512
-    # num_blocks = (len(global_theta) * N * N + num_threads - 1) // num_threads
-    # dtheta, dz_dtheta, z = [None, None, None], [None, None, None], [None, None, None]
-    # for i in range(3):
-    #     theta_min = 0
-    #     theta_max = 2 * np.pi
-    #     NT = 51
-    #     theta = cp.linspace(theta_min, theta_max, NT)
-    #     dtheta[i] = cp.hstack((theta[1] - theta[0], theta[2:] - theta[:-2], theta[-1] - theta[-2])) / 2
-    #     c_loc = 0
-    #     r_loc = np.power(R[i], 1.0 / factor)
-    #     z[i] = c_loc + r_loc * cp.exp(1j * theta)
-    #     dz_dtheta[i] = (csign[i] * 1j * r_loc) * cp.exp(1j * theta)
-    #     contour[num_blocks, num_threads](other_T[i].reshape(-1),
-    #                                      matrix_blocks.reshape(-1),
-    #                                      z[i],
-    #                                      factor,
-    #                                      len(z[i]),
-    #                                      N,
-    #                                      np.bool_(side=='L'))
-    #     cp.cuda.Stream.null.synchronize()
+    # contour_kernel_time += time.perf_counter()
+    # print(f"Contour kernel time: {contour_kernel_time:.6f} s")
         
+    # inverse_time = -time.perf_counter()
     iT = cp.linalg.inv(T)
-    # other_iT = cp.linalg.inv(other_T)
-    # print(cp.linalg.norm(T - other_T) / cp.linalg.norm(other_T))
-    # print(cp.linalg.norm(iT - other_iT) / cp.linalg.norm(other_iT))
+    # inverse_time += time.perf_counter()
+    # print(f"Inverse time: {inverse_time:.6f} s")
 
 
+    # reduction_time = -time.perf_counter()
     multiplier = (np.array(csign) * r) / (2.0 * np.pi)
     P0, P1 = [], []
     for i in range(3):
@@ -378,18 +368,8 @@ def contour_integral_batched_combo_gpu(N: int,  # Reduced block size, i.e., N = 
         tmp2 = r[i] * global_theta.reshape(len(global_theta), 1, 1) * tmp
         P0.append(cp.sum(iT[i] * tmp, axis=0))
         P1.append(cp.sum(iT[i] * tmp2, axis=0))
-
-    # P0ref, P1ref = [], []
-    # for i in range(3):
-    #     tmp = (dz_dtheta[i] * dtheta[i] / (2.0 * np.pi * 1j)).reshape(len(z[i]), 1, 1)
-    #     tmp2 = z[i].reshape(len(z[i]), 1, 1) * tmp
-    #     P0ref.append(cp.sum(other_iT[i] * tmp, axis=0))
-    #     P1ref.append(cp.sum(other_iT[i] * tmp2, axis=0))
-    
-    # for val, ref in zip(P0, P0ref):
-    #     print(cp.linalg.norm(val - ref) / cp.linalg.norm(ref))
-    # for val, ref in zip(P1, P1ref):
-    #     print(cp.linalg.norm(val - ref) / cp.linalg.norm(ref))
+    # reduction_time += time.perf_counter()
+    # print(f"Reduction time: {reduction_time:.6f} s")
 
     return *P0, *P1
 

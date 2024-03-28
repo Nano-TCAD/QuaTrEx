@@ -118,20 +118,30 @@ def calc_W_pool_mpi_split(
     pr_p2w,
     # Coulomb matrix.
     vh,
+    vh_diag, vh_upper, vh_lower,
     # Output Green's functions.
     wg_p2w,
     wl_p2w,
     wr_p2w,
     # Sparse-to-dense Mappings.
-    map_diag_mm,
-    map_upper_mm,
-    map_lower_mm,
-    map_diag_m,
-    map_upper_m,
-    map_lower_m,
-    map_diag_l,
-    map_upper_l,
-    map_lower_l,
+    # map_diag_mm,
+    # map_upper_mm,
+    # map_lower_mm,
+    # map_diag_m,
+    # map_upper_m,
+    # map_lower_m,
+    # map_diag_l,
+    # map_upper_l,
+    # map_lower_l,
+    mapping_diag_mm,
+    mapping_upper_mm,
+    mapping_lower_mm,
+    mapping_diag_m,
+    mapping_upper_m,
+    mapping_lower_m,
+    mapping_diag_l,
+    mapping_upper_l,
+    mapping_lower_l,
     # P indices
     rows_dev,
     columns_dev,
@@ -215,21 +225,21 @@ def calc_W_pool_mpi_split(
     lb_start_mm = lb_vec_mm[0]
     lb_end_mm = lb_vec_mm[nb_mm - 1]
 
-    mapping_diag_l = rgf_GF_GPU_combo.map_to_mapping(map_diag_l, nb_mm)
-    mapping_upper_l = rgf_GF_GPU_combo.map_to_mapping(map_upper_l, nb_mm - 1)
-    mapping_lower_l = rgf_GF_GPU_combo.map_to_mapping(map_lower_l, nb_mm - 1)
+    # mapping_diag_l = rgf_GF_GPU_combo.map_to_mapping(map_diag_l, nb_mm)
+    # mapping_upper_l = rgf_GF_GPU_combo.map_to_mapping(map_upper_l, nb_mm - 1)
+    # mapping_lower_l = rgf_GF_GPU_combo.map_to_mapping(map_lower_l, nb_mm - 1)
 
-    mapping_diag_m = rgf_GF_GPU_combo.map_to_mapping(map_diag_m, nb_mm)
-    mapping_upper_m = rgf_GF_GPU_combo.map_to_mapping(map_upper_m, nb_mm - 1)
-    mapping_lower_m = rgf_GF_GPU_combo.map_to_mapping(map_lower_m, nb_mm - 1)
+    # mapping_diag_m = rgf_GF_GPU_combo.map_to_mapping(map_diag_m, nb_mm)
+    # mapping_upper_m = rgf_GF_GPU_combo.map_to_mapping(map_upper_m, nb_mm - 1)
+    # mapping_lower_m = rgf_GF_GPU_combo.map_to_mapping(map_lower_m, nb_mm - 1)
 
-    mapping_diag_mm = rgf_GF_GPU_combo.map_to_mapping(map_diag_mm, nb_mm)
-    mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
-    mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
+    # mapping_diag_mm = rgf_GF_GPU_combo.map_to_mapping(map_diag_mm, nb_mm)
+    # mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
+    # mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
 
-    vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
-        vh, bmin_mm, bmax_mm + 1
-    )
+    # vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
+    #     vh, bmin_mm, bmax_mm + 1
+    # )
 
     obc_w_batchsize = 8
 
@@ -289,7 +299,9 @@ def calc_W_pool_mpi_split(
 
     # --- Boundary conditions ------------------------------------------
 
-    pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
+    # pl_rgf, pg_rgf, pr_rgf = polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
+    polarization_preprocess_2d(pl_p2w, pg_p2w, pr_p2w, rows_dev, columns_dev, ij2ji_dev, NCpSC, bmin, bmax, homogenize)
+    pl_rgf, pg_rgf, pr_rgf = pl_p2w, pg_p2w, pr_p2w
 
     nao = vh.shape[0]
     vh_dev = cp.sparse.csr_matrix(vh)
@@ -310,8 +322,8 @@ def calc_W_pool_mpi_split(
     lg_host = lg_dev
     ll_host = ll_dev
 
-    print(f"Used bytes: {mempool.used_bytes()}", flush=True)
-    print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+    # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+    # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
 
     # vh_s1 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
     # vh_s2 = cp.zeros((ne, lb_start, lb_start), dtype=np.complex128)
@@ -487,11 +499,11 @@ def calc_W_pool_mpi_split(
         # M00_right = cp.asarray(mr_e0[:j-i])
         # M01_right = cp.asarray(mr_e1[:j-i])
         # M10_right = cp.asarray(mr_e2[:j-i])
-        matrix_blocks_right = mbNN[:j-i]
+        matrix_blocks_right = mbNN
         M00_right = mr_e0
         M01_right = mr_e1
         M10_right = mr_e2
-        dmr, dxr_ed_gpu, condr, _ = beyn_gpu(NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+        dmr, dxr_ed_gpu, condr, _ = beyn_gpu(nbc * NCpSC, matrix_blocks_right, M00_right, M01_right, M10_right, imag_lim, R, 'R')
         # dxr_ed_gpu.get(out=dxr_ed[:j-i])
         dxr_ed = dxr_ed_gpu
         # dmr_ed[:j-i] -= dmr.get()
@@ -506,7 +518,7 @@ def calc_W_pool_mpi_split(
 
         time_obc_l -= time.perf_counter()
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=obc_w_batchsize) as executor:
             executor.map(obc_w_gpu.obc_w_L_lg_2,
                 dlg_sd[:j-i],
                 dlg_ed[:j-i],
@@ -571,14 +583,14 @@ def calc_W_pool_mpi_split(
             nPw=npw[i:j],
             bmax=bmax_mm,
             bmin=bmin_mm,
-            solve=True,
+            solve=False,
             input_stream=input_stream,
         )
 
         time_w += time.perf_counter()
 
-        print(f"Used bytes: {mempool.used_bytes()}", flush=True)
-        print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+        # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
     
 
     vh_s1 = None

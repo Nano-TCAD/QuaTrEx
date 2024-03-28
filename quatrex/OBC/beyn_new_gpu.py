@@ -8,6 +8,8 @@ from scipy.linalg import svd
 from numpy.linalg import eig
 from scipy.sparse import csr_matrix
 
+from concurrent.futures import ThreadPoolExecutor
+
 
 from quatrex.OBC.contour_integral import contour_integral_gpu as ci_gpu_internal, contour_integral_batched_gpu as ci_batched_gpu_internal
 from quatrex.OBC.contour_integral import contour_integral_batched_combo_gpu as ci_batched_combo_gpu_internal
@@ -264,6 +266,58 @@ def extract_small_matrix_blocks_gpu(M00, M01, M10, factor, type, densify: bool =
         m10 = cp.sparse.csr_matrix(m10)
 
     return m00, m01, m10, matrix_blocks
+
+
+def extract_small_matrix_blocks_gpu_2(M00, M01, M10, factor, type, m00, m01, m10, matrix_blocks):
+    N = M00.shape[0] // factor
+    num_blocks = 2 * factor + 1
+
+    # matrix_blocks = cp.empty((num_blocks, N, N), dtype=M00.dtype)
+
+    if type == 'L':
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[index * N:(index + 1) * N, :N]
+            matrix_blocks[2 * factor + 1 - I] = M00[:N, index * N:(index + 1) * N]
+
+        matrix_blocks[factor] = M00[:N, :N]
+        matrix_blocks[0] = M10[:N, :N]
+        matrix_blocks[2 * factor] = M01[:N, :N]
+    else:
+
+        NM = N * factor
+
+        for i, j in enumerate(range(factor, 1, -1)):
+            I = j
+            index = i + 1
+            matrix_blocks[I - 1] = M00[NM - N:NM, NM - (index + 1) * N:NM - index * N]
+            matrix_blocks[2 * factor + 1 - I] = M00[NM - (index + 1) * N:NM - index * N, NM - N:NM]
+        
+        matrix_blocks[factor] = M00[NM - N:NM, NM - N:NM]
+        matrix_blocks[0] = M10[NM - N:NM, NM - N:NM]
+        matrix_blocks[2 * factor] = M01[NM - N:NM, NM - N:NM]
+
+    # m00 = cp.zeros((N * factor, N * factor), dtype=M00.dtype)
+    # m01 = cp.zeros((N * factor, N * factor), dtype=M01.dtype)
+    # m10 = cp.zeros((N * factor, N * factor), dtype=M10.dtype)
+
+    for I in range(1, factor + 1):
+        for J in range(1, factor + 1):
+            m00[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[factor - I + J]
+            if I >= J:
+                m01[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[2 * factor - I + J]
+            if I <= J:
+                m10[(I - 1) * N:I * N, (J - 1) * N:J * N] = matrix_blocks[- I + J]
+
+    # if not densify:
+    #     m00 = cp.sparse.csr_matrix(m00)
+    #     m01 = cp.sparse.csr_matrix(m01)
+    #     m10 = cp.sparse.csr_matrix(m10)
+
+    # return m00, m01, m10, matrix_blocks
+
 
 def contour_integral_gpu(factor: int,
                          matrix_blocks: np.ndarray,
@@ -752,10 +806,16 @@ def beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iter
     
     T = cp.empty_like(M00)
     min_dEk = np.zeros(batch_size, dtype=np.float64)
+    # prepare_time = 0
+    # compute_time = 0
     for i in range(batch_size):
         if kL[i] is not None:
+            # prepare_time -= time.perf_counter()
             ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
+            # prepare_time += time.perf_counter()
+            # compute_time -= time.perf_counter()
             T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
+            # compute_time += time.perf_counter()
             ind = np.where(abs(dEk_dk))
             if len(ind[0]) > 0:
                 min_dEk[i] = np.min(abs(dEk_dk[ind]))
@@ -764,11 +824,19 @@ def beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iter
         else:
             T[i] = cp.identity(M00.shape[1])
             min_dEk[i] = 1e8
+    # prepare_time = -time.perf_counter()
+    # T, min_dEk = prepare_input_data_batched_gpu(kL, kR, phiL, phiR, M01, M10, imag_lim, rfactor, ifactor)
+    # prepare_time += time.perf_counter()
 
+    # compute_time = -time.perf_counter()
     gR = cp.linalg.inv(M00 + second @ T)
     for _ in range(ref_iteration):
         gR = cp.linalg.inv(M00 - second @ gR @ first)
     Sigma = second @ gR @ first
+    # compute_time += time.perf_counter()
+
+    # print(f"                Preparation: {prepare_time:.3f} s", flush=True)
+    # print(f"                Computation: {compute_time:.3f} s", flush=True)
     
     return Sigma, gR, min_dEk
 
@@ -906,11 +974,12 @@ def sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, kside):
         Vsurf = cp.zeros((Nk, NT), dtype=phiR.dtype)
         kref = kR
 
-    # start = time.time()
+    # imaginary_conditions_time = -time.perf_counter()
     imag_cond, dEk_dk = check_imag_cond_gpu(kref, kL, kR, phiL, phiR, M10, M01, imag_limit, kside)
-    # finish = time.time()
-    # print('time to check imag cond: ', finish - start)
+    # imaginary_conditions_time += time.perf_counter()
+    # print(f"                        Check imag cond: {imaginary_conditions_time:.3f} s", flush=True)
 
+    # compute_conditions_time = -time.perf_counter()
     Nk = len(kref)
     condA = cp.ndarray(Nk, dtype=np.bool_)
     condB = cp.ndarray(Nk, dtype=np.bool_)
@@ -918,89 +987,28 @@ def sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, kside):
     num_blocks = (Nk + num_threads - 1) // num_threads
     compute_sort_k_conditions_kernel((num_blocks,), (num_threads,), (condA, condB, kref, imag_cond, dEk_dk, Nk, factor))
     cp.cuda.stream.get_current_stream().synchronize()
+    # compute_conditions_time += time.perf_counter()
+    # print(f"                        Compute conditions: {compute_conditions_time:.3f} s", flush=True)
+
+    # ksurf_time = -time.perf_counter()
+
     condA = cp.asnumpy(condA)
     condB = cp.asnumpy(condB)
 
 
     Nref = 0
-    # stream = cp.cuda.stream.get_current_stream()
     for Ik in range(Nk):
-        # if (cond3[Ik] and cond4[Ik]) or (not cond3[Ik] and (cond1[Ik] or cond2[Ik])):
         if condA[Ik]:
             ksurf[Nref] = kref[Ik]
-            # cp.cuda.runtime.memcpyAsync(ksurf[Nref].data.ptr, kref[Ik].data.ptr, kref[Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             if kside == 'L':
                 Vsurf[:, Nref] = phiL[:, Ik]
-                # cp.cuda.runtime.memcpyAsync(Vsurf[:, Nref].data, phiL[:, Ik].data, phiL[:, Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             else:
                 Vsurf[Nref, :] = phiR[Ik, :]
-                # cp.cuda.runtime.memcpyAsync(Vsurf[Nref, :].data, phiR[Ik, :].data, phiR[Ik, :].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
-            # if not cond3[Ik] and (cond1[Ik] or cond2[Ik]):
             if condB[Ik]:
                 dEk[Nref] = dEk_dk[Ik]
-                # cp.cuda.runtime.memcpyAsync(dEk[Nref].data, dEk_dk[Ik].data, dEk_dk[Ik].nbytes, cp.cuda.runtime.memcpyDeviceToDevice, stream)
             Nref += 1
-    # cp.cuda.stream.get_current_stream().synchronize()
-
-    # ###### Validation against CPU ######
-
-    # Nref_cpu = 0
-    # phiL_cpu = cp.asnumpy(phiL)
-    # phiR_cpu = cp.asnumpy(phiR)
-    # imag_cond_cpu = cp.asnumpy(imag_cond)
-    # kref_cpu = cp.asnumpy(kref)
-    # dEk_dk_cpu = cp.asnumpy(dEk_dk)
-    # ksurf_cpu = np.zeros(Nk, dtype=kL.dtype)
-    # if kside == 'L':
-    #     NT = len(phiL[:, 0])
-    #     Vsurf_cpu = np.zeros((NT, Nk), dtype=phiL.dtype)
-    # else:
-    #     NT = len(phiR[0, :])
-    #     Vsurf_cpu = np.zeros((Nk, NT), dtype=phiR.dtype)
-    # dEk_cpu = np.zeros(Nk, dtype=phiL.dtype)
-
-    # for Ik in range(len(kref_cpu)):
-
-    #     if not imag_cond_cpu[Ik] and abs(np.imag(kref_cpu[Ik])) > 1e-6:
-
-    #         if factor * np.imag(kref_cpu[Ik]) < 0:
-
-    #             Nref_cpu += 1
-    #             ksurf_cpu[Nref_cpu - 1] = kref_cpu[Ik]
-
-    #             if kside == 'L':
-    #                 Vsurf_cpu[:, Nref_cpu - 1] = phiL_cpu[:, Ik]
-    #             else:
-    #                 Vsurf_cpu[Nref_cpu - 1, :] = phiR_cpu[Ik, :]
-
-    #             dEk_cpu[Nref_cpu - 1] = 0
-
-    #     else:
-
-    #         cond1 = (abs(np.real(dEk_dk_cpu[Ik])) < abs(np.imag(dEk_dk_cpu[Ik])) / 100) and (factor * np.imag(kref_cpu[Ik]) < 0)
-    #         cond2 = (abs(np.real(dEk_dk_cpu[Ik])) >= abs(np.imag(dEk_dk_cpu[Ik])) / 100) and (factor * np.real(dEk_dk_cpu[Ik]) < 0)
-
-    #         if cond1 or cond2:
-
-    #             Nref_cpu += 1
-    #             ksurf_cpu[Nref_cpu - 1] = kref_cpu[Ik]
-
-    #             if kside == 'L':
-    #                 Vsurf_cpu[:, Nref_cpu - 1] = phiL_cpu[:, Ik]
-    #             else:
-    #                 Vsurf_cpu[Nref_cpu - 1, :] = phiR_cpu[Ik, :]
-                
-    #             dEk_cpu[Nref_cpu - 1] = dEk_dk_cpu[Ik]
-    
-
-    # assert np.allclose(cp.asnumpy(ksurf[:Nref]), ksurf_cpu[:Nref_cpu])
-    # if kside == 'L':
-    #     assert np.allclose(cp.asnumpy(Vsurf[:, :Nref]), Vsurf_cpu[:, :Nref_cpu])
-    # else:
-    #     assert np.allclose(cp.asnumpy(Vsurf[:Nref, :]), Vsurf_cpu[:Nref_cpu, :])
-    # assert np.allclose(cp.asnumpy(dEk[:Nref]), dEk_cpu[:Nref_cpu])
-
-    # ####################################
+    # ksurf_time += time.perf_counter()
+    # print(f"                        Sort ksurf: {ksurf_time:.3f} s", flush=True)
 
     ksurf = ksurf[0:Nref]
 
@@ -1014,8 +1022,11 @@ def sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, kside):
     return ksurf, Vsurf, dEk
 
 def prepare_input_data_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor):
+    # sort_k_time = -time.perf_counter()
     ksurfL, VsurfL, dEk = sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, 'L')
     ksurfR, VsurfR, _ = sort_k_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, 'R')
+    # sort_k_time += time.perf_counter()
+    # print(f"                    Sort k: {sort_k_time:.3f} s", flush=True)
 
     Nk = min(len(ksurfL), len(ksurfR))
 
@@ -1025,9 +1036,38 @@ def prepare_input_data_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor):
 
     # Compute the inverse of VsurfL with the help from the VsurfR eigenvectors
     # inv_VsurfL = np.linalg.pinv(VsurfR @ VsurfL) @ VsurfR
+    # solver_time = -time.perf_counter()
     inv_VsurfL = cp.linalg.solve(VsurfR @ VsurfL, VsurfR)
+    # solver_time += time.perf_counter()
+    # print(f"                    Solver: {solver_time:.3f} s", flush=True)
 
     return ksurfL, VsurfL, inv_VsurfL, dEk
+
+
+def prepare_input_data_batched_gpu(kL, kR, phiL, phiR, M01, M10, imag_limit, factor, ifactor):
+
+    batch_size = len(M01)
+    T = cp.empty_like(M01)
+    min_dEk = np.zeros(batch_size, dtype=np.float64)
+
+    def _func(i):
+        if kL[i] is not None:
+            ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_limit, factor)
+            T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
+            ind = np.where(abs(dEk_dk))
+            if len(ind[0]) > 0:
+                min_dEk[i] = np.min(abs(dEk_dk[ind]))
+            else:
+                min_dEk[i] = 1e8
+        else:
+            T[i] = cp.identity(M01.shape[1])
+            min_dEk[i] = 1e8
+
+    with ThreadPoolExecutor(max_workers=batch_size) as executor:
+        executor.map(_func, range(batch_size))
+
+    return T, min_dEk
+
 
 def beyn_new_gpu(factor: int,
                  matrix_blocks,

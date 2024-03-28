@@ -588,6 +588,7 @@ def get_dl_obc_alt(xr_d: cp.ndarray, lg_d: cp.ndarray, lg_o: cp.ndarray, ll_d: c
         wg_d = fg[sl_x, sl_x] + xrmr_dx_s @ wg_d @ mrxr_ct_xd_s
 
     dlg_d = (mr_x[:, sl_x] @ wg_d @ mr_x_ct[sl_x, :] - ag_diff).get()
+    # dlg_d = mr_x[:, sl_x] @ wg_d @ mr_x_ct[sl_x, :] - ag_diff
 
     # lesser component
     yl_d = cp.divide(ieivec[ind,:] @ fl[sl_x, sl_x] @ ieivec[ind, :].conjugate().T, 1 - eival_sq_red) - ieivec[ind,:] @ fl[sl_x, sl_x] @ ieivec[ind, :].conjugate().T
@@ -598,6 +599,7 @@ def get_dl_obc_alt(xr_d: cp.ndarray, lg_d: cp.ndarray, lg_o: cp.ndarray, ll_d: c
         wl_d = fl[sl_x, sl_x] + xrmr_dx_s @ wl_d @ mrxr_ct_xd_s
 
     dll_d = (mr_x[:, sl_x] @ wl_d @ mr_x_ct[sl_x, :] - al_diff).get()
+    # dll_d = mr_x[:, sl_x] @ wl_d @ mr_x_ct[sl_x, :] - al_diff
 
     return dlg_d, dll_d
 

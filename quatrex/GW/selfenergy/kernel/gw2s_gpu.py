@@ -759,9 +759,9 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(sg, sl, sr_principale,
         sg[batch_start:batch_end] = sg_gpu[0:batch_end - batch_start]
         sl[batch_start:batch_end] = sl_gpu[0:batch_end - batch_start]
 
-        if rank == 0:
-            print(f"Used bytes: {mempool.used_bytes()}", flush=True)
-            print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+        # if rank == 0:
+        #     print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        #     print(f"Total bytes: {mempool.total_bytes()}", flush=True)
         
 
     # return (sg, sl, sr_principale)

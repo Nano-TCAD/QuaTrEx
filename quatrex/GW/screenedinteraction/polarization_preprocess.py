@@ -55,12 +55,15 @@ def polarization_preprocess(PL: npt.ArrayLike, PG: npt.ArrayLike, PR: npt.ArrayL
                                         PG01, PG10, len(bmax))
         
 def polarization_preprocess_2d(pl, pg, pr, rows, columns, ij2ji,  NCpSC, bmin, bmax, homogenize):
-    pl_rgf = (pl - pl[:, ij2ji].conj()) / 2
-    pg_rgf = (pg - pg[:, ij2ji].conj()) / 2
-    pr_rgf = (pg - pl) / 2
+    # pl_rgf = (pl - pl[:, ij2ji].conj()) / 2
+    # pg_rgf = (pg - pg[:, ij2ji].conj()) / 2
+    # pr_rgf = (pg - pl) / 2
+    pl[:] = (pl - pl[:, ij2ji].conj()) / 2
+    pg[:] = (pg - pg[:, ij2ji].conj()) / 2
+    pr[:] = (pg - pl) / 2
 
     #To_DO homogenize
     # This can be done using change_format.sparse2vecspase_v2 and after extracting the matrices do
     # change_format.sparse2block_no_map
 
-    return pl_rgf, pg_rgf, pr_rgf
+    # return pl_rgf, pg_rgf, pr_rgf

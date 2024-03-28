@@ -102,12 +102,12 @@ def calc_GF_pool_mpi_split_memopt(
     LBsize = bmax[0] - bmin[0] + 1
     RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
 
-    SigRBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigRBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
-    SigLBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigLBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
-    SigGBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigGBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # SigRBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigRBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # SigLBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigLBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # SigGBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigGBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
     # condl = np.zeros((ne), dtype = np.float64)
     # condr = np.zeros((ne), dtype = np.float64)
 
@@ -265,20 +265,44 @@ def calc_GF_pool_mpi_split_memopt(
     #        repeat(bmax),
     #        repeat(NCpSC))
     
+    # imag_lim = 5e-4
+    # R = 1000
+    # SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    # # assert not any(np.isnan(cond) for cond in condL)
+    # GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
+    # (1j * fL * GammaL).get(out=SigLBL)
+    # (1j * (fL - 1) * GammaL).get(out=SigGBL)
+    # SigRBL_gpu.get(out=SigRBL)
+    # SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    # # assert not any(np.isnan(cond) for cond in condR)
+    # GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
+    # (1j * fR * GammaR).get(out=SigLBR)
+    # (1j * (fR - 1) * GammaR).get(out=SigGBR)
+    # SigRBR_gpu.get(out=SigRBR)
     imag_lim = 5e-4
     R = 1000
+    left_beyn_time = -time.perf_counter()
     SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    left_beyn_time += time.perf_counter()
     # assert not any(np.isnan(cond) for cond in condL)
     GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
-    (1j * fL * GammaL).get(out=SigLBL)
-    (1j * (fL - 1) * GammaL).get(out=SigGBL)
-    SigRBL_gpu.get(out=SigRBL)
+    # (1j * fL * GammaL).get(out=SigLBL)
+    SigLBL = 1j * fL * GammaL
+    # (1j * (fL - 1) * GammaL).get(out=SigGBL)
+    SigGBL = 1j * (fL - 1) * GammaL
+    # SigRBL_gpu.get(out=SigRBL)
+    SigRBL = SigRBL_gpu
+    right_beyn_time = -time.perf_counter()
     SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    right_beyn_time += time.perf_counter()
     # assert not any(np.isnan(cond) for cond in condR)
     GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
-    (1j * fR * GammaR).get(out=SigLBR)
-    (1j * (fR - 1) * GammaR).get(out=SigGBR)
-    SigRBR_gpu.get(out=SigRBR)
+    # (1j * fR * GammaR).get(out=SigLBR)
+    SigLBR = 1j * fR * GammaR
+    # (1j * (fR - 1) * GammaR).get(out=SigGBR)
+    SigGBR = 1j * (fR - 1) * GammaR
+    # SigRBR_gpu.get(out=SigRBR)
+    SigRBR = SigRBR_gpu
     
     comm.Barrier()
     if rank == 0:
@@ -327,7 +351,7 @@ def calc_GF_pool_mpi_split_memopt(
                             SigGBL[ie:ie+energy_batchsize, :, :], SigGBR[ie:ie+energy_batchsize, :, :],
                             gr_h2g[ie:ie+energy_batchsize, :], gl_h2g[ie:ie+energy_batchsize, :], gg_h2g[ie:ie+energy_batchsize, :],
                             DOS[ie:ie+energy_batchsize, :], nE[ie:ie+energy_batchsize, :],
-                            nP[ie:ie+energy_batchsize, :], idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
+                            nP[ie:ie+energy_batchsize, :], idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = False,
                             input_stream = input_stream)
         
     comm.Barrier()

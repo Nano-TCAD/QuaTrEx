@@ -233,9 +233,9 @@ def g2p_fft_mpi_gpu_batched_nopr(pg, pl,
     batch_size = min(batch_size, no)
     batches = int(np.ceil(no / batch_size))
     batch_size = int(np.ceil(no / batches))  # Balance last batch
-    print(f"Used bytes: {mempool.used_bytes()}", flush=True)
-    print(f"Total bytes: {mempool.total_bytes()}", flush=True)
-    print(f"Spare bytes: {spare_bytes}, Batches: {batches}, Batch size: {batch_size}", flush=True)
+    # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+    # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+    # print(f"Spare bytes: {spare_bytes}, Batches: {batches}, Batch size: {batch_size}", flush=True)
 
     # # Assuming FFT space is complexity is O(NlogN), where N is ne (above)
     # total_space = 2 * ne * int(np.log2(ne)) * no
@@ -303,8 +303,8 @@ def g2p_fft_mpi_gpu_batched_nopr(pg, pl,
         pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start]
         pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start]
 
-        print(f"Used bytes: {mempool.used_bytes()}", flush=True)
-        print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+        # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
 
     # return (pg, pl)
 

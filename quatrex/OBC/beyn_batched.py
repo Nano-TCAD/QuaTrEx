@@ -3,7 +3,7 @@ import cupy as cp
 import numpy as np
 import time
 
-from .beyn_new_gpu import extract_small_matrix_blocks_gpu
+from .beyn_new_gpu import extract_small_matrix_blocks_gpu, extract_small_matrix_blocks_gpu_2
 from .beyn_new_gpu import ci_batched_gpu_internal
 from .contour_integral import contour_integral_batched_squared_gpu as ci_batched_squared_gpu_internal
 from .contour_integral import contour_integral_batched_combo_gpu as ci_combo_gpu_internal
@@ -19,14 +19,15 @@ def extract_small_matrix_blocks_batched_gpu(M00, M01, M10, factor, type):
     small_N = N // factor
     big_N = small_N * factor
  
-    N00 = cp.empty((batch_size, big_N, big_N), dtype=M00.dtype)
-    N01 = cp.empty((batch_size, big_N, big_N), dtype=M00.dtype)
-    N10 = cp.empty((batch_size, big_N, big_N), dtype=M00.dtype)
+    N00 = cp.zeros((batch_size, big_N, big_N), dtype=M00.dtype)
+    N01 = cp.zeros((batch_size, big_N, big_N), dtype=M00.dtype)
+    N10 = cp.zeros((batch_size, big_N, big_N), dtype=M00.dtype)
     matrix_blocks = cp.empty((batch_size, 2 * factor + 1, small_N, small_N), dtype=M00.dtype)
 
     # TODO: Actual batched version
     for i in range(batch_size):
-        N00[i], N01[i], N10[i], matrix_blocks[i] = extract_small_matrix_blocks_gpu(M00[i], M01[i], M10[i], factor, type, densify=True)
+        # N00[i], N01[i], N10[i], matrix_blocks[i] = extract_small_matrix_blocks_gpu(M00[i], M01[i], M10[i], factor, type, densify=True)
+        extract_small_matrix_blocks_gpu_2(M00[i], M01[i], M10[i], factor, type, N00[i], N01[i], N10[i], matrix_blocks[i])
     
     return N00, N01, N10, matrix_blocks
 
@@ -466,10 +467,13 @@ def beyn_new_batched_gpu_3(factor: int,
         NM = round(N / 2)
     NM = factor * NM
 
+    # rng_time = -time.perf_counter()
     if YL is None:
         YL = cp.random.rand(batch_size, N, NM)
     if YR is None:
         YR = cp.random.rand(batch_size, NM, N)
+    # rng_time += time.perf_counter()
+    # print(f"            RNG time: {rng_time:.3f} s", flush=True)
     
     def _svd(idx, P0C1, P0C2, P0C3, P1C1, P1C2, P1C3):
 
@@ -543,6 +547,14 @@ def beyn_new_batched_gpu_3(factor: int,
     
 
         return LV, Lu, Llambda, RW, Ru, Rlambda
+    
+    # pure_contour_integral_time = -time.perf_counter()
+    # for i in range(batch_size):
+    #     ci_combo_gpu_internal(N, factor, matrix_blocks[i], [3.0, 1.0 / R, 10.0 / R], [1.0, -1.0, -1.0], side)
+    # pure_contour_integral_time += time.perf_counter()
+    # print(f"            Pure contour integral: {pure_contour_integral_time:.3f} s", flush=True)
+    
+    # contour_integral_time = -time.perf_counter()
 
     futures = []
     executor = ThreadPoolExecutor(max_workers=batch_size)
@@ -555,7 +567,11 @@ def beyn_new_batched_gpu_3(factor: int,
         futures.append(executor.submit(_svd, i, P0C1, P0C2, P0C3, P1C1, P1C2, P1C3))
     # finish = time.time()
     # print(f"Time for all contours: {finish - start}", flush=True)
+        
+    # contour_integral_time += time.perf_counter()
+    # print(f"            Contour integral: {contour_integral_time:.3f} s", flush=True)
 
+    # phi_time = -time.perf_counter()
     
     # start = time.time()
     kL = [None for _ in range(batch_size)]
@@ -575,11 +591,14 @@ def beyn_new_batched_gpu_3(factor: int,
         # print(f"Time for {i}th svd-eig: {mid_i - start_i}, phi: {finish_i - mid_i}", flush=True)
     # finish = time.time()
     # print(f"Time for all svd-eig-phi: {finish - start}", flush=True)
+            
+    # phi_time += time.perf_counter()
+    # print(f"            Phi (+completing SVD/EIG): {phi_time:.3f} s", flush=True)
 
-    # start = time.time()
+    # sigma_time = -time.perf_counter()
     Sigma, gR, min_dEk = beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, 2, side)
-    # finish = time.time()
-    # print(f"Time for all sigma: {finish - start}", flush=True)
+    # sigma_time += time.perf_counter()
+    # print(f"            Sigma and gR: {sigma_time:.3f} s", flush=True)
 
     return Sigma, gR, cond, min_dEk
 
@@ -625,5 +644,8 @@ def beyn_batched_gpu_3(factor: int,
                          YL = None,
                          YR = None):
     
+    # block_extraction_time = -time.perf_counter()
     N00, N01, N10, matrix_blocks = extract_small_matrix_blocks_batched_gpu(M00, M01, M10, factor, type)
+    # block_extraction_time += time.perf_counter()
+    # print(f"            Block extraction {block_extraction_time:.3f} s", flush=True)
     return beyn_new_batched_gpu_3(factor, matrix_blocks, N00, N01, N10, imag_lim, R, type, YL, YR)

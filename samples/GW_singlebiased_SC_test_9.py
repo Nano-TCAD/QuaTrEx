@@ -111,6 +111,7 @@ if __name__ == "__main__":
     #         print("Only GPU implementation for this sample", flush=True)
     #     sys.exit(1)
     if(rank == 0):
+        print(f"Transpose with MPI is {args.net_transpose}", flush = True)
         print(f"Using {args.type} implementation", flush = True)
 
     # create hamiltonian object
@@ -119,7 +120,7 @@ if __name__ == "__main__":
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
     NCpSC = 4
     Vappl = 0.6
-    # energy = np.linspace(-5, 1, 61 * size, endpoint=True, dtype=float)  # Energy Vector
+    # energy = np.linspace(-5, 1, 64 * size, endpoint=True, dtype=float)  # Energy Vector
     energy = np.linspace(-50, 40, 32 * size, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -209,6 +210,25 @@ if __name__ == "__main__":
         rows_l, columns_l, bmax_mm, bmin_mm
     )
 
+    # folder = "/users/ziogasal/QuaTrEx/test_data/small"
+    # np.save(f"{folder}/rows_m.npy", rows_m)
+    # np.save(f"{folder}/columns_m.npy", columns_m)
+    # np.save(f"{folder}/ij2ji_m.npy", ij2ji_m)
+    # np.save(f"{folder}/map_diag_m.npy", map_diag_m)
+    # np.save(f"{folder}/map_upper_m.npy", map_upper_m)
+    # np.save(f"{folder}/map_lower_m.npy", map_lower_m)
+    # np.save(f"{folder}/rows_l.npy", rows_l)
+    # np.save(f"{folder}/columns_l.npy", columns_l)
+    # np.save(f"{folder}/ij2ji_l.npy", ij2ji_l)
+    # np.save(f"{folder}/map_diag_l.npy", map_diag_l)
+    # np.save(f"{folder}/map_upper_l.npy", map_upper_l)
+    # np.save(f"{folder}/map_lower_l.npy", map_lower_l)
+    # np.save(f"{folder}/map_diag_mm.npy", map_diag_mm)
+    # np.save(f"{folder}/map_upper_mm.npy", map_upper_mm)
+    # np.save(f"{folder}/map_lower_mm.npy", map_lower_mm)
+
+    # exit(0)
+
     if rank == 0:
         # print size of data
         print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}", flush = True)
@@ -274,7 +294,12 @@ if __name__ == "__main__":
     # count[:, size-1] += data_shape % size
 
     # displacements in nnz/energy
-    disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    # disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    disp = np.cumsum(count, axis=1) - count
+    # if rank == 0:
+    #     print(f"Count: {count}", flush=True)
+    #     print(f"Disp: {disp}", flush=True)
+    #     print(f"Old disp: {data_per_rank.reshape(-1, 1) * np.arange(size)}", flush=True)
 
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -371,6 +396,16 @@ if __name__ == "__main__":
             if rank == 0:
                 outp[:, :] = out_transposed.T
 
+    g2p_send_count = count[0, :] * count[1, rank]
+    g2p_send_displ = disp[0, :] * count[1, rank] * base_size
+    g2p_send_types = np.repeat(BASE_TYPE, size)
+    # g2p_recv_count = np.repeat([1], size)
+    # g2p_recv_displ = disp[1, :] * base_size
+    # g2p_recv_types = G2P_R_RIZ
+    g2p_recv_count = count[1, :] * count[0, rank]
+    g2p_recv_displ = disp[1, :] * count[0, rank] * base_size
+    g2p_recv_types = np.repeat(BASE_TYPE, size)
+
     def alltoall_g2p(sendbuf: npt.NDArray[np.complex128], recvbuf: npt.NDArray[np.complex128],
                      transpose_net: bool = False, gpu_aware: bool = False):
         if transpose_net:
@@ -379,41 +414,29 @@ if __name__ == "__main__":
             comm.Alltoallw([sendbuf, count[0, :], disp[0, :] * base_size, np.repeat(G2P_S_RIZ, size)],
                            [recvbuf, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
         else:
+            # tmp = cp.empty((size, count[0, rank], count[1, rank]), dtype=np.complex128)
             if gpu_aware:
                 sendbuf = cp.copy(sendbuf.T, order="C")
                 cp.cuda.get_current_stream().synchronize()
             else:
                 sendbuf = np.copy(sendbuf.T, order="C") 
-            comm.Alltoallw([sendbuf,
-                            count[0, :] * count[1, rank],
-                            disp[0, :] * count[1, rank] * base_size,
-                            np.repeat(BASE_TYPE, size)],
-                           [recvbuf, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
-        # if transpose_net:
-        #     inp = cp.asarray(inp)
-        #     cp.cuda.get_current_stream().synchronize()
-        #     comm.Alltoallw([inp, count[0, :], disp[0, :] * base_size,
-        #                     np.repeat(G2P_S_RIZ, size)],
-        #                    [outp, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
-        # else:
-        #     # inp_transposed = np.copy(inp.T, order="C")
-        #     inp_transposed = cp.copy(inp.T, order="C")
-        #     cp.cuda.get_current_stream().synchronize()
-        #     comm.Alltoallw([
-        #         inp_transposed, count[0, :] * count[1, rank], disp[0, :] * count[1, rank] * base_size,
-        #         np.repeat(BASE_TYPE, size)
-        #     ], [outp, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
-    
-    def alltoall_g2p_replace(buf: npt.NDArray[np.complex128], transpose_net: bool = False, gpu_aware: bool = False):
-        # NOTE: Work-in-progress
-        if not transpose_net:
-            if gpu_aware:
-                buf = cp.copy(buf.T, order="C")
-                cp.cuda.get_current_stream().synchronize()
-            else:
-                buf = np.copy(buf.T, order="C") 
-        comm.Alltoallw([MPI.MPI_IN_PLACE, count[0, :], disp[0, :] * base_size, np.repeat(G2P_S_RIZ, size)],
-                       [buf, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
+            # comm.Alltoallw([sendbuf,
+            #                 count[0, :] * count[1, rank],
+            #                 disp[0, :] * count[1, rank] * base_size,
+            #                 np.repeat(BASE_TYPE, size)],
+            #                [recvbuf, np.repeat([1], size), disp[1, :] * base_size, G2P_R_RIZ])
+            tmp0 = recvbuf.reshape(size, count[0, rank], count[1, rank])
+            tmp1 = recvbuf.reshape(count[0, rank], size, count[1, rank])
+            comm.Alltoallw([sendbuf, g2p_send_count, g2p_send_displ, g2p_send_types],
+                           [tmp0, g2p_recv_count, g2p_recv_displ, g2p_recv_types])
+            tmp1[:] = tmp0.transpose(1, 0, 2)
+            # recvbuf[:] = tmp.transpose(1, 0, 2).reshape(count[0, rank], data_shape[1])
+            cp.cuda.get_current_stream().synchronize()
+            
+            # comm.Alltoallv([sendbuf.reshape(-1), g2p_send_count, g2p_send_displ, BASE_TYPE],
+            #                [recvbuf.reshape(-1), g2p_recv_count, g2p_recv_displ, BASE_TYPE])
+
+    # mpi_tmp2 = cp.empty((data_shape[0], count[1, rank]), dtype=np.complex128)
 
     def alltoall_p2g(sendbuf: npt.NDArray[np.complex128], recvbuf: npt.NDArray[np.complex128],
                      transpose_net: bool = False, gpu_aware: bool = False):
@@ -423,16 +446,26 @@ if __name__ == "__main__":
             comm.Alltoallw([sendbuf, count[1, :], disp[1, :] * base_size, np.repeat(P2G_S_RIZ, size)],
                            [recvbuf, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
         else:
-            if gpu_aware:
-                sendbuf = cp.copy(sendbuf.T, order="C")
-                cp.cuda.get_current_stream().synchronize()
-            else:
-                sendbuf = np.copy(sendbuf.T, order="C") 
-            comm.Alltoallw([sendbuf,
-                            count[1, :] * count[0, rank],
-                            disp[1, :] * count[0, rank] * base_size,
-                            np.repeat(BASE_TYPE, size)],
-                           [recvbuf, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
+            # if gpu_aware:
+            #     sendbuf = cp.copy(sendbuf.T, order="C")
+            #     cp.cuda.get_current_stream().synchronize()
+            # else:
+            #     sendbuf = np.copy(sendbuf.T, order="C") 
+            # comm.Alltoallw([sendbuf,
+            #                 count[1, :] * count[0, rank],
+            #                 disp[1, :] * count[0, rank] * base_size,
+            #                 np.repeat(BASE_TYPE, size)],
+            #                [recvbuf, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
+            
+            tmp1 = sendbuf.reshape(count[0, rank], size, count[1, rank])
+            tmp0 = cp.copy(tmp1.transpose(1, 0, 2), order="C")
+            tmp2 = recvbuf.reshape(data_shape[0], count[1, rank])
+            cp.cuda.get_current_stream().synchronize()
+            comm.Alltoallw([tmp0, g2p_recv_count, g2p_recv_displ, g2p_recv_types],
+                           [tmp2, g2p_send_count, g2p_send_displ, g2p_send_types])
+            recvbuf[:] = tmp2.transpose()
+            cp.cuda.get_current_stream().synchronize()
+
         # if transpose_net:
         #     comm.Alltoallw([inp, count[1, :], disp[1, :] * base_size,
         #                     np.repeat(P2G_S_RIZ, size)],
@@ -483,9 +516,10 @@ if __name__ == "__main__":
     # gg_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
     # gl_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
     # gr_h2g = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
-    gg_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
-    gl_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
-    gr_h2g = cp.zeros((count[1, rank], no), dtype=np.complex128)
+    gg_h2g = cp.empty((count[1, rank], no), dtype=np.complex128)
+    gl_h2g = cp.empty((count[1, rank], no), dtype=np.complex128)
+    gr_h2g = cp.empty((count[1, rank], no), dtype=np.complex128)
+    gl_transposed_h2g = cp.empty((count[1, rank], no), dtype=np.complex128)
 
     # initialize Screened interaction-------------------------------------------
     # wg_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
@@ -497,6 +531,8 @@ if __name__ == "__main__":
     wg_p2w = gg_h2g
     wl_p2w = gl_h2g
     wr_p2w = gr_h2g
+    wl_transposed_p2w = gl_transposed_h2g
+    wg_transposed_p2w = wr_p2w  # We don't use WR yet
 
     pg_g2p = cp.empty((count[0, rank], ne), dtype=np.complex128)
     pl_g2p = cp.empty((count[0, rank], ne), dtype=np.complex128)
@@ -529,6 +565,16 @@ if __name__ == "__main__":
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
+    # folder = "/users/ziogasal/QuaTrEx/test_data/large"
+    # np.save(f"{folder}/rows.npy", rows)
+    # np.save(f"{folder}/columns.npy", columns)
+    # np.save(f"{folder}/ij2ji.npy", ij2ji)
+    # np.save(f"{folder}/map_diag.npy", map_diag)
+    # np.save(f"{folder}/map_upper.npy", map_upper)
+    # np.save(f"{folder}/map_lower.npy", map_lower)
+
+    # exit(0)
+
     mapping_diag = rgf_GF_GPU_combo.map_to_mapping(map_diag, nb)
     mapping_upper = rgf_GF_GPU_combo.map_to_mapping(map_upper, nb-1)
     mapping_lower = rgf_GF_GPU_combo.map_to_mapping(map_lower, nb-1)
@@ -541,6 +587,30 @@ if __name__ == "__main__":
 
     hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
     overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
+
+    # bmax = hamiltonian_obj.Bmax - 1
+    # bmin = hamiltonian_obj.Bmin - 1
+    # lb_vec = bmax - bmin + 1
+    # lb_start = lb_vec[0]
+    # lb_end = lb_vec[nb - 1]
+    # bmax_mm = bmax[nbc - 1 : nb : nbc]
+    # bmin_mm = bmin[0:nb:nbc]
+    # nb_mm = bmax_mm.size
+    # lb_max_mm = np.max(bmax_mm - bmin_mm + 1)
+    # lb_vec_mm = bmax_mm - bmin_mm + 1
+    # lb_start_mm = lb_vec_mm[0]
+    # lb_end_mm = lb_vec_mm[nb_mm - 1]
+    nb_mm = bmax_mm.size
+    mapping_diag_l = rgf_GF_GPU_combo.map_to_mapping(map_diag_l, nb_mm)
+    mapping_upper_l = rgf_GF_GPU_combo.map_to_mapping(map_upper_l, nb_mm - 1)
+    mapping_lower_l = rgf_GF_GPU_combo.map_to_mapping(map_lower_l, nb_mm - 1)
+    mapping_diag_m = rgf_GF_GPU_combo.map_to_mapping(map_diag_m, nb_mm)
+    mapping_upper_m = rgf_GF_GPU_combo.map_to_mapping(map_upper_m, nb_mm - 1)
+    mapping_lower_m = rgf_GF_GPU_combo.map_to_mapping(map_lower_m, nb_mm - 1)
+    mapping_diag_mm = rgf_GF_GPU_combo.map_to_mapping(map_diag_mm, nb_mm)
+    mapping_upper_mm = rgf_GF_GPU_combo.map_to_mapping(map_upper_mm, nb_mm - 1)
+    mapping_lower_mm = rgf_GF_GPU_combo.map_to_mapping(map_lower_mm, nb_mm - 1)
+    vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(vh, bmin_mm, bmax_mm + 1)
 
     is_mpi_gpu_aware = True
 
@@ -719,23 +789,47 @@ if __name__ == "__main__":
             worker_num=gf_worker_threads)
         
         # Extract diagonal bands
-        gg_diag_band[:] = gg_h2g[:, rows == columns]
-        gl_diag_band[:] = gl_h2g[:, rows == columns]
+        gg_diag_band[:] = gg_h2g[:, rows_dev == columns_dev]
+        gl_diag_band[:] = gl_h2g[:, rows_dev == columns_dev]
 
+        # cp.cuda.get_current_stream().synchronize()
         comm.Barrier()
         start_g2p_comm = time.perf_counter()
         
         # calculate the transposed
         if is_mpi_gpu_aware:
-            gl_transposed_h2g = cp.copy(gl_h2g[:, ij2ji], order="C")
+            # gl_transposed_h2g = cp.copy(gl_h2g[:, ij2ji_dev], order="C")
+            gl_transposed_h2g[:] = gl_h2g[:, ij2ji_dev]
         else:
             gl_transposed_h2g = np.copy(gl_h2g[:, ij2ji], order="C")
 
         # use of all to all w since not divisible
+        # cp.cuda.get_current_stream().synchronize()
+        # comm.Barrier()
+        start = time.perf_counter()
         alltoall_g2p(gg_h2g, gg_g2p, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # comm.Barrier()
+        # finish = time.perf_counter()
+        # if rank == 0:
+        #     print(f"G2P communication time (1): {finish - start}", flush = True)
+        # start = time.perf_counter()
         alltoall_g2p(gl_h2g, gl_g2p, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
-        alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # comm.Barrier()
+        # finish = time.perf_counter()
+        # if rank == 0:
+        #     print(f"G2P communication time (2): {finish - start}", flush = True)
+        # start = time.perf_counter()
+        # alltoall_g2p(gr_h2g, gr_g2p, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # comm.Barrier()
+        # finish = time.perf_counter()
+        # if rank == 0:
+        #     print(f"G2P communication time (3): {finish - start}", flush = True)
+        # start = time.perf_counter()
         alltoall_g2p(gl_transposed_h2g, gl_transposed_g2p, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # comm.Barrier()
+        # finish = time.perf_counter()
+        # if rank == 0:
+        #     print(f"G2P communication time (4): {finish - start}", flush = True)
 
         comm.Barrier()
         finish_g2p_comm = time.perf_counter()
@@ -770,7 +864,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
-        alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
+        # alltoall_p2g(pl_g2p, pr_p2w, transpose_net=args.net_transpose, gpu_aware=is_mpi_gpu_aware)
 
         pg_p2w_vec = None
         pl_p2w_vec = None
@@ -825,20 +919,30 @@ if __name__ == "__main__":
                 pr_p2w,
                 # Coulomb matrix.
                 vh,
+                vh_diag, vh_upper, vh_lower,
                 # Output Green's functions.
                 wg_p2w,
                 wl_p2w,
                 wr_p2w,
                 # Sparse-to-dense Mappings.
-                map_diag_mm,
-                map_upper_mm,
-                map_lower_mm,
-                map_diag_m,
-                map_upper_m,
-                map_lower_m,
-                map_diag_l,
-                map_upper_l,
-                map_lower_l,
+                # map_diag_mm,
+                # map_upper_mm,
+                # map_lower_mm,
+                # map_diag_m,
+                # map_upper_m,
+                # map_lower_m,
+                # map_diag_l,
+                # map_upper_l,
+                # map_lower_l,
+                mapping_diag_mm,
+                mapping_upper_mm,
+                mapping_lower_mm,
+                mapping_diag_m,
+                mapping_upper_m,
+                mapping_lower_m,
+                mapping_diag_l,
+                mapping_upper_l,
+                mapping_lower_l,
                 # P indices
                 rows_dev,
                 columns_dev,
@@ -922,8 +1026,8 @@ if __name__ == "__main__":
         
         # calculate the transposed
         if is_mpi_gpu_aware:
-            wg_transposed_p2w = cp.copy(wg_p2w[:, ij2ji], order="C")
-            wl_transposed_p2w = cp.copy(wl_p2w[:, ij2ji], order="C")
+            wg_transposed_p2w[:] = wg_p2w[:, ij2ji_dev]
+            wl_transposed_p2w[:] = wl_p2w[:, ij2ji_dev]
         else:
             wg_transposed_p2w = np.copy(wg_p2w[:, ij2ji], order="C")
             wl_transposed_p2w = np.copy(wl_p2w[:, ij2ji], order="C")
