@@ -1,5 +1,6 @@
 import numpy as np    
 import types
+from numpy.linalg import inv
 
 #  block sparse CSR matrix:
 #     same as CSR format, but with an easier access to the ind_ptr in block [i,j]
@@ -106,30 +107,142 @@ def matmul_bcsr(M,G,col_index,ind_ptr,nnz,block_size,
     return mat
  
 # forward pass of RGF
-#   solve the left-connected equation system: M@G^r = I and G^< = G^r @ Sig^< @ (G^r)^H
+#   solve the left-connected equation system: (ES-M-Sig^r@S)@G^r = I and G^< = G^r @ Sig^< @ (G^r)^H
 #   G^> can be implicitly known from the identity: G^r - (G^r)^H = G^> - G^<
 #   several forward passes can be chained together to solve a big system in small partitions,
 #   just need to pass the `sigma_out` and `sigma_out_lesser` into the next function call as
 #   `sigma_in` and `sigma_in_lesser` 
 #
-#   `M` is system matrix, `sigma_scat` and `sigma_scat_lesser` are scattering self-energies
+#   `E` is energy, `M` is system matrix, `S` is overlap matrix, 
+#   `sigma_scat` and `sigma_scat_lesser` are scattering self-energies
 #   `sigma_in` and `sigma_in_lesser` are boundary incoming self-energies from the first site
 #   `sigma_out` and `sigma_out_lesser` are boundary outgoing self-energies from the last site
 #   `gl` and `gl_lesser` are left-connected Green functions
-#   `start_iblock` and `end_iblock` are starting and ending block index for the partition
+#   `start_iblock` and `end_iblock` are starting and ending block index of the partition
 #   `inc` is the incremental direction of transport axis, + for going from 0 to L and - for opposite
-def rgf_forward_pass(M,sigma_scat,sigma_scat_lesser,sigma_in,sigma_in_lesser,
-                     start_iblock,end_iblock,num_blocks,block_size):
-    length = abs(start_iblock - end_iblock)
+def rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,sigma_in,sigma_in_lesser,
+                     start_iblock,end_iblock,num_blocks,block_size,
+                     col_index,ind_ptr,nnz,num_diag):
+    length = abs(end_iblock - start_iblock) - 1 
     inc = np.sign(end_iblock-start_iblock)
     gl = np.zeros((length,block_size,block_size),dtype='complex')
     gl_lesser = np.zeros((length,block_size,block_size),dtype='complex')
     sigma_out = np.zeros((block_size,block_size),dtype='complex')
     sigma_out_lesser = np.zeros((block_size,block_size),dtype='complex')
+    z=E+0.0j
+    H00=np.zeros((block_size,block_size),dtype='complex')    
+    A=np.zeros((block_size,block_size),dtype='complex')
+    B=np.zeros((block_size,block_size),dtype='complex')
+    for ix in range(start_iblock,end_iblock+inc,inc):
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        Hii = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=-inc)
+        Sii = get_block_from_bcsr(S,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        B = sig_ph_r @ Sii 
+        H00 = Hii + B
+        # $$H00 = H(i,i) + \Sigma_{ph}(i) * S(i,i)$$
+        # $$Gl(i) = [E*S(i,i) - H00 - H(i,i-1) * Gl(i-1) * H(i-1,i)]^{-1}$$
+        if (ix != start_iblock):
+            B = H1i @ gl[ix-1,:,:] @ H1i.conj().T     
+        else:
+            B = sigma_in   
+
+        if (ix == end_iblock):
+            sigma_out = B
+        else:
+            A = z*Sii - H00 - B        
+            gl[ix,:,:] = inv(A)   
+
+        # $$Gln(i) = Gl(i) * [\Sigma_{ph}^<(i)*S(i,i) + H(i,i+1)*Gln(i+1)*H(i+1,i)] * Gl(i)^\dagger$$
+        if (ix != start_iblock):
+            B = H1i @ gl_lesser[ix-1,:,:] @ H1i.conj().T
+        else:
+            B = sigma_in_lesser
+
+        if (ix == end_iblock):
+            sigma_out_lesser = B            
+        else:
+            A = sig_ph_l @ Sii
+            B = B + A
+            gl_lesser[ix,:,:] = gl[ix,:,:] @ B @ gl[ix,:,:].conj().T
 
     return gl,gl_lesser,sigma_out,sigma_out_lesser
 
+
 # backward pass of RGF
-#   solve the fully-connected equation system: M@G^r = I and G^< = G^r @ Sig^< @ (G^r)^H
-def rgf_backward():
-    return
+#   solve the fully-connected equation system: (ES-M-Sig^r@S)@G^r = I and G^< = G^r @ Sig^< @ (G^r)^H
+#   
+#   `gl` and `gl_lesser` are left-connected Green functions obtained from forward pass
+#   `M` is system matrix in BCSR form
+#   `G_l_prev` and `G_r_prev` are the fully-connected Green functions of the previous block of `start_iblock`
+#   `sigma_out` and `sigma_out_lesser` are boundary outgoing self-energies from the last site
+#   `start_iblock` and `end_iblock` are starting and ending block index of the partition
+#   `G_r` and `G_lesser` are fully-connected Green functions in BCSR form
+def rgf_backward(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_blocks,block_size,
+                     col_index,ind_ptr,nnz,num_diag,
+                     G_retarded,G_lesser,G_greater,cur):    
+    inc = np.sign(end_iblock-start_iblock)
+    A=np.zeros((block_size,block_size),dtype='complex')
+    B=np.zeros((block_size,block_size),dtype='complex')
+    GN0=np.zeros((block_size,block_size),dtype='complex')    
+    G_l = G_l_prev
+    G_r = G_r_prev
+    G_g = np.zeros((block_size,block_size),dtype='complex')
+    G_l_new = np.zeros((block_size,block_size),dtype='complex')
+    G_r_new = np.zeros((block_size,block_size),dtype='complex')
+
+    for ix in range(start_iblock,end_iblock+inc,inc):
+        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix-inc,idiag=inc)
+        Hi1 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=-inc)
+        # $$A = G^<(i+1) * H(i+1,i) * Gl(i)^\dagger + G(i+1) * H(i+1,i) * Gln(i)$$        
+        A = G_l @ H1i @ gl[ix,:,:].conj().T
+        B = G_r @ H1i @ gl_lesser[ix,:,:]
+        A += B        
+        # $$B = H(i,i+1) * A$$
+        # $$Jdens(i) = -2 * B$$
+        B = Hi1 @ A
+        cur[ix,:,:] = -2.0*B        
+        # $$GN0 = Gl(i) * H(i,i+1) * G(i+1)$$
+        # $$G(i) = Gl(i) + GN0 * H(i+1,i) * Gl(i)$$        
+        B = gl[ix,:,:] @ Hi1
+        GN0 = B @ G_r 
+        A = GN0 @ H1i @ gl[ix,:,:]                
+        G_r_new = gl[ix,:,:] + A
+        
+        # $$G^<(i) = Gln(i) + Gl(i) * H(i,i+1) * G^<(i+1) * H(i+1,i) *Gl(i)^\dagger$$
+        B = gl[ix,:,:] @ Hi1 
+        C = B @ G_l 
+        A = C @ H1i 
+        C = A @ gl[ix,:,:].conj().T
+        G_l_new = gl_lesser[ix,:,:] + C            
+        # $$G^<(i) = G^<(i) + GN0 * H(i+1,i) * Gln(i)$$
+        B = GN0 @ H1i 
+        C = B @ gl_lesser[ix,:,:]
+        G_l_new +=  C            
+        # $$G^<(i) = G^<(i) + Gln(i) * H(i,i+1) * GN0$$
+        B = gl_lesser[ix,:,:] @ Hi1 
+        C = B @ GN0.conj().T
+        G_l_new +=  C
+        
+        # $$G^>(i) = G^<(i) + [G(i) - G(i)^\dagger]$$
+        G_g = G_l + (G_r - G_r.conj().T)
+        G_l = G_l_new
+        G_r = G_r_new
+
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
+    
+    
+    return G_r,G_l
