@@ -600,14 +600,12 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
     ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
 
     # Create self-energy arrays.
-    sg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    sl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    sr_principale: npt.NDArray[np.complex128] = np.empty_like(
-        gg, dtype=np.complex128)
+    sg: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
+    sl: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
+    sr_principale: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
 
     for ki in range(nkpts):
         for kip in range(nkpts):
-
             # find correct energy range that correspond to the right k-point.
             # energy kpoint indices.
             ek = ki * ne
@@ -627,16 +625,12 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
             gl_t = linalg_cpu.fft_numba(gl[:, ekp:ekp+ne], ne2, no)
             wg_t = linalg_cpu.fft_numba(wg[:, ekd:ekd+ne], ne2, no)
             wl_t = linalg_cpu.fft_numba(wl[:, ekd:ekd+ne], ne2, no)
-            wg_transposed_t = linalg_cpu.fft_numba(
-                wg_transposed[:, ekd:ekd+ne], ne2, no)
-            wl_transposed_t = linalg_cpu.fft_numba(
-                wl_transposed[:, ekd:ekd+ne], ne2, no)
+            wg_transposed_t = linalg_cpu.fft_numba(wg_transposed[:, ekd:ekd+ne], ne2, no)
+            wl_transposed_t = linalg_cpu.fft_numba(wl_transposed[:, ekd:ekd+ne], ne2, no)
 
             # fft of energy reversed
-            rgg_t = linalg_cpu.fft_numba(
-                linalg_cpu.flip(gg[:, ekp:ekp+ne]), ne2, no)
-            rgl_t = linalg_cpu.fft_numba(
-                linalg_cpu.flip(gl[:, ekp:ekp+ne]), ne2, no)
+            rgg_t = linalg_cpu.fft_numba(linalg_cpu.flip(gg[:, ekp:ekp+ne]), ne2, no)
+            rgl_t = linalg_cpu.fft_numba(linalg_cpu.flip(gl[:, ekp:ekp+ne]), ne2, no)
 
             # multiply elementwise for sigma_1 the normal term
             sg_t_1 = linalg_cpu.elementmul(gg_t, wg_t)
@@ -644,19 +638,15 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
 
             # multiply elementwise the energy reversed with difference of transposed and energy zero
             # see the README for derivation
-            sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(
-                wl_transposed_t, wl_transposed[:, 0]))
-            sl_t_2 = linalg_cpu.elementmul(rgl_t, linalg_cpu.substract_special(
-                wg_transposed_t, wg_transposed[:, 0]))
+            sg_t_2 = linalg_cpu.elementmul(rgg_t, linalg_cpu.substract_special(wl_transposed_t, wl_transposed[:, 0]))
+            sl_t_2 = linalg_cpu.elementmul(rgl_t, linalg_cpu.substract_special(wg_transposed_t, wg_transposed[:, 0]))
 
             # ifft, cutoff and multiply with pre factor
             sg_1 = linalg_cpu.scalarmul_ifft_cutoff(sg_t_1, pre_factor, ne, no)
             sl_1 = linalg_cpu.scalarmul_ifft_cutoff(sl_t_1, pre_factor, ne, no)
 
-            sg_2 = linalg_cpu.flip(
-                linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no))
-            sl_2 = linalg_cpu.flip(
-                linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no))
+            sg_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sg_t_2, pre_factor, ne, no))
+            sl_2 = linalg_cpu.flip(linalg_cpu.scalarmul_ifft_cutoff(sl_t_2, pre_factor, ne, no))
 
             # Calculating the truncated fock part
             # vh1d = np.asarray(vh[rows, cols].reshape(-1))
