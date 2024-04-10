@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/small_cut_off/"
     scratch_path2 = "/usr/scratch/bucaramanga/awinka/quatrex_results/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     # solution_path not used
@@ -139,15 +139,15 @@ if __name__ == "__main__":
     # create hamiltonian object
     Vappl = 0.2  # 0.2  # Applied voltage
     # Number of kpoints in x-, y-, and z-directions
-    num_kpoints = np.array([1, 5, 1])
+    num_kpoints = np.array([1, 3, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-20, 15, 512, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-15, 10, 8192, endpoint=True, dtype=float)  # Energy Vector
     EPHN = np.array([0.0]) # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
     # Have to read the correct Hamiltonian object
     matrix_obj = Matrices(
-        args.file_hm, num_kpoints, Vappl=Vappl, rank=rank)
+        args.file_hm, num_kpoints, Vappl=Vappl, rank=rank, potential_type="none")
     serial_ham = pickle.dumps(matrix_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     matrix_obj = pickle.loads(broadcasted_ham)
@@ -411,7 +411,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     
     # max number of iterations
-    max_iter = 50
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))

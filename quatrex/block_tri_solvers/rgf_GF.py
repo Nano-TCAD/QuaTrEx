@@ -456,55 +456,46 @@ def rgf_GF(M: sparse.csr_matrix,
     #                                                    M[:LBsize, LBsize:2*LBsize].toarray(), np.eye(LBsize, LBsize))
     if not sancho:
         SigRBL, _, condL, min_dEkL = beyn_func(NCpSC, M[:LBsize, :LBsize].toarray(),
-                                               M[:LBsize, LBsize:2 *
-                                                   LBsize].toarray(),
-                                               M[LBsize:2 * LBsize,
-                                                   :LBsize].toarray(),
+                                               M[:LBsize, LBsize:2 * LBsize].toarray(),
+                                               M[LBsize:2 * LBsize, :LBsize].toarray(),
                                                imag_lim,
                                                R,
                                                'L')
 
     if np.isnan(condL) or sancho:
         _, SigRBL, _, condL = open_boundary_conditions(M[:LBsize, :LBsize].toarray(),
-                                                       M[LBsize:2 * LBsize,
-                                                           :LBsize].toarray(),
+                                                       M[LBsize:2 * LBsize, :LBsize].toarray(),
                                                        M[:LBsize, LBsize:2 * LBsize].toarray(), np.eye(LBsize, LBsize))
 
     # condL = np.nan
     if not np.isnan(condL):
         M[:LBsize, :LBsize] -= SigRBL
         GammaL = 1j * (SigRBL - SigRBL.conj().T)
-        SigLBL = - 1j * fL * GammaL
-        # is this correct? Shouldn't it be 1-fL?
-        SigGBL = 1j * (1 - fL) * GammaL
+        SigLBL = 1j * fL * GammaL
+        SigGBL = 1j * (fL - 1) * GammaL
         SigL[:LBsize, :LBsize] += SigLBL
         SigG[:LBsize, :LBsize] += SigGBL
 
     # GR/GL/GG OBC right
     if not sancho:
         SigRBR, _, condR, min_dEkR = beyn_func(NCpSC, M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
-                                               M[NT - 2 * RBsize:NT - RBsize,
-                                                   NT - RBsize:NT].toarray(),
-                                               M[NT - RBsize:NT, NT - 2 *
-                                                   RBsize:NT - RBsize].toarray(),
+                                               M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
+                                               M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
                                                imag_lim,
                                                R,
                                                'R')
 
     if np.isnan(condR) or sancho:
         _, SigRBR, _, condR = open_boundary_conditions(M[NT - RBsize:NT, NT - RBsize:NT].toarray(),
-                                                       M[NT - 2 * RBsize:NT - RBsize,
-                                                           NT - RBsize:NT].toarray(),
-                                                       M[NT - RBsize:NT, NT - 2 *
-                                                           RBsize:NT - RBsize].toarray(),
+                                                       M[NT - 2 * RBsize:NT - RBsize, NT - RBsize:NT].toarray(),
+                                                       M[NT - RBsize:NT, NT - 2 * RBsize:NT - RBsize].toarray(),
                                                        np.eye(RBsize, RBsize))
     # condR = np.nan
     if not np.isnan(condR):
         M[NT - RBsize:NT, NT - RBsize:NT] -= SigRBR
         GammaR = 1j * (SigRBR - SigRBR.conj().T)
-        SigLBR = - 1j * fR * GammaR
-        # Is this correct? Shouldn't it be 1-fR? No!
-        SigGBR = 1j * (1 - fR) * GammaR
+        SigLBR = 1j * fR * GammaR
+        SigGBR = 1j * (fR - 1) * GammaR
         SigL[NT - RBsize:NT, NT - RBsize:NT] += SigLBR
         SigG[NT - RBsize:NT, NT - RBsize:NT] += SigGBR
 
@@ -567,7 +558,6 @@ def rgf_GF(M: sparse.csr_matrix,
 
             gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] @ (SigL_c + SigLB[IB, 0:NI, 0:NI]) @ gR[IB, 0:NI, 0:NI].T.conj()  # Confused about the AL
 
-            # What is this?
             AG = M_r @ gR[IB+1, 0:NP, 0:NP] @ SigG_l  # Handling off-diagonal sigma elements? Prob. need to check
 
             # gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
@@ -583,23 +573,19 @@ def rgf_GF(M: sparse.csr_matrix,
 
         # Second step of iteration
         GR[0, :NI, :NI] = gR[0, :NI, :NI]
-        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] +
-                                                  1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
+        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP]
 
         GL[0, :NI, :NI] = gL[0, :NI, :NI]
         GLnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigL[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
             - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gL[1, :NP, :NP] \
-            - GL[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
-                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+            - GL[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
 
         GG[0, :NI, :NI] = gG[0, :NI, :NI]
         GGnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigG[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
             - GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gG[1, :NP, :NP] \
-            - GG[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0] +
-                                  1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
+            - GG[0, :NI, :NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj()
 
-        idE[0] = np.real(np.trace(
-            SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
+        idE[0] = np.real(np.trace(SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
 
         # try:
         #     assert np.allclose(GR[0, :NI, :NI] - GR[0, :NI, :NI].T.conj(), GG[0, :NI, :NI] - GL[0, :NI, :NI], rtol=1e-2)
@@ -747,8 +733,7 @@ def rgf_GF(M: sparse.csr_matrix,
                     - GG[IB, 0:NI, 0:NI] \
                     @ M_d.T.conj() \
                     @ gR[IB+1, 0:NP, 0:NP].T.conj()
-                idE[IB] = np.real(np.trace(
-                    SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))
+                idE[IB] = np.real(np.trace(SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))
 
         for IB in range(NB):
 
@@ -768,8 +753,8 @@ def rgf_GF(M: sparse.csr_matrix,
                 GGnn1[IB, :, :] *= factor
 
         # idE[NB - 1] = idE[NB - 2]
-        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI,
-                            :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
+        # Do I need a AL/AG correction here?
+        idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI, :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
 
     return SigRBL, SigRBR
 

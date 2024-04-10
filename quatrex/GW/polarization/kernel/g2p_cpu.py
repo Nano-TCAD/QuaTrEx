@@ -412,8 +412,8 @@ def g2p_fft_mpi_cpu_inlined_kpoints(
         gr_t[:, i*ne2:(i+1)*ne2] = gr_ts
         gl_transposed_t[:, i*ne2:(i+1)*ne2] = gl_transposed_ts
 
-    pg_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
-    pr_t: npt.NDArray[np.complex128] = np.empty_like(gl_t, dtype=np.complex128)
+    pg_t: npt.NDArray[np.complex128] = np.zeros_like(gl_t, dtype=np.complex128)
+    pr_t: npt.NDArray[np.complex128] = np.zeros_like(gl_t, dtype=np.complex128)
 
     # Convolution over k-points
     for ki in range(nkpts):

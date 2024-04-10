@@ -159,8 +159,10 @@ class Matrices:
                 self.Vatom = read_file_to_float_ndarray(
                     sim_folder + '/Vatom.dat', ",")
                 self.Vpot = self.get_atomic_potential()
+            elif potential_type == 'none':
+                self.Vpot = np.zeros(self.size)
             # Adds the potential to the Hamiltonian
-            # self.add_potential()
+            self.add_potential()
 
             # Set kpoints (MP grid)
             self.kp = self.k_points(Nk)
@@ -409,14 +411,13 @@ class Matrices:
 
     def create_k_matrix(self, int_mat=None, kp=None):
         """
-        Constructs the full matrix from an interaction matrix. Here, it only works for
-        H_3, H_4, and H_5.
+        Constructs the full matrix from an interaction matrix. 
 
         ## Parameters
         int_mat: dict
             interactions (Hamiltonian or Coulomb)
         kp: ndarray
-            k-points
+            k-points (Usually MP grid)
 
         ## Returns
         Mk: dict
@@ -428,6 +429,7 @@ class Matrices:
         if kp is None:
             kp = self.kp
 
+        # Number of k-points
         Nk = kp.shape[0]
         Mk = {}
 
@@ -438,8 +440,8 @@ class Matrices:
                 rp = np.array(key)
                 if k_key not in Mk.keys():
                     Mk[k_key] = np.exp(2 * np.pi * 1j * rp @
-                                       kp[ik]) * int_mat[key]
+                                       kp[ik]) * int_mat[key]  # / Nk
                 else:
                     Mk[k_key] += np.exp(2 * np.pi * 1j * rp @
-                                        kp[ik]) * int_mat[key]
+                                        kp[ik]) * int_mat[key]  # / Nk
         return Mk
