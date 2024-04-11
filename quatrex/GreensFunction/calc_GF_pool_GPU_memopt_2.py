@@ -66,7 +66,9 @@ def calc_GF_pool_mpi_split_memopt(
     homogenize=True,
     NCpSC: int = 1,
     mkl_threads: int = 1,
-    worker_num: int = 1        
+    worker_num: int = 1,
+    post_process: bool = True,
+    batchsize: int = None,      
 ):
     comm.Barrier()
     if rank == 0:
@@ -253,7 +255,7 @@ def calc_GF_pool_mpi_split_memopt(
 
     if rank == 0:
         time_pre_OBC += time.perf_counter()
-        print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
+        print("Time for pre-processing OBC: %.6f s" % time_pre_OBC, flush = True)
         time_OBC = -time.perf_counter()
                 
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
@@ -307,7 +309,7 @@ def calc_GF_pool_mpi_split_memopt(
     comm.Barrier()
     if rank == 0:
         time_OBC += time.perf_counter()
-        print("Time for OBC: %.3f s" % time_OBC, flush = True)
+        print("Time for OBC: %.6f s" % time_OBC, flush = True)
         time_GF_trafo = -time.perf_counter()
 
     l_defect = np.count_nonzero(np.isnan(condL))
@@ -325,20 +327,12 @@ def calc_GF_pool_mpi_split_memopt(
     # overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
     # input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    comm.Barrier()
-    if rank == 0:
-        time_GF_trafo += time.perf_counter()
-        print("Time for GF transformation: %.3f s" % time_GF_trafo, flush = True)
-        time_SE = -time.perf_counter()
 
-
-    energy_batchsize = ne 
+    energy_batchsize = batchsize if batchsize is not None else ne
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()
     if rank == 0:
-        time_SE += time.perf_counter()
-        print("Time for SE subtraction: %.3f s" % time_SE, flush = True)
         time_GF = -time.perf_counter()
     for ie in energy_batch:
         rgf_GF_GPU_combo.rgf_batched_GPU(energy[ie:ie+energy_batchsize],
@@ -357,9 +351,11 @@ def calc_GF_pool_mpi_split_memopt(
     comm.Barrier()
     if rank == 0:
         time_GF += time.perf_counter()
-        print("Time for GF: %.3f s" % time_GF, flush = True)
+        print("Time for GF: %.6f s" % time_GF, flush = True)
         time_post_proc = -time.perf_counter()
 
+    if not post_process:
+        return
     
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
@@ -427,7 +423,7 @@ def calc_GF_pool_mpi_split_memopt(
     comm.Barrier()
     if rank == 0:
         time_post_proc += time.perf_counter()
-        print("Time for post-processing: %.3f s" % time_post_proc, flush = True)
+        print("Time for post-processing: %.6f s" % time_post_proc, flush = True)
     
 def generator_rgf_GF(E, DH):
     for i in range(E.shape[0]):

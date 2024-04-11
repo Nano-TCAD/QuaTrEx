@@ -6,6 +6,7 @@ from scipy import sparse
 from scipy.sparse import identity
 import matplotlib.pylab as plt
 from scipy.interpolate import griddata
+import time
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
 from quatrex.utils.read_utils import *
@@ -50,10 +51,19 @@ class Hamiltonian:
     
     def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0):
         if(not rank):
+
+            start_time = time.perf_counter()
+            print(f"Starting to create Hamiltonian object for {sim_folder} ...", flush=True)
+            begin = start_time
+
             self.no_orb = no_orb
             self.sim_folder = sim_folder
             self.blocks = glob.glob(self.sim_folder + '/H*.bin')
             self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
+
+            current = time.perf_counter()
+            print(f"Time to read files: {current - begin:.2f} seconds", flush=True)
+            begin = current 
 
             self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
 
@@ -85,10 +95,18 @@ class Hamiltonian:
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
                                                                   dtype=np.cfloat,
                                                                   format='csr')
+            
+            current = time.perf_counter()
+            print(f"Time to read Hamiltonian and Overlap matrices: {current - begin:.2f} seconds", flush=True)
+            begin = current
 
             #Check that hamiltonian is hermitean
             self.hermitean = self.check_hermitivity(tol=1e-6)
             #self.hermitean = True
+
+            current = time.perf_counter()
+            print(f"Time to check hermitivity: {current - begin:.2f} seconds", flush=True)
+            begin = current
 
             #Read Block Properties
             self.LM = read_file_to_float_ndarray(sim_folder + layer_matrix)
@@ -97,20 +115,48 @@ class Hamiltonian:
             self.TB = np.max(self.no_orb)
             self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
             self.Smin = self.Smin.reshape((self.Smin.shape[0], )).astype(int)
+
+            current = time.perf_counter()
+            print(f"Time to read block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             self.prepare_block_properties()
-            self.map_neighbor_indices()
-            self.map_sparse_indices()
+            current = time.perf_counter()
+            print(f"Time to prepare block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            self.map_neighbor_indices_opt()
+            current = time.perf_counter()
+            print(f"Time to map neighbor indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            if potential_type is None:
+                import os
+                self.map_sparse_indices_opt()
+                self.ij2ji = np.load(os.path.join(self.sim_folder, "ij2ji.npy"))
+                self.ij2ji_m = np.load(os.path.join(self.sim_folder, "ij2ji_m.npy"))
+                self.ij2ji_l = np.load(os.path.join(self.sim_folder, "ij2ji_l.npy"))
+            else:
+                self.map_sparse_indices()
+            current = time.perf_counter()
+            print(f"Time to map sparse indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             if(homogenize):
                 self.homogenize(NCpSC)
-            if(potential_type == 'linear'):
-                self.Vpot = self.get_linear_potential_drop()
-            elif (potential_type == 'unit_cell'):
-                self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
-                self.Vpot = self.get_unit_cell_potential()
-            elif (potential_type == 'atomic'):
-                self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
-                self.Vpot = self.get_atomic_potential()
-            self.add_potential()
+            if (potential_type is not None):
+                if(potential_type == 'linear'):
+                    self.Vpot = self.get_linear_potential_drop()
+                elif (potential_type == 'unit_cell'):
+                    self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
+                    self.Vpot = self.get_unit_cell_potential()
+                elif (potential_type == 'atomic'):
+                    self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                    self.Vpot = self.get_atomic_potential()
+                self.add_potential()
+
+            current = time.perf_counter()
+            print(f"Time to add potential: {current - begin:.2f} seconds", flush=True)
 
     #Helper function to initialise all hamiltonians
     def read_sparse_matrix(self, fname='./H_4.bin'):
@@ -290,6 +336,39 @@ class Hamiltonian:
                         if self.LM[neigh - 1, 4 + IB2].astype(int) == IA + 1:
                             self.LM_map[IA, 4 + IB1] = IB2 + 1
                             break
+    
+    def map_neighbor_indices_opt(self, ):
+        """
+        This functions generates the content of the field LM_map.
+        Assume atom i and atom j are neighbors. Using the layer matrix it holds that
+        LM(i,4+IB_i)=j. However it doesn't hold LM(j,4+IB_i)=i, instead we 
+        find the reciprocal neighbor with LM(j,4+IB_j)=i. 
+        
+        LM_map has the following property: LM_map(i,4+IB_i)=IB_j and LM_map(j,4+IB_j)=IB_i
+
+        Returns
+        -------
+        None.
+
+        """
+        self.LM_map = np.copy(self.LM)
+        self.LM_int = self.LM.astype(int)
+
+        for IA in range(self.NA):
+
+            # for IB1 in range(self.NB):
+            for idx, neigh in enumerate(self.LM_int[IA, 4:]):
+                # neigh = self.LM_int[IA, 4 + IB1]
+                if neigh > 0:
+                    try:
+                        IB2 = next(i for i, val in enumerate(self.LM_int[neigh - 1, 4:]) if val == IA + 1)
+                    except StopIteration:
+                        continue
+                    # self.LM_map[IA, 4 + IB1] = IB2 + 1
+                    self.LM_map[IA, idx] = IB2 + 1
+                    break
+        
+        del self.LM_int
 
     def map_sparse_indices(self, ):
         """
@@ -341,6 +420,65 @@ class Hamiltonian:
             indA = ind
         self.columns = indI[:ind].astype('int32')
         self.rows = indJ[:ind].astype('int32')
+        # np.save('rows.npy', self.rows)
+        # np.save('columns.npy', self.columns)
+
+    def map_sparse_indices_opt(self, ):
+        """
+        This functions generates the content of the rows and cols field.
+        The meaning of rows and cols are the non-zero indices of the sparse system matrices,
+        they are derived from the neighbor information in the layer matrix.
+        Using these indices, the transformation between sparse, block and energy contigous formats can be done.
+        """
+        import os
+        # self.LM_int = self.LM.astype(int)
+        self.rows = np.load(os.path.join(self.sim_folder, 'rows.npy'))
+        self.columns = np.load(os.path.join(self.sim_folder, 'columns.npy'))
+        # max_orb = np.max(self.no_orb)
+        self.NH = self.Bmax[-1]
+        # indI = np.zeros((self.NH * (self.NB + 1) * self.TB, ), dtype=int)
+        # indJ = np.zeros((self.NH * (self.NB + 1) * self.TB, ), dtype=int)
+        # ind = 0
+
+        # indA = 0
+
+        # for IA in range(self.NA):
+        #     indR = self.orb_per_at[IA] - 1
+        #     # orbA = self.orb_per_at[IA + 1] - self.orb_per_at[IA]
+        #     orbA = self.orb_per_at[IA + 1] - indR + 1
+
+        #     for IB in range(self.NB + 1):
+        #         add_element = 1
+
+        #         if IB == 0:
+        #             indC = indR
+        #             orbB = orbA
+        #         else:
+        #             if self.LM[IA, 4 + IB - 1] > 0:
+        #                 neigh = self.LM_int[IA, 4 + IB - 1]
+        #                 indC = self.orb_per_at[neigh - 1] - 1
+        #                 orbB = self.orb_per_at[neigh] - self.orb_per_at[neigh - 1]
+        #             else:
+        #                 add_element = 0
+
+        #         if add_element:
+        #             if (max_orb == 1):
+        #                 indI[ind:ind + orbA * orbB] = np.sort(
+        #                     np.reshape(np.outer(np.arange(indR, indR + orbA), np.ones((1, orbB))), (1, orbA * orbB)))
+        #                 indJ[ind:ind + orbA * orbB] = np.sort(
+        #                     np.reshape(np.outer(np.ones((orbA, 1)), np.arange(indC, indC + orbB)), (1, orbA * orbB)))
+        #             else:
+        #                 indI[ind:ind + orbA * orbB] = np.reshape(
+        #                     np.outer(np.arange(indR, indR + orbA), np.ones((1, orbB))), (1, orbA * orbB))
+        #                 indJ[ind:ind + orbA * orbB] = np.reshape(
+        #                     np.outer(np.ones((orbA, 1)), np.arange(indC, indC + orbB)), (1, orbA * orbB))
+        #             ind += orbA * orbB
+        #     if (max_orb == 1):
+        #         indI[indA:ind] = np.sort(indI[indA:ind])
+        #         indJ[indA:ind] = np.sort(indJ[indA:ind])
+        #     indA = ind
+        # self.columns = indI[:ind].astype('int32')
+        # self.rows = indJ[:ind].astype('int32')
 
     def get_linear_potential_drop(self, ):
         """

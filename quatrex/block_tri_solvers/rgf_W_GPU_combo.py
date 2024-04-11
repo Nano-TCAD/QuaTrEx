@@ -174,6 +174,26 @@ def rgf_batched_GPU(
     wG_gpu = cp.empty(
         (num_blocks, batch_size, block_size, block_size), dtype=dtype
     )  # Greater (right)
+    # # EXPERIMENTAL
+    # xR_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Retarded (right)
+    # wL_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Lesser (right)
+    # wG_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Greater (right)
+    # xR_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Retarded (right)
+    # wL_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Lesser (right)
+    # wG_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Greater (right)
+    ############################
     # dll_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
     # dlg_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
     dll_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
@@ -297,6 +317,9 @@ def rgf_batched_GPU(
     xr = xR_gpu[IB]
     wl = wL_gpu[IB]
     wg = wG_gpu[IB]
+    # xr = xR_gpu[idx]
+    # wl = wL_gpu[idx]
+    # wg = wG_gpu[idx]
 
     dmr = dmr_dev[IB]
     dll = dll_dev[IB]
@@ -342,6 +365,14 @@ def rgf_batched_GPU(
         with input_stream:
 
             input_stream.wait_event(event=backward_events[pidx])
+
+            # xr = xR_gpu[pidx]
+            # xr.get(out=xR_cpu[pIB])
+            # wl = wL_gpu[pidx]
+            # wl.get(out=wL_cpu[pIB])
+            # wg = wG_gpu[pidx]
+            # wg.get(out=wG_cpu[pIB])
+
             if nIB >= 0:
 
                 nmrd = mr_diag_buffer[nidx]
@@ -391,6 +422,14 @@ def rgf_batched_GPU(
         pwl = wL_gpu[IB + 1]
         wg = wG_gpu[IB]
         pwg = wG_gpu[IB + 1]
+
+        # xr = xR_gpu[idx]
+        # pxr = xR_gpu[pidx]
+        # wl = wL_gpu[pidx]
+        # pwl = wL_gpu[pidx]
+        # wg = wG_gpu[pidx]
+        # pwg = wG_gpu[pidx]
+
         dmr = dmr_dev[IB]
         # dll = dll_gpu[IB]
         # dlg = dlg_gpu[IB]
@@ -454,6 +493,23 @@ def rgf_batched_GPU(
     with input_stream:
 
         input_stream.wait_event(event=backward_events[idx])
+
+        # if IB == 0:
+
+        #     xr = xR_gpu[idx]
+        #     xr.get(out=xR_cpu[IB])
+        #     wl = wL_gpu[idx]
+        #     wl.get(out=wL_cpu[IB])
+        #     wg = wG_gpu[idx]
+        #     wg.get(out=wG_cpu[IB])
+
+        #     nnxr = xR_gpu[2]
+        #     nnxr.set(xR_cpu[IB+2])
+        #     nnwl = wL_gpu[2]
+        #     nnwl.set(wL_cpu[IB+2])
+        #     nnwg = wG_gpu[2]
+        #     nnwg.set(wG_cpu[IB+2])
+
         if nIB < num_blocks:
 
             npmru = mr_upper_buffer[nidx]
@@ -639,6 +695,14 @@ def rgf_batched_GPU(
 
                 if nIB < num_blocks - 1:
 
+                    # nnIB = nIB + 1
+                    # nnidx = nnIB % 3
+                    # nnxr = xR_gpu[nnidx]
+                    # nnxr.set(xR_cpu[nnIB])
+                    # nnwl = wL_gpu[nnidx]
+                    # nnwl.set(wL_cpu[nnIB])
+                    # nnwg = wG_gpu[nnidx]
+
                     nmru = mr_diag_buffer[nidx]
                     nmrl = ll_diag_buffer[nidx]
                     nllu = ll_upper_buffer[nidx]
@@ -670,6 +734,11 @@ def rgf_batched_GPU(
         xr = xR_gpu[IB]
         wl = wL_gpu[IB]
         wg = wG_gpu[IB]
+
+        # current_idx = IB % 3
+        # xr = xR_gpu[current_idx]
+        # wl = wL_gpu[current_idx]
+        # wg = wG_gpu[current_idx]
 
         dvh = dvh_dev[IB]
 
@@ -741,6 +810,10 @@ def rgf_batched_GPU(
             nxr = xR_gpu[nIB]
             nwl = wL_gpu[nIB]
             nwg = wG_gpu[nIB]
+            # next_index = nIB % 3
+            # nxr = xR_gpu[next_index]
+            # nwl = wL_gpu[next_index]
+            # nwg = wG_gpu[next_index]
 
             mru = mr_diag_buffer[idx]  # NOTE: This is not a mistake.
             mrl = ll_diag_buffer[idx]

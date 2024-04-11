@@ -16,6 +16,7 @@ import numpy as np
 import numpy.typing as npt
 import typing
 from scipy import sparse
+import time
 
 from quatrex.utils.bsr import bsr_matrix
 
@@ -876,6 +877,95 @@ def find_idx_transposed(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int
     assert idx_transposed.size == np.unique(idx_transposed).size
     idx_transposed = np.int32(idx_transposed)
     return idx_transposed
+
+
+def find_idx_transposed_2(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32]) -> npt.NDArray[np.int32]:
+    """Creates vector with mapping between element ij and ji of a sparse matrix.
+        It is assumed that the matrix is either symmetric/hermitian such that if 
+        ij exists also ji is non-zero.
+
+    Args:
+        rows (npt.NDArray[np.int32]): row index of non-zero values of a matrix
+        columns (npt.NDArray[np.int32]): column index of non-zero values of a matrix
+
+    Returns:
+        npt.NDArray[np.int32]: Array with mapping from ij to ji 
+    """
+
+    print(f"Rows type: {rows.dtype}", flush=True)
+    print(f"Columns type: {columns.dtype}", flush=True)
+
+    assert_time_0 = - time.perf_counter()
+    assert np.array_equal(np.shape(rows), np.shape(columns))
+    assert_time_0 += time.perf_counter()
+    print(f"Assert 0 time: {assert_time_0}", flush=True)
+
+    # import cupy as cp
+    # rows_dev = cp.asarray(rows)
+    # columns_dev = cp.asarray(columns)
+
+    # stack to 2D arrays
+    stack_time = - time.perf_counter()
+    ij: npt.NDArray[np.int32] = np.stack((rows, columns), axis=1)
+    ji: npt.NDArray[np.int32] = np.stack((columns, rows), axis=1)
+    # ij = cp.stack((rows_dev, columns_dev), axis=1)
+    # ji = cp.stack((columns_dev, rows_dev), axis=1)
+    stack_time += time.perf_counter()
+    print(f"Stack time: {stack_time}", flush=True)
+    print(f"IJ type: {ij.dtype}", flush=True)
+
+    # create type for sorting, a column is 8 byte
+    reshape_time = - time.perf_counter()
+    rowtype = np.dtype((np.void, 8))
+    # make contiguous in memory, view with new type and flatten
+    ij_n = np.ascontiguousarray(ij).view(rowtype).ravel()
+    ji_n = np.ascontiguousarray(ji).view(rowtype).ravel()
+    # ij_n = cp.ascontiguousarray(ij).view(rowtype).ravel()
+    # ji_n = cp.ascontiguousarray(ji).view(rowtype).ravel()
+    reshape_time += time.perf_counter()
+    print(f"Reshape time: {reshape_time}", flush=True)
+    print(f"IJ_n type: {ij_n.dtype}", flush=True)
+
+    # return idx that would sort
+    sort_time = - time.perf_counter()
+    # ij_n = ij_n.get()
+    ij_to_ijs = np.argsort(ij_n)
+    # ij_to_ijs = cp.argsort(ij_n)
+    sort_time += time.perf_counter()
+    print(f"Sort time: {sort_time}", flush=True)
+
+    # find indexes how to insert ji_n into ij_n such it remains sorted
+    # ij_n is sorted with ij_to_ijs
+    search_time = - time.perf_counter()
+    ijs_to_ji = ij_n.searchsorted(ji_n, sorter=ij_to_ijs)
+    search_time += time.perf_counter()
+    print(f"Search time: {search_time}", flush=True)
+
+    # take the elements from ij_to_ijs at ijs_to_ji
+    # ij -> ij sorted -> ji mapping
+    transpose_time = - time.perf_counter()
+    import cupy as cp
+    idx_transposed: npt.NDArray[np.int32] = cp.asarray(ij_to_ijs[ijs_to_ji])
+    transpose_time += time.perf_counter()
+    print(f"Transpose time: {transpose_time}", flush=True)
+
+    # # assert right shape
+    # assert_time_1 = - time.perf_counter()
+    # assert np.array_equal(np.shape(rows), np.shape(idx_transposed))
+    # # assert transformation is correct
+    # assert np.array_equal(ij, ji[idx_transposed])
+    # assert np.array_equal(ij[idx_transposed], ji)
+    # assert idx_transposed.size == np.unique(idx_transposed).size
+    # assert_time_1 += time.perf_counter()
+    # print(f"Assert 1 time: {assert_time_1}", flush=True)
+     # assert right shape
+    print(f"Idx-tranposed type: {idx_transposed.dtype}", flush=True)
+    conversion_time = - time.perf_counter()
+    # idx_transposed = np.int32(idx_transposed)
+    idx_transposed = cp.asarray(idx_transposed, dtype=np.int32)
+    conversion_time += time.perf_counter()
+    print(f"Conversion time: {conversion_time}", flush=True)
+    return idx_transposed.get()
 
 
 def find_idx_rt(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],

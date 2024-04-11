@@ -178,6 +178,8 @@ def calc_W_pool_mpi_split(
     block_inv: bool = False,
     use_dace: bool = False,
     validate_dace: bool = False,
+    post_process: bool = False,
+    w_batch_size: int = 8,
 ):
     """Memory-optimized version of the p2w_gpu function.
 
@@ -241,7 +243,7 @@ def calc_W_pool_mpi_split(
     #     vh, bmin_mm, bmax_mm + 1
     # )
 
-    obc_w_batchsize = 8
+    obc_w_batchsize = w_batch_size
 
     # Pinned memory buffers for the OBC.
     # dxr_sd = cpx.zeros_pinned((obc_w_batchsize, lb_start_mm, lb_start_mm), dtype=np.complex128)
@@ -294,7 +296,7 @@ def calc_W_pool_mpi_split(
     comm.Barrier()
     if rank == 0:
         time_pre_OBC += time.perf_counter()
-        print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush=True)
+        print("Time for pre-processing OBC: %.6f s" % time_pre_OBC, flush=True)
         time_OBC = -time.perf_counter()
 
     # --- Boundary conditions ------------------------------------------
@@ -618,25 +620,24 @@ def calc_W_pool_mpi_split(
     # if rank == 0:
     #     print("    Time for obc mm: %.3f s" % (finish_obc_mm - start_obc_mm), flush=True)
 
+    true_finish = time.perf_counter()
     comm.Barrier()
     finish_spgemm = time.perf_counter()
     if rank == 0:
         print("Screened Interaction region", flush=True)
-        print("    Time for overall W loop: %.3f s" % (finish_spgemm - start_spgemm), flush=True)
-        print("        Time for CopyToDevice: %.3f s" % time_copy_in, flush=True)
-        print("        Time for SpGEMM: %.3f s" % time_spgemm, flush=True)
-        print("        Time for CopyToHost: %.3f s" % time_copy_out, flush=True)
-        print("        Time for Densification: %.3f s" % time_dense, flush=True)
-        print("        Time for OBC MM: %.3f s" % time_obc_mm, flush=True)
-        print("        Time for Beyn W: %.3f s" % time_beyn_w, flush=True)
-        print("        Time for OBC L: %.3f s" % time_obc_l, flush=True)
-        print("        Time for RGF W: %.3f s" % time_w, flush=True)
+        print("    Time for overall W loop: %.6f s" % (finish_spgemm - start_spgemm), flush=True)
+        print("    True runtime for rank 0: %.6f s" % (true_finish - start_spgemm), flush=True)
+        print("        Time for CopyToDevice: %.6f s" % time_copy_in, flush=True)
+        print("        Time for SpGEMM: %.6f s" % time_spgemm, flush=True)
+        print("        Time for CopyToHost: %.6f s" % time_copy_out, flush=True)
+        print("        Time for Densification: %.6f s" % time_dense, flush=True)
+        print("        Time for OBC MM: %.6f s" % time_obc_mm, flush=True)
+        print("        Time for Beyn W: %.6f s" % time_beyn_w, flush=True)
+        print("        Time for OBC L: %.6f s" % time_obc_l, flush=True)
+        print("        Time for RGF W: %.6f s" % time_w, flush=True)
 
         print(f"Used bytes: {mempool.used_bytes()}", flush=True)
         print(f"Total bytes: {mempool.total_bytes()}", flush=True)
-
-    # comm.Barrier()
-    start_beyn_w = time.perf_counter()
 
     # imag_lim = 1e-4
     # R = 1e4
@@ -657,14 +658,6 @@ def calc_W_pool_mpi_split(
     # dmr_ed -= dmr.get()
     # (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
 
-    comm.Barrier()
-    finish_beyn_w = time.perf_counter()
-    if rank == 0:
-        print("    Time for beyn w: %.3f s" % (finish_beyn_w - start_beyn_w), flush=True)
-        
-    comm.Barrier()
-    start_obc_l = time.perf_counter()
-
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     #     executor.map(obc_w_gpu.obc_w_L_lg_2,
     #         dlg_sd,
@@ -680,11 +673,6 @@ def calc_W_pool_mpi_split(
     #         dxr_sd,
     #         dxr_ed,
     #     )
-    
-    comm.Barrier()
-    finish_obc_l = time.perf_counter()
-    if rank == 0:
-        print("    Time for obc l: %.3f s" % (finish_obc_l - start_obc_l), flush=True)
 
     # l_defect = np.count_nonzero(np.isnan(condL))
     # r_defect = np.count_nonzero(np.isnan(condR))
@@ -694,18 +682,6 @@ def calc_W_pool_mpi_split(
     #         "Warning: %d left and %d right boundary conditions are not satisfied."
     #         % (l_defect, r_defect)
     #     )
-
-    comm.Barrier()
-    if rank == 0:
-        time_OBC += time.perf_counter()
-        print("Time for OBC: %.3f s" % time_OBC, flush=True)
-        time_spmm = -time.perf_counter()
-
-    comm.Barrier()
-    if rank == 0:
-        time_spmm += time.perf_counter()
-        print("Time for spgemm: %.3f s" % time_spmm, flush=True)
-        time_GF_trafo = -time.perf_counter()
 
     # --- Transform L to the (NE, NNZ) format --------------------------
 
@@ -724,13 +700,6 @@ def calc_W_pool_mpi_split(
     # vh_diag, vh_upper, vh_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(
     #     vh, bmin_mm, bmax_mm + 1
     # )
-
-    comm.Barrier()
-    if rank == 0:
-        time_GF_trafo += time.perf_counter()
-        print("Time for W transformation: %.3f s" % time_GF_trafo, flush=True)
-        # time_GF = -time.perf_counter()
-        time_GF = -time.perf_counter()
 
     # --- Compute screened interaction ---------------------------------
 
@@ -779,8 +748,6 @@ def calc_W_pool_mpi_split(
 
     comm.Barrier()
     if rank == 0:
-        time_GF += time.perf_counter()
-        print("Time for W: %.3f s" % time_GF, flush=True)
         time_post_proc = -time.perf_counter()
 
     # --- Post-processing ----------------------------------------------
@@ -793,6 +760,9 @@ def calc_W_pool_mpi_split(
             "Warning: %d left and %d right boundary conditions are not satisfied."
             % (l_defect, r_defect)
         )
+
+    if not post_process:
+        return
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
@@ -908,7 +878,7 @@ def calc_W_pool_mpi_split(
     comm.Barrier()
     if rank == 0:
         time_post_proc += time.perf_counter()
-        print("Time for post-processing: %.3f s" % time_post_proc, flush=True)
+        print("Time for post-processing: %.6f s" % time_post_proc, flush=True)
 
 
 if __name__ == "__main__":

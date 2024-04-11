@@ -572,8 +572,8 @@ def get_dl_obc_alt(xr_d: cp.ndarray, lg_d: cp.ndarray, lg_o: cp.ndarray, ll_d: c
     # conjugate/transpose/abs square
     eivec_ct = eivec.conjugate().T
     #ieivec = np.linalg.inv(eivec)
-    ieivec_ct = ieivec.conjugate().T
-    eival_sq = cp.diag(eival) @ cp.diag(eival).conjugate()
+    # ieivec_ct = ieivec.conjugate().T
+    # eival_sq = cp.diag(eival) @ cp.diag(eival).conjugate()
     eival_sq_red = cp.outer(eival_red,eival_red.conjugate())
 
     # greater component
