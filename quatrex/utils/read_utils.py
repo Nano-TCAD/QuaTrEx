@@ -29,6 +29,30 @@ def read_file_to_int_ndarray(filename, delimiter=" "):
     return (data)
 
 
+def read_file_to_int_ndarray_distr(filename, delimiter=" ", rank = None, comm = None):
+
+    def is_int(string):
+        """ True if given string is float else False"""
+        try:
+            return int(string)
+        except ValueError:
+            return False
+
+    if rank == 0:
+        data = []
+        with open(filename, 'r') as f:
+            d = f.readlines()
+            for i in d:
+                k = i.rstrip().split(delimiter)
+                data.append([int(i) if is_int(i) else i for i in k])
+        data = np.array(data, dtype='int')
+    else:
+        data = None
+    data = comm.bcast(data, root=0)
+
+    return (data)
+
+
 def read_file_to_float_ndarray(filename, delimiter=" "):
 
     def is_float(string):
@@ -45,5 +69,29 @@ def read_file_to_float_ndarray(filename, delimiter=" "):
             k = i.rstrip().split(delimiter)
             data.append([float(i) if is_float(i) else i for i in k])
     data = np.array(data, dtype='float64')
+
+    return (data)
+
+
+def read_file_to_float_ndarray_distr(filename, delimiter=" ", rank = None, comm = None):
+
+    def is_float(string):
+        """ True if given string is float else False"""
+        try:
+            return float(string)
+        except ValueError:
+            return False
+
+    if rank == 0:
+        data = []
+        with open(filename, 'r') as f:
+            d = f.readlines()
+            for i in d:
+                k = i.rstrip().split(delimiter)
+                data.append([float(i) if is_float(i) else i for i in k])
+        data = np.array(data, dtype='float64')
+    else:
+        data = None
+    data = comm.bcast(data, root=0)
 
     return (data)
