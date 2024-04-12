@@ -610,10 +610,6 @@ def p2w_pool_mpi_cpu_kpoint(
     bmax = coulomb_obj.Bmax
     bmin = coulomb_obj.Bmin
 
-    # fix nbc to 2 for the given solution
-    # todo calculate it
-    #nbc = 2
-
     # block sizes after matrix multiplication
     bmax_mm = bmax[nbc - 1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
@@ -626,10 +622,13 @@ def p2w_pool_mpi_cpu_kpoint(
     # in block format
     wr_diag, wr_upper, wl_diag, wl_upper, wg_diag, wg_upper = matrix_creation.initialize_block_G(ne, nb_mm, lb_max_mm)
     xr_diag = np.zeros((ne, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
+    pr = np.zeros_like(pg)
+
     # set number of mkl threads
     mkl.set_num_threads(mkl_threads)
 
     for ie in range(ne):
+        # Have to check that these identities are correct for k-points
         # Anti-Hermitian symmetrizing of PL and PG
         pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
         pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
@@ -639,23 +638,20 @@ def p2w_pool_mpi_cpu_kpoint(
 
         if homogenize:
             (PR00, PR01, PR10, _) = extract_small_matrix_blocks(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                                                pr[ie][bmin[0]:bmax[0] +
-                                                                       1, bmin[1]:bmax[1]+1],
+                                                                pr[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
                                                                 pr[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             pr[ie] = homogenize_matrix_Rnosym(PR00,
                                               PR01,
                                               PR10, len(bmax))
             (PL00, PL01, PL10, _) = extract_small_matrix_blocks(pl[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                                                pl[ie][bmin[0]:bmax[0] +
-                                                                       1, bmin[1]:bmax[1]+1],
+                                                                pl[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
                                                                 pl[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             pl[ie] = homogenize_matrix_Rnosym(PL00,
                                               PL01,
                                               PL10,
                                               len(bmax))
             (PG00, PG01, PG10, _) = extract_small_matrix_blocks(pg[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
-                                                                pg[ie][bmin[0]:bmax[0] +
-                                                                       1, bmin[1]:bmax[1]+1],
+                                                                pg[ie][bmin[0]:bmax[0]+1, bmin[1]:bmax[1]+1],
                                                                 pg[ie][bmin[1]:bmax[1]+1, bmin[0]:bmax[0]+1], NCpSC, 'L')
             pg[ie] = homogenize_matrix_Rnosym(PG00,
                                               PG01,
@@ -668,7 +664,6 @@ def p2w_pool_mpi_cpu_kpoint(
     ref_flag = False
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         # Use the map function to apply the inv_matrices function to each pair of matrices in parallel
-        #executor.map(
         results = executor.map(
                     rgf_W.rgf_w_opt,
                     rgf_Coul,
