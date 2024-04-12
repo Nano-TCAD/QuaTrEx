@@ -554,7 +554,6 @@ def p2w_pool_mpi_cpu_kpoint(
     energy: npt.NDArray[np.float64],
     pg: npt.NDArray[np.complex128],
     pl: npt.NDArray[np.complex128],
-    pr: npt.NDArray[np.complex128],
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
@@ -583,7 +582,6 @@ def p2w_pool_mpi_cpu_kpoint(
         energy (npt.NDArray[np.float64]): energy points
         pg (npt.NDArray[np.complex128]): Greater polarization, vector of sparse matrices
         pl (npt.NDArray[np.complex128]): Lesser polarization, vector of sparse matrices
-        pr (npt.NDArray[np.complex128]): Retarded polarization, vector of sparse matrices
         coulomb_obj (npt.NDArray[np.complex128]): Class containing the Coulomb integral information
         dosw (npt.NDArray[np.complex128]): density of state
         new (npt.NDArray[np.complex128]): density of state
