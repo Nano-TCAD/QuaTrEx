@@ -631,15 +631,12 @@ def p2w_pool_mpi_cpu_kpoint(
 
     for ie in range(ne):
         # Anti-Hermitian symmetrizing of PL and PG
-        #pl[ie] = 1j * np.imag(pl[ie])
         pl[ie] = (pl[ie] - pl[ie].conj().T) / 2
-
-        #pg[ie] = 1j * np.imag(pg[ie])
         pg[ie] = (pg[ie] - pg[ie].conj().T) / 2
 
         # PR has to be derived from PL and PG and then has to be symmetrized
         pr[ie] = (pg[ie] - pl[ie]) / 2
-        #pr[ie] = (pr[ie] + pr[ie].T) / 2
+
         if homogenize:
             (PR00, PR01, PR10, _) = extract_small_matrix_blocks(pr[ie][bmin[0]:bmax[0]+1, bmin[0]:bmax[0]+1],
                                                                 pr[ie][bmin[0]:bmax[0] +
