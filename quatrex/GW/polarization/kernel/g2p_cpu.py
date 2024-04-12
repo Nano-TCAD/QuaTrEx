@@ -352,6 +352,83 @@ def g2p_fft_mpi_cpu_inlined_nopr(
     return (pg[:, :ne], pl[:, :ne])
 
 
+def g2p_fft_kpoints(
+    pre_factor: np.complex128,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    num_kpoints: npt.NDArray[np.int32]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculates the polarization with fft on the cpu(see file description). 
+        This one includes the convolution of the k-points. So far the implementation is very naive
+        and I have to double check the implementation.
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ] 
+    """
+    # number of energy points and nnz (or orbital?)
+    nkpts = np.prod(num_kpoints, dtype=np.int32)
+    ne = int(gg.shape[1]/nkpts)
+    no = gg.shape[0]
+    ne2 = 2 * ne
+    # Index matrix for k-points
+    ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
+
+    # compute fourier transforms.
+    # Now everything is kept in memory, which might be a problem
+    # fft. _t subscript are used for the time domain.
+    gg_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+    gl_t: npt.NDArray[np.complex128] = np.empty((no, nkpts*ne2), dtype=np.complex128)
+
+    for i in range(nkpts):
+        gg_ts = fft.fft(gg[:, i*ne:(i+1)*ne], n=ne2, axis=1)
+        gl_ts = fft.fft(gl[:, i*ne:(i+1)*ne], n=ne2, axis=1)
+        # Assert identities. What about k-points?
+        gg_t[:, i*ne2:(i+1)*ne2] = gg_ts
+        gl_t[:, i*ne2:(i+1)*ne2] = gl_ts
+
+    pg_t: npt.NDArray[np.complex128] = np.zeros_like(gg_t, dtype=np.complex128)
+    pl_t: npt.NDArray[np.complex128] = np.zeros_like(gl_t, dtype=np.complex128)
+
+    # Convolution over k-points
+    for ki in range(nkpts):
+        for kj in range(nkpts):
+            # Need to extract the correct energies that correspond to the right k-point.
+            # energy kpoint indices.
+            eki = ki * ne2
+            ekj = kj * ne2
+            # Find other k-index
+            mi = np.array(np.where(ind_mat == ki))
+            mj = np.array(np.where(ind_mat == kj))
+            md = tuple(mj-mi)
+            ekj_i = int(ind_mat[md]) * ne2
+            # Use identity (22)
+            pg_t[:, eki:eki+ne2] += - gg_t[:, ekj:ekj+ne2] * np.conjugate(gl_t[:, ekj_i:ekj_i+ne2])
+            pl_t[:, eki:eki+ne2] += - gl_t[:, ekj:ekj+ne2] * np.conjugate(gg_t[:, ekj_i:ekj_i+ne2])
+
+    # ifft, cutoff and multiply with pre factor
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+
+    for i in range(nkpts):
+        pg_temp = fft.ifft(pg_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor
+        pl_temp = fft.ifft(pl_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor
+
+        # Assert identity (23). Which I hope is correct for k-points? Maybe double check.
+        assert np.allclose(pl_temp, -np.conjugate(pg_temp[:, ::-1]))
+
+        pg[:, i*ne:(i+1)*ne] = pg_temp
+        pl[:, i*ne:(i+1)*ne] = pl_temp
+
+    return (pg, pl)
+
+
 # @numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:], c16[:,:], i8[:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fft_mpi_cpu_inlined_kpoints(
     pre_factor: np.complex128,
