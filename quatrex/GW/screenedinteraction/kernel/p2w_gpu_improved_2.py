@@ -32,6 +32,20 @@ from quatrex.OBC.beyn_batched import beyn_new_batched_gpu_3 as beyn_gpu
 
 from quatrex.GW.screenedinteraction.polarization_preprocess import polarization_preprocess_2d
 
+from quatrex.block_tri_solvers.rgf_GF_GPU_combo import _store_block_compressed
+
+def _compress_block(dense_block, compressed_data, block_idx, mapping):
+    batch_size = 1
+    copy_size = mapping[block_idx][0].size
+    nnz = compressed_data.shape[0]  # IMPORTANT: This is a single energy point and has only 1 dimension.
+    bsize = dense_block.shape[1]
+    num_threads = 1024
+    num_blocks = (batch_size * copy_size + num_threads - 1) // num_threads
+    _store_block_compressed[num_blocks, num_threads](mapping[block_idx],
+                                                     dense_block.reshape(-1),
+                                                     compressed_data.reshape(-1),
+                                                     batch_size, copy_size, nnz, bsize, False)
+
 
 @cpx.jit.rawkernel()
 def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
@@ -44,7 +58,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
         eidx = indptr[row + 1]
         block_size = ecol - scol
 
-        buf = cpx.jit.shared_memory(cp.complex128, 832)
+        buf = cpx.jit.shared_memory(cp.complex128, 2016)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
@@ -67,7 +81,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
             out[bid, i] = buf[i]
 
 
-def spgemm(A, B, rows: int = 8192):
+def spgemm(A, B, rows: int = 8192 * 2):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -79,7 +93,7 @@ def spgemm(A, B, rows: int = 8192):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 8192):
+def spgemm_direct(A, B, C, rows: int = 8192 * 2):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -101,6 +115,55 @@ def sp_mm_gpu(pr_rgf, pg_rgf, pl_rgf, rows, columns, vh_dev, mr, lg, ll, nao):
     spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix((pg_dev, (rows, columns)), shape = (nao, nao))), vh_ct_dev, lg)
     #spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix(pl)), vh_ct_dev, ll)
     spgemm_direct(spgemm(vh_dev, cp.sparse.csr_matrix((pl_dev, (rows, columns)), shape = (nao, nao))), vh_ct_dev, ll)
+
+
+def get_mat_3BD(num_blocks):
+    mat_3BD = set()
+    for i in range(num_blocks):
+        for j in range(max(0, i - 1), min(num_blocks, i + 2)):
+            mat_3BD.add((i, j))
+    return mat_3BD
+
+
+def get_mat_5BD(num_blocks):
+    mat_5BD = set()
+    for i in range(num_blocks):
+        for j in range(max(0, i - 2), min(num_blocks, i + 3)):
+            mat_5BD.add((i, j))
+    return mat_5BD
+
+
+def banded_mm(left_spec, left_matrix, right_spec, right_matrix, block_size, num_blocks, keep_all: bool = True):
+    dense_res = dict()
+    left_block = cp.empty((block_size, block_size), dtype=np.complex128)
+    right_block = cp.empty((block_size, block_size), dtype=np.complex128)
+    num_threads = min(1024, block_size)
+    num_thread_blocks = block_size
+    for i in range(num_blocks):
+        if keep_all:
+            j_range = range(num_blocks)
+        else:
+            j_range = range(max(0, i - 1), min(num_blocks, i + 2))  # Keeping 3-block diagonal structure for L
+        for j in j_range:
+            temp = None
+            for k in range(num_blocks):
+                if (i, k) in left_spec and (k, j) in right_spec:
+                    if isinstance(left_matrix, dict):
+                        left_block = left_matrix[(i, k)]
+                    else:
+                        _toarray[num_thread_blocks, num_threads](left_matrix.data, left_matrix.indices, left_matrix.indptr, left_block,
+                                                                i * block_size, (i + 1) * block_size, k * block_size, (k + 1) * block_size)
+                    _toarray[num_thread_blocks, num_threads](right_matrix.data, right_matrix.indices, right_matrix.indptr, right_block,
+                                                            k * block_size, (k + 1) * block_size, j * block_size, (j + 1) * block_size)
+                    if temp is None:
+                        temp = left_block @ right_block
+                    else:
+                        temp += left_block @ right_block
+            if temp is not None:
+                dense_res[(i, j)] = temp
+                cp.cuda.stream.get_current_stream().synchronize()
+    cp.cuda.stream.get_current_stream().synchronize()
+    return dense_res
 
 
 def calc_W_pool_mpi_split(
@@ -180,6 +243,8 @@ def calc_W_pool_mpi_split(
     validate_dace: bool = False,
     post_process: bool = False,
     w_batch_size: int = 8,
+    mat_3BD=None,
+    mat_5BD=None,
 ):
     """Memory-optimized version of the p2w_gpu function.
 
@@ -309,6 +374,7 @@ def calc_W_pool_mpi_split(
     vh_dev = cp.sparse.csr_matrix(vh)
     vh_ct_dev = vh_dev.T.conj(copy=False)
     identity = cp.sparse.identity(nao)
+    dense_identity = cp.identity(lb_start, dtype=np.complex128)
 
     # slice block start diagonal and slice block start off diagonal
     slb_sd = slice(0, lb_start)
@@ -411,9 +477,80 @@ def calc_W_pool_mpi_split(
 
             cp.cuda.Stream.null.synchronize()
 
-            mr_dev[ie-i] = (identity - spgemm(vh_dev, pr_dev)).data
-            spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[ie-i])
-            spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[ie-i])
+            if mat_3BD is not None and mat_5BD is not None:
+            # if False:
+
+                vh_pr = banded_mm(mat_3BD, vh_dev, mat_3BD, pr_dev, lb_start, nb_mm, keep_all=False)
+                for (i0, j0), dense_block in vh_pr.items():
+                    mr_tmp = dense_identity - dense_block
+                    # map_type = None
+                    if i0 == j0:
+                        mapping = mapping_diag_m
+                        block_idx = i0
+                        # map_type = 'diag'
+                    elif i0 > j0:
+                        mapping = mapping_lower_m
+                        block_idx = j0
+                        # map_type = 'lower'
+                    else:
+                        mapping = mapping_upper_m
+                        block_idx = i0
+                        # map_type = 'upper'
+                    # if rank == 0:
+                        # print(f"MR Block: {i0}, {j0}, {block_idx}, map type: {map_type}", flush=True)
+                    _compress_block(mr_tmp, mr_dev[ie-i], block_idx, mapping)
+                    # cp.cuda.Stream.null.synchronize()
+                cp.cuda.Stream.null.synchronize()
+                del vh_pr
+                
+                vh_pg = banded_mm(mat_3BD, vh_dev, mat_3BD, pg_dev, lb_start, nb_mm, keep_all=True)
+                vh_pg_vh_ct = banded_mm(mat_5BD, vh_pg, mat_3BD, vh_ct_dev, lb_start, nb_mm, keep_all=False)
+                for (i0, j0), dense_block in vh_pg_vh_ct.items():
+                    # map_type = None
+                    if i0 == j0:
+                        mapping = mapping_diag_l
+                        block_idx = i0
+                        # map_type = 'diag'
+                    elif i0 > j0:
+                        mapping = mapping_lower_l
+                        block_idx = j0
+                        # map_type = 'lower'
+                    else:
+                        mapping = mapping_upper_l
+                        block_idx = i0
+                        # map_type = 'upper'
+                    # if rank == 0:
+                    #     print(f"LG Block: {i0}, {j0}, {block_idx}, map type: {map_type}", flush=True)
+                    _compress_block(dense_block, lg_dev[ie-i], block_idx, mapping)
+                cp.cuda.Stream.null.synchronize()
+                del vh_pg, vh_pg_vh_ct
+
+                vh_pl = banded_mm(mat_3BD, vh_dev, mat_3BD, pl_dev, lb_start, nb_mm, keep_all=True)
+                vh_pl_vh_ct = banded_mm(mat_5BD, vh_pl, mat_3BD, vh_ct_dev, lb_start, nb_mm, keep_all=False)
+                for (i0, j0), dense_block in vh_pl_vh_ct.items():
+                    # map_type = None
+                    if i0 == j0:
+                        mapping = mapping_diag_l
+                        block_idx = i0
+                        # map_type = 'diag'
+                    elif i0 > j0:
+                        mapping = mapping_lower_l
+                        block_idx = j0
+                        # map_type = 'lower'
+                    else:
+                        mapping = mapping_upper_l
+                        block_idx = i0
+                        # map_type = 'upper'
+                    # if rank == 0:
+                    #     print(f"LL Block: {i0}, {j0}, {block_idx}, map type: {map_type}", flush=True)
+                    _compress_block(dense_block, ll_dev[ie-i], block_idx, mapping)
+                cp.cuda.Stream.null.synchronize()
+                del vh_pl, vh_pl_vh_ct
+
+            else:
+                mr_dev[ie-i] = (identity - spgemm(vh_dev, pr_dev)).data
+                spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[ie-i])
+                spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[ie-i])
 
             time_spgemm += time.perf_counter()
 
@@ -638,6 +775,21 @@ def calc_W_pool_mpi_split(
 
         print(f"Used bytes: {mempool.used_bytes()}", flush=True)
         print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+    
+    comm.Barrier()
+
+    for r in range(1, size):
+        if rank == r:
+            print("    True runtime for rank %d: %.6f s" % (r, (true_finish - start_spgemm)), flush=True)
+            print("        Time for CopyToDevice: %.6f s" % time_copy_in, flush=True)
+            print("        Time for SpGEMM: %.6f s" % time_spgemm, flush=True)
+            print("        Time for CopyToHost: %.6f s" % time_copy_out, flush=True)
+            print("        Time for Densification: %.6f s" % time_dense, flush=True)
+            print("        Time for OBC MM: %.6f s" % time_obc_mm, flush=True)
+            print("        Time for Beyn W: %.6f s" % time_beyn_w, flush=True)
+            print("        Time for OBC L: %.6f s" % time_obc_l, flush=True)
+            print("        Time for RGF W: %.6f s" % time_w, flush=True)
+        comm.Barrier()
 
     # imag_lim = 1e-4
     # R = 1e4

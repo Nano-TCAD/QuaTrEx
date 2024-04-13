@@ -32,7 +32,7 @@ def _get_coulomb_batch(
 
         # NOTE: The buffer size here should ideally not be hardcoded.
         # buf = cpx.jit.shared_memory(cp.complex128, 416)
-        buf = cpx.jit.shared_memory(cp.complex128, 832)
+        buf = cpx.jit.shared_memory(cp.complex128, 2016)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
@@ -109,17 +109,19 @@ def rgf_batched_GPU(
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
 
-    map_diag_mm_dev = [cp.empty_like(mm) for mm in map_diag_mm]
-    map_upper_mm_dev = [cp.empty_like(mm) for mm in map_upper_mm]
-    map_lower_mm_dev = [cp.empty_like(mm) for mm in map_lower_mm]
+    if not isinstance(map_diag_mm, cp.ndarray):
 
-    map_diag_m_dev = [cp.empty_like(m) for m in map_diag_m]
-    map_upper_m_dev = [cp.empty_like(m) for m in map_upper_m]
-    map_lower_m_dev = [cp.empty_like(m) for m in map_lower_m]
+        map_diag_mm_dev = [cp.empty_like(mm) for mm in map_diag_mm]
+        map_upper_mm_dev = [cp.empty_like(mm) for mm in map_upper_mm]
+        map_lower_mm_dev = [cp.empty_like(mm) for mm in map_lower_mm]
 
-    map_diag_l_dev = [cp.empty_like(l) for l in map_diag_l]
-    map_upper_l_dev = [cp.empty_like(l) for l in map_upper_l]
-    map_lower_l_dev = [cp.empty_like(l) for l in map_lower_l]
+        map_diag_m_dev = [cp.empty_like(m) for m in map_diag_m]
+        map_upper_m_dev = [cp.empty_like(m) for m in map_upper_m]
+        map_lower_m_dev = [cp.empty_like(m) for m in map_lower_m]
+
+        map_diag_l_dev = [cp.empty_like(l) for l in map_diag_l]
+        map_upper_l_dev = [cp.empty_like(l) for l in map_upper_l]
+        map_lower_l_dev = [cp.empty_like(l) for l in map_lower_l]
 
     vd_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     vu_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
@@ -254,17 +256,55 @@ def rgf_batched_GPU(
 
     with input_stream:
 
-        for i in range(num_blocks):
-            map_diag_mm_dev[i].set(map_diag_mm[i])
-            map_diag_m_dev[i].set(map_diag_m[i])
-            map_diag_l_dev[i].set(map_diag_l[i])
-            if i < num_blocks - 1:
-                map_upper_mm_dev[i].set(map_upper_mm[i])
-                map_upper_m_dev[i].set(map_upper_m[i])
-                map_upper_l_dev[i].set(map_upper_l[i])
-                map_lower_mm_dev[i].set(map_lower_mm[i])
-                map_lower_m_dev[i].set(map_lower_m[i])
-                map_lower_l_dev[i].set(map_lower_l[i])
+        if not isinstance(map_diag_mm, cp.ndarray):
+            for i in range(num_blocks):
+                map_diag_mm_dev[i].set(map_diag_mm[i])
+                map_diag_m_dev[i].set(map_diag_m[i])
+                map_diag_l_dev[i].set(map_diag_l[i])
+                if i < num_blocks - 1:
+                    map_upper_mm_dev[i].set(map_upper_mm[i])
+                    map_upper_m_dev[i].set(map_upper_m[i])
+                    map_upper_l_dev[i].set(map_upper_l[i])
+                    map_lower_mm_dev[i].set(map_lower_mm[i])
+                    map_lower_m_dev[i].set(map_lower_m[i])
+                    map_lower_l_dev[i].set(map_lower_l[i])
+        else:
+            map_diag_mm_dev = map_diag_mm
+            map_upper_mm_dev = map_upper_mm
+            map_lower_mm_dev = map_lower_mm
+            map_diag_m_dev = map_diag_m
+            map_upper_m_dev = map_upper_m
+            map_lower_m_dev = map_lower_m
+            map_diag_l_dev = map_diag_l
+            map_upper_l_dev = map_upper_l
+            map_lower_l_dev = map_lower_l
+
+        # for i in range(num_blocks):
+        #     map_diag_mm_dev[i].set(map_diag_mm[i])
+        #     if i < num_blocks - 1:
+        #         map_upper_mm_dev[i].set(map_upper_mm[i])
+        #         map_lower_mm_dev[i].set(map_lower_mm[i])
+
+        # if isinstance(map_diag_m, np.ndarray):
+        #     for i in range(num_blocks):
+        #         # map_diag_mm_dev[i].set(map_diag_mm[i])
+        #         map_diag_m_dev[i].set(map_diag_m[i])
+        #         map_diag_l_dev[i].set(map_diag_l[i])
+        #         if i < num_blocks - 1:
+        #             # map_upper_mm_dev[i].set(map_upper_mm[i])
+        #             map_upper_m_dev[i].set(map_upper_m[i])
+        #             map_upper_l_dev[i].set(map_upper_l[i])
+        #             # map_lower_mm_dev[i].set(map_lower_mm[i])
+        #             map_lower_m_dev[i].set(map_lower_m[i])
+        #             map_lower_l_dev[i].set(map_lower_l[i])
+        #     else:
+        #         map_diag_m_dev = map_diag_m
+        #         map_upper_m_dev = map_upper_m
+        #         map_lower_m_dev = map_lower_m
+        #         map_diag_l_dev = map_diag_l
+        #         map_upper_l_dev = map_upper_l
+        #         map_lower_l_dev = map_lower_l
+
 
         if mr_dev is not None:
             mr_dev.set(mr_host)
