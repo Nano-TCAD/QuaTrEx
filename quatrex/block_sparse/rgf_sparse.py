@@ -181,10 +181,9 @@ def rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,sigma_in,sigma_in_lesser
 #   `gl` and `gl_lesser` are left-connected Green functions obtained from forward pass
 #   `M` is system matrix in BCSR form
 #   `G_l_prev` and `G_r_prev` are the fully-connected Green functions of the previous block of `start_iblock`
-#   `sigma_out` and `sigma_out_lesser` are boundary outgoing self-energies from the last site
 #   `start_iblock` and `end_iblock` are starting and ending block index of the partition
-#   `G_r` and `G_lesser` are fully-connected Green functions in BCSR form
-def rgf_backward(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_blocks,block_size,
+#   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
+def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_blocks,block_size,
                      col_index,ind_ptr,nnz,num_diag,
                      G_retarded,G_lesser,G_greater,cur):    
     inc = np.sign(end_iblock-start_iblock)
@@ -243,6 +242,55 @@ def rgf_backward(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_bl
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
         put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
-    
-    
+      
     return G_r,G_l
+
+
+# RGF
+#   driver for solving the Green functions: (ES-M-Sig^r@S)@G^r = I and G^< = G^r @ Sig^< @ (G^r)^H
+#   
+#   `E` is energy, `M` is system matrix, `S` is overlap matrix, 
+#   `sigma_scat` and `sigma_scat_lesser` are scattering self-energies
+#   `flavor` is the way to solve the RGF equation
+def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,G_retarded,G_lesser,G_greater,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag):
+    if (flavor=='lrl'):
+        z = E + 0.0*1j
+        # left-right-left 
+        ix=0
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=1)
+        g00 = surface_green_function(z,H00,H10,S00)
+        # left boundary self-energies
+        sig_r_B = H10 @ g00 @ H10.conj().T
+        sig_l_B = - sig_r_B * fd(mu[0],temp[0])
+        gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
+                                                                   sigma_in=sig_r_B,sigma_in_lesser=sig_l_B,
+                                                                   start_iblock=0,end_iblock=num_blocks,num_blocks=num_blocks,block_size=block_size,
+                                                                   col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag)
+        ix=num_diag
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                            num_blocks,num_diag,dtype='complex',iblock=ix+1,idiag=-1)
+        g00 = surface_green_function(z,H00,H10,S00)
+        # right boundary self-energies
+        sig_r_B = H10 @ g00 @ H10.conj().T
+        sig_l_B = - sig_r_B * fd(mu[1],temp[1])
+        # solve fully-connected GF for ix block
+        A = z*S00 - H00 - sigma_out - sig_r_B
+        gl[ix,:,:] = inv(A)
+        
+        # backward pass
+
+    elif (flavor=='rlr'):
+        # right-left-right
+
+    elif (flavor=='2sided'):
+        # 2-sided
+
+
+    
