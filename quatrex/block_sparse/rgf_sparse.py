@@ -251,46 +251,71 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
 #   
 #   `E` is energy, `M` is system matrix, `S` is overlap matrix, 
 #   `sigma_scat` and `sigma_scat_lesser` are scattering self-energies
-#   `flavor` is the way to solve the RGF equation
+#   `flavor` is the order to solve the RGF equation
+#   `mu` and `temp` are arrays of chemical potentials and temperatures of the left and right contacts
+#   `fd` is the statistical distribution function with respect to energy at a certain temperature and chemical potential, ie. Fermi-Dirac or Bose-Einstein or ...
+#   `surface_green_function` is the surface Green's function solver
+#   `num_blocks`, `block_size`, `col_index`, `ind_ptr`, `nnz`, `num_diag` are the BCSR parameters
+#   
+#   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
+#   `cur` is the current density in BCSR form
 def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_function,
         G_retarded,G_lesser,G_greater,cur,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag):
     z = E + 0.0*1j
-    if (flavor=='lrl'):
-        # left-right-left 
-        ix=0
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                            num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                            num_blocks,num_diag,dtype='complex',iblock=ix+1,idiag=-1)
-        g00 = surface_green_function(z,H00,H10,S00)
-        # left boundary self-energies
-        sig_r_B = H10 @ g00 @ H10.conj().T
-        sig_l_B = - (sig_r_B - sig_r_B.conjg().T) * fd(mu[0],temp[0])
-        gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
-                                                                   sigma_in=sig_r_B,sigma_in_lesser=sig_l_B,
-                                                                   start_iblock=0,end_iblock=num_blocks,num_blocks=num_blocks,block_size=block_size,
-                                                                   col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag)
-        ix=num_diag
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+    # left boundary selfenergy
+    ix=0
+    inc=-1
+    H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=inc)
+    S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    H00 += sig_ph_r @ S00
+    g00 = surface_green_function(z,H00,H10,S00)
+    sig_r_left = H10 @ g00 @ H10.conj().T
+    sig_l_left = - (sig_r_left - sig_r_left.conjg().T) * fd(mu[0],temp[0]) # fluctuation–dissipation relation 
+    # right boundary selfenergy
+    ix=num_diag
+    inc=1
+    H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=inc)
+    S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+    H00 += sig_ph_r @ S00
+    g00 = surface_green_function(z,H00,H10,S00)
+    sig_r_right = H10 @ g00 @ H10.conj().T
+    sig_l_right = - (sig_r_right - sig_r_right.conjg().T) * fd(mu[1],temp[1]) # fluctuation–dissipation relation 
+    if (flavor=='lrl'):
+        # left-right-left         
+        gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
+                                                                   sigma_in=sig_r_left,sigma_in_lesser=sig_l_left,
+                                                                   start_iblock=0,end_iblock=num_blocks,num_blocks=num_blocks,block_size=block_size,
+                                                                   col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag)        
+        # solve fully-connected GF for the ix block with full connections to left and right sides
+        ix=num_blocks
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
         S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=1)
         sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
                                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
-                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H00 += sig_ph_r @ S00
-        g00 = surface_green_function(z,H00,H10,S00)
-        # right boundary self-energies
-        sig_r_B = H10 @ g00 @ H10.conj().T
-        sig_l_B = - (sig_r_B - sig_r_B.conjg().T) * fd(mu[1],temp[1])
-        # solve fully-connected GF for the ix block with full connections to left and right sides
-        A = z*S00 - H00 - sigma_out - sig_r_B
+                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        A = z*S00 - H00 - sigma_out - sig_r_right - sig_ph_r @ S00
         G_r = inv(A)
         sig = sigma_out_lesser
-        sig += sig_l_B
+        sig += sig_l_right
         sig += sig_ph_l @ S00 
         G_l = G_r @ sig @ G_r.conjg().T
         G_g = G_l + (G_r - G_r.conj().T)        
@@ -305,42 +330,26 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_funct
                                     block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     elif (flavor=='rlr'):
-        # right-left-right
-        ix=num_blocks
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=1)
-        g00 = surface_green_function(z,H00,H10,S00)
-        # right boundary self-energies
-        sig_r_B = H10 @ g00 @ H10.conj().T
-        sig_l_B = - (sig_r_B - sig_r_B.conjg().T) * fd(mu[1],temp[1])
+        # right-left-right        
         gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
-                                                                   sigma_in=sig_r_B,sigma_in_lesser=sig_l_B,
+                                                                   sigma_in=sig_r_right,sigma_in_lesser=sig_l_right,
                                                                    start_iblock=num_blocks,end_iblock=0,num_blocks=num_blocks,
                                                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
-                                                                   num_diag=num_diag)
+                                                                   num_diag=num_diag)                
+        # solve fully-connected GF for the ix block with full connections to left and right sides
         ix=0
         H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
         S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix+1,idiag=-1)
         sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
                                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
-                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H00 += sig_ph_r @ S00
-        g00 = surface_green_function(z,H00,H10,S00)
-        # left boundary self-energies
-        sig_r_B = H10 @ g00 @ H10.conj().T
-        sig_l_B = - (sig_r_B - sig_r_B.conjg().T) * fd(mu[0],temp[0])
-        # solve fully-connected GF for the ix block with full connections to left and right sides
-        A = z*S00 - H00 - sigma_out - sig_r_B
+                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        A = z*S00 - H00 - sigma_out - sig_r_left - sig_ph_r @ S00        
         G_r = inv(A)
         sig = sigma_out_lesser
-        sig += sig_l_B
+        sig += sig_l_left
         sig += sig_ph_l @ S00 
         G_l = G_r @ sig @ G_r.conjg().T
         G_g = G_l + (G_r - G_r.conj().T)        
@@ -357,6 +366,44 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_funct
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     elif (flavor=='2sided'):
         # 2-sided
-
+        ix = num_blocks // 2
+        gl1,gl_lesser1,sigma_out1,sigma_out_lesser1 = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
+                                                                   sigma_in=sig_r_left,sigma_in_lesser=sig_l_left,
+                                                                   start_iblock=0,end_iblock=ix,num_blocks=num_blocks,
+                                                                   block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
+                                                                   num_diag=num_diag)    
+        gl2,gl_lesser2,sigma_out2,sigma_out_lesser2 = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
+                                                                   sigma_in=sig_r_right,sigma_in_lesser=sig_l_right,
+                                                                   start_iblock=num_blocks,end_iblock=ix,num_blocks=num_blocks,
+                                                                   block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
+                                                                   num_diag=num_diag)    
+        # solve fully-connected GF for the ix block with full connections to left and right sides
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
+        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
+        A = z*S00 - H00 - sigma_out1 - sigma_out2 - sig_ph_r @ S00        
+        G_r = inv(A)
+        sig = sigma_out_lesser1 + sigma_out_lesser2
+        sig += sig_ph_l @ S00 
+        G_l = G_r @ sig @ G_r.conjg().T
+        G_g = G_l + (G_r - G_r.conj().T)        
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+                          num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
+        # backward pass
+        G_r1,G_l1 = rgf_backward_pass(gl1,gl_lesser1,G_r,G_l,M,start_iblock=ix-1,end_iblock=0,num_blocks=num_blocks,
+                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
+                                    G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
+        G_r2,G_l2 = rgf_backward_pass(gl2,gl_lesser2,G_r,G_l,M,start_iblock=ix+1,end_iblock=num_blocks,num_blocks=num_blocks,
+                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
+                                    G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     return 
     
