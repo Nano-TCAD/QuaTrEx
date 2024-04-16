@@ -686,10 +686,8 @@ def gw2s_fft_cpu_kpoint(
     pre_factor: np.complex128,
     gg: npt.NDArray[np.complex128],
     gl: npt.NDArray[np.complex128],
-    gr: npt.NDArray[np.complex128],
     wg: npt.NDArray[np.complex128],
     wl: npt.NDArray[np.complex128],
-    wr: npt.NDArray[np.complex128],
     num_kpoints: tuple[np.int32],  # has to be tuple because of numba and ind_mat
     vh1D_k: npt.NDArray[np.float64],
     energy: npt.NDArray[np.float64],
@@ -699,8 +697,6 @@ def gw2s_fft_cpu_kpoint(
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """
     This is an attempt at a simplified version of the self-energy calculation including k-points. Currently underway...
-
-    Trying to use the Hilbert transform from GPAW.
 
     Calculate the self energy with fft on the cpu.
     
@@ -713,10 +709,8 @@ def gw2s_fft_cpu_kpoint(
         ij2ji   (npt.NDArray[np.int32]): mapping to transposed matrix, (#orbital)
         gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
         gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
-        gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
         wg (npt.NDArray[np.complex128]): Greater screened interaction, (#orbital, #energy)
         wl (npt.NDArray[np.complex128]): Lesser screened interaction,  (#orbital, #energy)
-        wr (npt.NDArray[np.complex128]): Retarded screened interaction,(#orbital, #energy)
         wg_transposed (npt.NDArray[np.complex128]): Greater screened interaction, transposed in orbitals, (#orbital, #energy)
         wl_transposed (npt.NDArray[np.complex128]): Lesser screened interaction, transposed in orbitals,  (#orbital, #energy)
         kpoints (npt.NDArray[np.int32]): kpoints indices
@@ -740,9 +734,9 @@ def gw2s_fft_cpu_kpoint(
     ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
 
     # Create self-energy arrays.
-    sg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    sl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    sr_principale: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    sg: npt.NDArray[np.complex128] = np.zero_like(gg, dtype=np.complex128)
+    sl: npt.NDArray[np.complex128] = np.zero_like(gg, dtype=np.complex128)
+    sr_principale: npt.NDArray[np.complex128] = np.zero_like(gg, dtype=np.complex128)
 
     for ki in range(nkpts):
         for kip in range(nkpts):
@@ -807,6 +801,13 @@ def gw2s_fft_cpu_kpoint(
             sl[:, ek:ek+ne] += slk
             sr_principale[:, ek:ek+ne] += srk_principale
     return (sg, sl, sr_principale)
+
+
+def retarded_self_energy(sg, sl, sr, energy, pre_factor):
+    """
+    Part of the retarded self-energy calculation.
+    """
+    pass
 
 
 def gw2s_fft_mpi_cpu_3part_sr_bare(
