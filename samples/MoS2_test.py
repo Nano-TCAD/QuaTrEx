@@ -25,6 +25,7 @@ sys.path.append(parent_path)
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
+from quatrex.GW.selfenergy.current_conservation import current_conservation
 from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GreensFunction import calc_GF_pool
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     # Number of kpoints in x-, y-, and z-directions
     num_kpoints = np.array([1, 3, 1])
     Idx_k = np.arange(np.prod(num_kpoints))  # k-point index vector
-    energy = np.linspace(-15, 10, 8192, endpoint=True, dtype=float)  # Energy Vector
+    energy = np.linspace(-10, 5, 512, endpoint=True, dtype=float)  # Energy Vector
     EPHN = np.array([0.0]) # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
@@ -163,7 +164,7 @@ if __name__ == "__main__":
     bmax = matrix_obj.Bmax  # - 1
     bmin = matrix_obj.Bmin  # - 1
 
-    ij2ji:      npt.NDArray[np.int32] = change_format.find_idx_transposed( rows, columns)
+    ij2ji:      npt.NDArray[np.int32] = change_format.find_idx_transposed(rows, columns)
     denergy:    npt.NDArray[np.double] = energy[1] - energy[0]
     nkpts:      np.int32 = np.int32(np.prod(num_kpoints))
     ne:         np.int32 = np.int32(energy.shape[0])
@@ -180,7 +181,7 @@ if __name__ == "__main__":
 
     # number of blocks
     nb = bmin.shape[0]
-    # nbc = 2
+    # nbc = 1
     nbc = get_number_connected_blocks(matrix_obj.size, bmin, bmax, rows, columns)
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
@@ -355,6 +356,9 @@ if __name__ == "__main__":
             if rank == 0:
                 outp[:, :] = out_transposed.T
 
+    def gather_master_checkpoint(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128]):
+        comm.Gatherv(inp, [outp, count[0, :], disp[0, :], ROW_RIZ], root=0)
+
     def alltoall_g2p(inp: npt.NDArray[np.complex128],
                      outp: npt.NDArray[np.complex128],
                      transpose_net: bool = False):
@@ -411,7 +415,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     
     # max number of iterations
-    max_iter = 10
+    max_iter = 80
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -617,23 +621,6 @@ if __name__ == "__main__":
 
         comm.Barrier()
         
-        # Create checkpoint. CURRENTLY NOT WORKING
-        if checkpoint:
-            if rank == 0:
-                
-                if not os.path.exists(checkpoint_folder):
-                    os.makedirs(checkpoint_folder)
-                with open(checkpoint_folder + f'checkpoint_{iter_num}.pkl', 'wb') as f:
-                    pickle.dump([gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper], f)
-
-            if rank == 0:
-                comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
-                comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
-
-            else:
-                comm.Reduce(dos, None, op=MPI.SUM, root=0)
-                comm.Reduce(ide, None, op=MPI.SUM, root=0)
-        
         if rank == 0:
             gf_time += time.perf_counter()
             print(f"    GF time: {gf_time:.3f} s", flush=True)
@@ -728,7 +715,33 @@ if __name__ == "__main__":
             print(f"    Comm-0 time: {comm0_time:.3f} s", flush=True)
             g2p_time = -time.perf_counter()
 
-        # calculate the polarization at every rank----------------------------------
+        # Create checkpoint. CURRENTLY NOT WORKING
+        if checkpoint and iter_num == 0:
+            if rank == 0:
+                print("Creating checkpoint...", flush=True)
+                gg_save = np.empty(data_shape, dtype=np.complex128)
+                #gl_save = np.empty(data_shape, dtype=np.complex128)
+                #gr_save = np.empty(data_shape, dtype=np.complex128)
+            else:
+                gg_save = None
+                #gl_save = None
+                #gr_save = None
+            # Gather Green's function to rank 0
+            gather_master_checkpoint(gg_g2p, gg_save)
+            #gather_master_checkpoint(gl_g2p, gl_save)
+            #gather_master_checkpoint(gr_g2p, gr_save)
+            #comm.Barrier()
+            
+            if rank == 0:
+                if not os.path.exists(checkpoint_folder):
+                    os.makedirs(checkpoint_folder)
+                with open(checkpoint_folder + f'checkpoint_{iter_num}.pkl', 'wb') as f:
+                    pickle.dump([gg_save], f)
+                print("Checkpoint created.", flush=True)
+
+        # --------------------------------------------------------------------------------------------------------
+        # ------------------------------calculate the polarization at every rank----------------------------------
+        # --------------------------------------------------------------------------------------------------------
         if args.type in ("gpu"):
             pg_g2p, pl_g2p, pr_g2p = g2p_gpu.g2p_fft_mpi_gpu(
                 pre_factor,
@@ -738,13 +751,10 @@ if __name__ == "__main__":
                 gl_transposed_g2p)
         elif args.type in ("cpu"):
             # Use convolution here. Might extend to fft also (not implemented yet). k_points are supported here
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_kpoints(  # g2p_cpu.g2p_conv_cpu_kpoints(
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_kpoints(
                 pre_factor,
-                ij2ji,
                 gg_g2p,
                 gl_g2p,
-                gr_g2p,
-                gl_transposed_g2p,
                 num_kpoints
             )
         else:
@@ -759,16 +769,6 @@ if __name__ == "__main__":
 
         # distribute polarization function according to p2w step--------------------
 
-        # # create local buffers
-        # pg_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # pl_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # pr_p2w = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-
-        comm.Barrier()
-
         if rank == 0:
             pre_comm1_time += time.perf_counter()
             print(f"    Pre-Comm-1 time: {pre_comm1_time:.3f} s", flush=True)
@@ -777,7 +777,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
+        # alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -837,15 +837,10 @@ if __name__ == "__main__":
                 pg_p2w, rows, columns, nao)
             pl_p2w_vec = change_format.sparse2vecsparse_v2(
                 pl_p2w, rows, columns, nao)
-            pr_p2w_vec = change_format.sparse2vecsparse_v2(
-                pr_p2w, rows, columns, nao)
-            # with open(scratch_path2 + f'pg_p2w_{iter_num}.pkl', 'wb') as f:
-            #     pickle.dump(pg_p2w_vec, f)
-            # with open(scratch_path2 + f'pl_p2w_{iter_num}.pkl', 'wb') as f:
-            #     pickle.dump(pl_p2w_vec, f)
-            # with open(scratch_path2 + f'pr_p2w_{iter_num}.pkl', 'wb') as f:
-            #     pickle.dump(pr_p2w_vec, f)
-            # calculate the screened interaction on every rank--------------------------
+            # pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
+            # ------------------------------------------------------------------------------------------------
+            # ----------------------calculate the screened interaction on every rank--------------------------
+            # ------------------------------------------------------------------------------------------------
             if args.pool:
                 # k-points are supported here
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_kpoint(
@@ -853,7 +848,7 @@ if __name__ == "__main__":
                     energy_loc,
                     pg_p2w_vec,
                     pl_p2w_vec,
-                    pr_p2w_vec,
+                    # pr_p2w_vec,
                     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
@@ -916,21 +911,7 @@ if __name__ == "__main__":
         wg_lower = -wg_upper.conjugate().transpose((0, 1, 3, 2))
         wl_lower = -wl_upper.conjugate().transpose((0, 1, 3, 2))
         wr_lower = wr_upper.transpose((0, 1, 3, 2))
-        # if iter_num == 0:
-        #     wg_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wg_diag, wg_upper,
-        #                                                     wg_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     wl_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wl_diag, wl_upper,
-        #                                                     wl_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        #     wr_p2w = change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
-        #                                                     map_lower_mm, wr_diag, wr_upper,
-        #                                                     wr_lower, no, count[1,rank],
-        #                                                     energy_contiguous=False)
-        # else:
-        # add new contribution to the Screened interaction
+
         wg_p2w[memory_mask] = (1.0 - mem_w) * change_format.block2sparse_energy_alt(map_diag_mm, map_upper_mm,
                                                                                     map_lower_mm, wg_diag, wg_upper,
                                                                                     wg_lower, no, count[1, rank],
@@ -950,18 +931,6 @@ if __name__ == "__main__":
         wg_transposed_p2w = np.copy(wg_p2w[:, ij2ji], order="C")
         wl_transposed_p2w = np.copy(wl_p2w[:, ij2ji], order="C")
 
-        # # create local buffers
-        # wg_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wl_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wr_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-        # wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
-        #                 dtype=np.complex128, order="C")
-
         comm.Barrier()
 
         if rank == 0:
@@ -973,10 +942,8 @@ if __name__ == "__main__":
         alltoall_g2p(wg_p2w, wg_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wl_p2w, wl_gw2s, transpose_net=args.net_transpose)
         alltoall_g2p(wr_p2w, wr_gw2s, transpose_net=args.net_transpose)
-        alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s,
-                     transpose_net=args.net_transpose)
-        alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s,
-                     transpose_net=args.net_transpose)
+        alltoall_g2p(wg_transposed_p2w, wg_transposed_gw2s, transpose_net=args.net_transpose)
+        alltoall_g2p(wl_transposed_p2w, wl_transposed_gw2s, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -1013,36 +980,12 @@ if __name__ == "__main__":
                                                                                wr_gw2s,
                                                                                wg_transposed_gw2s,
                                                                                wl_transposed_gw2s,
-                                                                               tuple(
-                                                                                   num_kpoints),
+                                                                               tuple(num_kpoints),
                                                                                vh1D_k,
                                                                                energy,
                                                                                rank,
                                                                                disp,
                                                                                count)
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
-
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -1052,17 +995,6 @@ if __name__ == "__main__":
             gw2s_time += time.perf_counter()
             print(f"    GW2S time: {gw2s_time:.3f} s", flush=True)
             pre_comm3_time = -time.perf_counter()
-
-        # distribute screened interaction according to h2g step---------------------
-        # # create local buffers
-        # sg_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # sl_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-        # sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
-        #                 dtype=np.complex128, order="C")
-
-        comm.Barrier()
 
         if rank == 0:
             pre_comm3_time += time.perf_counter()
@@ -1080,6 +1012,24 @@ if __name__ == "__main__":
             comm3_time += time.perf_counter()
             print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
             wrapping_up_time = -time.perf_counter()
+
+        # --------------------------------------------------------------------------------
+        # -------------------------Assert current conservation----------------------------
+        # --------------------------------------------------------------------------------
+        current_conserved = current_conservation(sg_h2g_buf, sl_h2g_buf, gg_h2g, gl_h2g)
+        if rank == 0:
+            comm.Reduce(MPI.IN_PLACE, current_conserved, op=MPI.SUM, root=0)
+        else:
+            comm.Reduce(current_conserved, None, op=MPI.SUM, root=0)
+        if rank == 0:
+            rel_current_conserved = np.abs(current_conserved[0]-current_conserved[1])/np.abs(current_conserved[0])
+            try:
+                assert np.isclose(rel_current_conserved, 0.0, rtol=1e-3)
+            except AssertionError:
+                print("Assertion Error: Current conservation not satisfied", flush=True)
+                print(f"Relative error: {rel_current_conserved}", flush=True)
+                print(f"Current conserved 1: {current_conserved[0]}", flush=True)
+                print(f"Current conserved 2: {current_conserved[1]}", flush=True)
 
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
@@ -1108,12 +1058,6 @@ if __name__ == "__main__":
                                                                             temp,
                                                                             mem_s)
         
-        # This code should be commented? Yes?
-        # if iter_num == max_iter - 1:
-        #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
-        #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
-        #     alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
-
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
