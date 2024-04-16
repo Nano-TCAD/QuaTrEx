@@ -147,6 +147,8 @@ gmon.out
 .dacecache/
 
 # Local testing
+tests/mpi/
+tests/polarization/
 samples/testing.ipynb
 tests/test/*.pkl
 tests/test/generator_testing.ipynb
