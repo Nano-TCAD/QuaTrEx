@@ -1,24 +1,24 @@
 #mont-fort3.ee.ethz.ch:2
-mont-fort4.ee.ethz.ch:2
+#mont-fort4.ee.ethz.ch:2
 #mont-fort5.ee.ethz.ch:2
 #mont-fort6.ee.ethz.ch:2
 
-mont-fort8.ee.ethz.ch:2
-mont-fort9.ee.ethz.ch:2
-mont-fort10.ee.ethz.ch:2
-#mont-fort11.ee.ethz.ch:2
+#mont-fort8.ee.ethz.ch:4
+mont-fort9.ee.ethz.ch:8
+mont-fort10.ee.ethz.ch:8
+mont-fort11.ee.ethz.ch:8
 
-#mont-fort12.ee.ethz.ch:2
-mont-fort13.ee.ethz.ch:2
-mont-fort14.ee.ethz.ch:2
-mont-fort15.ee.ethz.ch:2
-mont-fort16.ee.ethz.ch:2
+mont-fort12.ee.ethz.ch:8
+#mont-fort13.ee.ethz.ch:2
+#mont-fort14.ee.ethz.ch:2
+#mont-fort15.ee.ethz.ch:2
 
+#mont-fort16.ee.ethz.ch:2
 #mont-fort17.ee.ethz.ch:2
 #mont-fort18.ee.ethz.ch:2
 #mont-fort19.ee.ethz.ch:2
-#mont-fort20.ee.ethz.ch:2
 
+#mont-fort20.ee.ethz.ch:2
 #mont-fort21.ee.ethz.ch:2
 #mont-fort22.ee.ethz.ch:2
 #mont-fort23.ee.ethz.ch:2

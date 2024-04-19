@@ -147,8 +147,7 @@ if __name__ == "__main__":
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
     # Idx_e = np.arange(energy.shape[0]) # Energy Index Vector. I'm not sure this is correct.
     # Have to read the correct Hamiltonian object
-    matrix_obj = Matrices(
-        args.file_hm, num_kpoints, Vappl=Vappl, rank=rank, potential_type="none")
+    matrix_obj = Matrices(args.file_hm, num_kpoints, Vappl=Vappl, rank=rank, potential_type="none")
     serial_ham = pickle.dumps(matrix_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     matrix_obj = pickle.loads(broadcasted_ham)
@@ -415,7 +414,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     
     # max number of iterations
-    max_iter = 80
+    max_iter = 100
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -762,6 +761,19 @@ if __name__ == "__main__":
 
         comm.Barrier()
 
+        #try:
+        #    assert np.allclose(pl_g2p, -np.conjugate(pg_g2p[:, ::-1]))
+        #except AssertionError:
+        #    print("Assertion Error: pl_g2p != -np.conjugate(pg_g2p[:, ::-1])", flush=True)
+        #    print("rank: ", rank, flush=True)
+        #    print(f"Relative error: {np.linalg.norm(pl_g2p + np.conjugate(pg_g2p[:, ::-1]))/np.linalg.norm(pl_g2p)}", flush=True)
+        #    if rank == 0:
+        #        print("Saving pl_g2p and pg_g2p for debugging...", flush=True)
+        #        np.save(scratch_path2 + 'pl_g2p.npy', pl_g2p)
+        #        np.save(scratch_path2 + 'pg_g2p.npy', pg_g2p)
+        #comm.Barrier()
+        #exit()
+
         if rank == 0:
             g2p_time += time.perf_counter()
             print(f"    G2P time: {g2p_time:.3f} s", flush=True)
@@ -833,10 +845,8 @@ if __name__ == "__main__":
 
         if not args.bsr or (args.bsr and args.validate_bsr):
             # transform from 2D format to list/vector of sparse arrays format-----------
-            pg_p2w_vec = change_format.sparse2vecsparse_v2(
-                pg_p2w, rows, columns, nao)
-            pl_p2w_vec = change_format.sparse2vecsparse_v2(
-                pl_p2w, rows, columns, nao)
+            pg_p2w_vec = change_format.sparse2vecsparse_v2(pg_p2w, rows, columns, nao)
+            pl_p2w_vec = change_format.sparse2vecsparse_v2(pl_p2w, rows, columns, nao)
             # pr_p2w_vec = change_format.sparse2vecsparse_v2(pr_p2w, rows, columns, nao)
             # ------------------------------------------------------------------------------------------------
             # ----------------------calculate the screened interaction on every rank--------------------------
@@ -1024,7 +1034,7 @@ if __name__ == "__main__":
         if rank == 0:
             rel_current_conserved = np.abs(current_conserved[0]-current_conserved[1])/np.abs(current_conserved[0])
             try:
-                assert np.isclose(rel_current_conserved, 0.0, rtol=1e-3)
+                assert np.isclose(rel_current_conserved, 0.0, atol=1e-10)
             except AssertionError:
                 print("Assertion Error: Current conservation not satisfied", flush=True)
                 print(f"Relative error: {rel_current_conserved}", flush=True)
