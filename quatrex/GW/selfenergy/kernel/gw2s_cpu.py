@@ -597,7 +597,7 @@ def gw2s_fft_mpi_cpu_PI_sr_kpoint(
     ne = int(gg.shape[1]/nkpts)
     ne2 = 2 * ne
     # Index matrix for kpoints
-    ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
+    ind_mat = np.roll(np.arange(nkpts, dtype=np.int32), -(nkpts//2)).reshape(num_kpoints)
 
     # Create self-energy arrays.
     sg: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)

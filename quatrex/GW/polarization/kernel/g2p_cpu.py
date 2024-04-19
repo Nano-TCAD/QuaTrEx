@@ -378,7 +378,7 @@ def g2p_fft_kpoints(
     no = gg.shape[0]
     ne2 = 2 * ne
     # Index matrix for k-points
-    ind_mat = np.arange(nkpts, dtype=np.int32).reshape(num_kpoints)
+    ind_mat = np.roll(np.arange(nkpts, dtype=np.int32), -(nkpts//2)).reshape(num_kpoints)
 
     # compute fourier transforms.
     # Now everything is kept in memory, which might be a problem
@@ -413,20 +413,20 @@ def g2p_fft_kpoints(
             pl_t[:, eki:eki+ne2] += - gl_t[:, ekj:ekj+ne2] * np.conjugate(gg_t[:, ekj_i:ekj_i+ne2])
 
     # ifft, cutoff and multiply with pre factor
-    pg: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
-    pl: npt.NDArray[np.complex128] = np.empty_like(gg_t, dtype=np.complex128)
+    pg: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.zeros_like(gl, dtype=np.complex128)
 
     for i in range(nkpts):
-        pg_temp = fft.ifft(pg_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor
-        pl_temp = fft.ifft(pl_t[:, i*ne2:(i+1)*ne2], axis=1)[:, :ne] * pre_factor
+        pg_temp = fft.ifft(pg_t[:, i*ne2:(i+1)*ne2], axis=1)
+        pl_temp = fft.ifft(pl_t[:, i*ne2:(i+1)*ne2], axis=1)
 
-        # Assert identity (23). Which I hope is correct for k-points? Maybe double check.
+        # Assert identity (23).
         # The identity is true for -k (so it should also be true for system with inversion symmetry? Yes!
         # I don't really know why below trows an assertion error for MoS2)
         # assert np.allclose(pl_temp, -np.conjugate(pg_temp[:, ::-1]))
 
-        pg[:, i*ne:(i+1)*ne] = pg_temp
-        pl[:, i*ne:(i+1)*ne] = pl_temp
+        pg[:, i*ne:(i+1)*ne] = pg_temp[:, :ne] * pre_factor
+        pl[:, i*ne:(i+1)*ne] = pl_temp[:, :ne] * pre_factor
 
     return (pg, pl)
 
