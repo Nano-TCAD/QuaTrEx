@@ -1604,7 +1604,7 @@ def beyn_new(factor: int,
     # LV, LS, LW, RV, RS, RW = beyn_svd(LP0, RP0, eps_lim=1e-8)
     LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
 
-    if LS.size == 0 or RS.size == 0:
+    if LS.size == 0 or RS.size == 0 or np.linalg.det(LS) == 0 or np.linalg.det(RS) == 0:
         cond = np.nan
         Sigma = None
         gR = None
