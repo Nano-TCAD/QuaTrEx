@@ -148,7 +148,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 4])
-    NCpSC = 1
+    NCpSC = 4
     Vappl = 0.6
     energy = np.linspace(-40, 35, 14400, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 3.0
+    epsR = 1.25
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
@@ -498,7 +498,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 25
+    max_iter = 5
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -524,12 +524,12 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_14000_27_SC_eps3_NCpSC1/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
                 
-        if((iter_num % 5 == 0) and iter_num > 0):
+        if((iter_num % 10 == 0) and iter_num > 0):
             cp.get_default_memory_pool().free_all_blocks()
 
         # initialize observables----------------------------------------------------
@@ -1063,21 +1063,10 @@ if __name__ == "__main__":
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nE,  op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nP,  op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nEw, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nPw, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
-            comm.Reduce(nE, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nP, None,  op=MPI.SUM, root=0)
-            comm.Reduce(dosw, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nEw, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nPw, None,  op=MPI.SUM, root=0)
-            
         
         comm.Barrier()
         finish_observables = time.perf_counter()
@@ -1087,12 +1076,7 @@ if __name__ == "__main__":
         if rank == 0:
             np.savetxt(folder + 'E.dat', energy)
             np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(folder + 'nE_' + str(iter_num) + '.dat', nE.view(float))
-            np.savetxt(folder + 'nP_' + str(iter_num) + '.dat', nP.view(float))
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(folder + 'DOSW_' + str(iter_num) + '.dat', dosw.view(float))
-            np.savetxt(folder + 'nEW_' + str(iter_num) + '.dat', nEw.view(float))
-            np.savetxt(folder + 'nPW_' + str(iter_num) + '.dat', nPw.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
             np.savetxt(folder + 'ECmin.dat', ECmin_vec)

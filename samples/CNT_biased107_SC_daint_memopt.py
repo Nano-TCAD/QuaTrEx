@@ -74,7 +74,7 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire/")
+    solution_path = os.path.join(scratch_path, "CNT_32_newlayer/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -147,10 +147,10 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([1, 4])
-    NCpSC = 1
-    Vappl = 0.6
-    energy = np.linspace(-40, 35, 14400, endpoint = True, dtype = float) # Energy Vector
+    no_orb = np.array([1, 1])
+    NCpSC = 2
+    Vappl = 0.2
+    energy = np.linspace(-35, 25, 10000, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 13, rank = rank, layer_matrix = '/Layer_Matrix.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -256,15 +256,15 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -2.0362
+    energy_fl = -3.6
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 3.0
+    epsR = 1.0
     # DFT Conduction Band Minimum
-    ECmin = -2.0662
+    ECmin = -3.524
 
     # Phyiscal Constants -----------
 
@@ -288,8 +288,10 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
-    #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    vh_1 = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
+    vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    indices_V_incomplete = np.where(np.abs(vh.data) < 0.001)
+    vh.data[indices_V_incomplete] = vh_1.data[indices_V_incomplete]
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -299,12 +301,10 @@ if __name__ == "__main__":
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
-    remainders = data_shape % size
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
-    count[0, :remainders[0]] += 1
-    count[1, :remainders[1]] += 1
+    count[:, size-1] += data_shape % size
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
@@ -498,7 +498,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 25
+    max_iter = 700
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -524,7 +524,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_14000_27_SC_eps3_NCpSC1/'
+    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_epsR1_n165/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -787,7 +787,7 @@ if __name__ == "__main__":
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
-                                                gl_transposed_g2p, batch_size = 220)
+                                                gl_transposed_g2p, batch_size = 240)
         else: 
             raise ValueError("Argument error, input type not possible")
         
@@ -988,7 +988,7 @@ if __name__ == "__main__":
         elif args.type in ("gpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count,  batch_size = 220)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 240)
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1063,21 +1063,10 @@ if __name__ == "__main__":
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nE,  op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nP,  op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, dosw, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nEw, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nPw, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
-            comm.Reduce(nE, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nP, None,  op=MPI.SUM, root=0)
-            comm.Reduce(dosw, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nEw, None,  op=MPI.SUM, root=0)
-            comm.Reduce(nPw, None,  op=MPI.SUM, root=0)
-            
         
         comm.Barrier()
         finish_observables = time.perf_counter()
@@ -1087,12 +1076,7 @@ if __name__ == "__main__":
         if rank == 0:
             np.savetxt(folder + 'E.dat', energy)
             np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(folder + 'nE_' + str(iter_num) + '.dat', nE.view(float))
-            np.savetxt(folder + 'nP_' + str(iter_num) + '.dat', nP.view(float))
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(folder + 'DOSW_' + str(iter_num) + '.dat', dosw.view(float))
-            np.savetxt(folder + 'nEW_' + str(iter_num) + '.dat', nEw.view(float))
-            np.savetxt(folder + 'nPW_' + str(iter_num) + '.dat', nPw.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
             np.savetxt(folder + 'ECmin.dat', ECmin_vec)
