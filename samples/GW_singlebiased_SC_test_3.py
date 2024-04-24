@@ -56,11 +56,11 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC3_0_2V.mat")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC2_0_2V.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_3v.mat")
-    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_3v.mat")
-    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_3v.mat")
+    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_0v.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_0v.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_0v.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -88,13 +88,13 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([1,1])
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
-    NCpSC = 2
+    NCpSC = 4
     Vappl = 0.2
     energy = np.linspace(-30, 20, 126, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'linear', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix107.dat', homogenize = True, NCpSC = NCpSC)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'read_in_diag', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = NCpSC)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)

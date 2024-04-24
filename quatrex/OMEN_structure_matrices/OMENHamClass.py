@@ -102,6 +102,8 @@ class Hamiltonian:
             self.map_sparse_indices()
             if(homogenize):
                 self.homogenize(NCpSC)
+            if(potential_type == 'read_in_diag'):
+                self.Vpot = np.loadtxt(self.sim_folder + 'Vpot_diag.npy')
             if(potential_type == 'linear'):
                 self.Vpot = self.get_linear_potential_drop()
             elif (potential_type == 'unit_cell'):
