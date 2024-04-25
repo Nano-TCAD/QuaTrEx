@@ -119,8 +119,9 @@ def generate_wannierHam_generator_1d(wannier_hr:np.ndarray,
 def generate_wannierHam_generator_3d(wannier_hr:np.ndarray, 
                                     potential:np.ndarray,
                                     nb:int, ns:int, kvec:np.ndarray, cell:np.array) :
-    '''return a generator function of the upscaled matrix for the Wannier-stype periodic matrix with potential applied to the 
-    diagonal elements. This is a simplified 1D version.
+    '''return a generator function of the upscaled matrix at a transverse k, 
+    for the Wannier-stype periodic matrix with potential applied to the 
+    diagonal elements. 
 
     Parameters
     ----------  
@@ -389,7 +390,7 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
 #   `num_blocks`, `block_size`, `col_index`, `ind_ptr`, `nnz`, `num_diag` are the BCSR parameters
 #   
 #   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
-#   `cur` is the current density in BCSR form
+#   `cur` is the current density flowing between adjacent blocks
 def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_function,
         G_retarded,G_lesser,G_greater,cur,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag):
     z = E + 0.0*1j
