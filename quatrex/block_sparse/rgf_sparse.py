@@ -2,17 +2,17 @@ import numpy as np
 import types
 from numpy.linalg import inv
 
-#  block sparse CSR matrix/tensor of `num_dim` :
-#     same as CSR format, but with an easier access to the ind_ptr in block [iblock,idiag,idim]
+#  block sparse CSR matrix:
+#     same as CSR format, but with an easier access to the ind_ptr in block [iblock,idiag]
 #     the diagonal block sizes are defined by `block_sizes`
 #     can consider using a generator function instead of an array of values for matrix-free representation 
 
 def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,dtype='complex',nnz:int=0,num_blocks:int=0,
-                        num_diag:int=0,num_dim:int=0,idim:int=0,
+                        num_diag:int=0,num_dim:int=0,
                         offset:int=0) -> np.ndarray:
     """return a dense matrix of size (block_size x block_size) of the block 
-    [iblock,idiag,idim] filled with values from `v`.    
+    [iblock,idiag] filled with values from `v`.    
      
     Parameters
     ----------   
@@ -28,9 +28,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
     iblock: 
         block index
     idiag: 
-        off-diagonal index of the wanted block 
-    idim:
-        dimention index of the wanted block
+        off-diagonal index of the wanted block     
     offset: 
         offset of pointer index of this MPI-rank 
     block_sizes:
@@ -45,16 +43,16 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
     if (type(v) == types.functionType):
         for i in range(block_sizes[iblock]):
             # get ind_ptr for the block row i
-            ptr1 = ind_ptr[i,  iblock, idiag, idim]
-            ptr2 = ind_ptr[i+1,iblock, idiag, idim]
+            ptr1 = ind_ptr[i,  iblock, idiag]
+            ptr2 = ind_ptr[i+1,iblock, idiag]
             for j in range(ptr1,ptr2):
                 col=col_index[j-offset]
-                mat[i, col] = v(i,col,iblock,idiag,idim)   
+                mat[i, col] = v(i,col,iblock,idiag)   
     else: 
         for i in range(block_sizes[iblock]):
             # get ind_ptr for the block row i
-            ptr1 = ind_ptr[i,  iblock, idiag, idim]
-            ptr2 = ind_ptr[i+1,iblock, idiag, idim]
+            ptr1 = ind_ptr[i,  iblock, idiag]
+            ptr2 = ind_ptr[i+1,iblock, idiag]
             for j in range(ptr1,ptr2):
                 col=col_index[j-offset]
                 mat[i, col] = v[j-offset]   
@@ -65,11 +63,11 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
 #    NOTE: `v` is an array
 def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
-                        num_diag:int=0,num_dim:int=0,idim:int=0):
-    for i in range(block_sizes[iblock,idiag,idim]):
+                        num_diag:int=0,num_dim:int=0):
+    for i in range(block_sizes[iblock,idiag]):
         # get ind_ptr for the block row i
-        ptr1 = ind_ptr[i,  iblock, idiag, idim]
-        ptr2 = ind_ptr[i+1,iblock, idiag, idim]
+        ptr1 = ind_ptr[i,  iblock, idiag]
+        ptr2 = ind_ptr[i+1,iblock, idiag]
         for j in range(ptr1,ptr2):
             v[j-offset] = mat[i, col_index[j-offset]]
     return
@@ -118,6 +116,63 @@ def generate_wannierHam_generator_1d(wannier_hr:np.ndarray,
         
 
 
+def generate_wannierHam_generator_3d(wannier_hr:np.ndarray, 
+                                    potential:np.ndarray,
+                                    nb:int, ns:int, kvec:np.ndarray, cell:np.array) :
+    '''return a generator function of the upscaled matrix for the Wannier-stype periodic matrix with potential applied to the 
+    diagonal elements. This is a simplified 1D version.
+
+    Parameters
+    ----------  
+    wannier_hr: 
+        the Wannier-style periodic matrix elements 
+        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
+        < m0 | H | nR >  is the matrix element of matrix H
+        see [https://wannier.org/support/] for details on Wannier functions
+
+    potential:
+        on-site (Hartree) potential 
+
+    nb: 
+        number of bands / wannier functions
+    
+    ns:
+        number of unit cells in the transport super cell
+
+    kvec:
+        transverse k vector size of [2]      
+
+    cell:
+        unit cell size of [3,3]
+
+    Returns
+    -------
+    wannierHam_generator: function
+        generator function of the upscaled matrix 
+    '''
+    a1=cell[:,0]
+    a2=cell[:,1]
+    a3=cell[:,2]
+    def wannierHam_generator(row_ind:int,col_ind:int,iblock:int,idiag:int) -> np.complex128:
+        r1 = idiag*ns + (col_ind - row_ind) // nb 
+        m = row_ind % nb 
+        n = col_ind % nb 
+        ny= wannier_hr.shape[1]
+        nz= wannier_hr.shape[2]
+        h = 0.0+1j*0.0
+        for r2 in range(ny):
+            for r3 in range(nz):
+                rt = (r2 - ny//2) * a2 + (r3 - nz//2) * a3 
+                phi = np.exp( - 1j * kvec.dot(rt) )
+                h += wannier_hr[r1,r2,r3,m,n] * phi
+        
+        if (row_ind == col_ind):
+            pot_shift = potential(row_ind + iblock*ns*nb) 
+        else:
+            pot_shift = 0.0
+        return h + pot_shift
+    
+    return wannierHam_generator
 
 
 # compute V'@P@V for iblock in a range of off-diagonal and return the dense blocks for several diagonals
