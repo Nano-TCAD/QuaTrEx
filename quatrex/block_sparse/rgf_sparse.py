@@ -48,14 +48,16 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
             ptr1 = ind_ptr[i,  iblock, idiag, idim]
             ptr2 = ind_ptr[i+1,iblock, idiag, idim]
             for j in range(ptr1,ptr2):
-                mat[i, col_index[j]] = v(i,col_index[j],iblock,idiag,idim)   
+                col=col_index[j-offset]
+                mat[i, col] = v(i,col,iblock,idiag,idim)   
     else: 
         for i in range(block_sizes[iblock]):
             # get ind_ptr for the block row i
             ptr1 = ind_ptr[i,  iblock, idiag, idim]
             ptr2 = ind_ptr[i+1,iblock, idiag, idim]
             for j in range(ptr1,ptr2):
-                mat[i, col_index[j-offset]] = v[j-offset]   
+                col=col_index[j-offset]
+                mat[i, col] = v[j-offset]   
     return mat        
 
 
