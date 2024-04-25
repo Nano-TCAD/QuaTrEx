@@ -61,14 +61,15 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
 
 # put a dense matrix values into the corresponding position of value array `v` 
 #    NOTE: `v` is an array
-def put_block_to_bcsr(v,col_index,ind_ptr,nnz,block_size,
-                      num_blocks,num_diag,iblock,idiag,mat):
-    for i in range(block_size):
+def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
+                        iblock:int,idiag:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
+                        num_diag:int=0,num_dim:int=0,idim:int=0):
+    for i in range(block_sizes[iblock,idiag,idim]):
         # get ind_ptr for the block row i
-        ptr1 = ind_ptr[i,  iblock, idiag]
-        ptr2 = ind_ptr[i+1,iblock, idiag]
+        ptr1 = ind_ptr[i,  iblock, idiag, idim]
+        ptr2 = ind_ptr[i+1,iblock, idiag, idim]
         for j in range(ptr1,ptr2):
-            v[j] = mat[i, col_index[j]]
+            v[j-offset] = mat[i, col_index[j-offset]]
     return
 
 
