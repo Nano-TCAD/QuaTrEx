@@ -1,16 +1,16 @@
 import numpy as np    
 import types
 from numpy.linalg import inv
+from scipy.sparse import coo_array,csr_array
 
 #  block sparse CSR matrix:
-#     same as CSR format, but with an easier access to the ind_ptr in block [iblock,idiag]
+#     simply stack CSR of each block continuously, with an easy access to the i-th block on i-th diagonal [iblock,idiag]
 #     the diagonal block sizes are defined by `block_sizes`
 #     can consider using a generator function instead of an array of values for matrix-free representation 
 
 def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,dtype='complex',nnz:int=0,num_blocks:int=0,
-                        num_diag:int=0,num_dim:int=0,
-                        offset:int=0) -> np.ndarray:
+                        num_diag:int=0,offset:int=0) -> np.ndarray:
     """return a dense matrix of size (block_size x block_size) of the block 
     [iblock,idiag] filled with values from `v`.    
      
@@ -71,6 +71,38 @@ def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.n
         for j in range(ptr1,ptr2):
             v[j-offset] = mat[i, col_index[j-offset]]
     return
+
+
+def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.ndarray,
+                nnz:int,num_blocks:int,num_diag:int):
+    ind_ptr = np.zeros((np.max(block_sizes),num_blocks,num_diag),dtype=int)
+    col_index = np.zeros(nnz,dtype=int)
+    v_bcsr = np.zeros(nnz,dtype=v_coo.dtype)
+    block_startidx = np.zeros(num_blocks+1)
+    ind = np.zeros(nnz//num_blocks*2,num_blocks,num_diag,dtype=int) # 2 is to leave some space
+    nn = np.zeros(num_blocks,num_diag,dtype=int) 
+    for i in range(num_blocks):
+        block_startidx[i+1] = block_startidx[i]+block_sizes[i]                
+    for i in range(nnz):
+        row_block  = np.searchsorted(block_startidx , row[i])
+        col_block  = np.searchsorted(block_startidx , col[i])
+        idiag = col_block - row_block
+        iblock= row_block
+        nn[iblock,idiag] += 1
+        ind[nn[iblock,idiag]-1,iblock,idiag] = i
+    bcsr_nnz=0    
+    for iblock in range(num_blocks):
+        for idiag in range(num_diag):
+            block_csr = coo_array( v_coo[ind[0:nn[iblock,idiag]-1,iblock,idiag]], 
+                                    (row[ind[0:nn[iblock,idiag]-1,iblock,idiag]], col[ind[0:nn[iblock,idiag]-1,iblock,idiag]]),
+                                    shape=(block_sizes[iblock], block_sizes[iblock+idiag])).tocsr()
+            block_nnz = block_csr.nnz                
+            v_bcsr[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.data
+            col_index[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.indices
+            ind_ptr[:,iblock,idiag] = block_csr.ind_ptr
+            bcsr_nnz += block_nnz                
+    return v_bcsr,col_index,ind_ptr
+
 
 
 def generate_wannierHam_generator_1d(wannier_hr:np.ndarray, 
