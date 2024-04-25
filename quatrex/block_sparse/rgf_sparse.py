@@ -84,24 +84,24 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
     for i in range(num_blocks):
         block_startidx[i+1] = block_startidx[i]+block_sizes[i]                
     for i in range(nnz):
-        row_block  = np.searchsorted(block_startidx , row[i])
-        col_block  = np.searchsorted(block_startidx , col[i])
+        row_block  = np.searchsorted(block_startidx , row[i]) - 1
+        col_block  = np.searchsorted(block_startidx , col[i]) - 1
         idiag = col_block - row_block
-        iblock= row_block
+        iblock= row_block        
+        ind[nn[iblock,idiag],iblock,idiag] = i
         nn[iblock,idiag] += 1
-        ind[nn[iblock,idiag]-1,iblock,idiag] = i
     bcsr_nnz=0    
     for iblock in range(num_blocks):
         for idiag in range(num_diag):
-            block_csr = coo_array( v_coo[ind[0:nn[iblock,idiag]-1,iblock,idiag]], 
-                                    (row[ind[0:nn[iblock,idiag]-1,iblock,idiag]], col[ind[0:nn[iblock,idiag]-1,iblock,idiag]]),
-                                    shape=(block_sizes[iblock], block_sizes[iblock+idiag])).tocsr()
+            block_csr = coo_array( ( v_coo[ind[0:nn[iblock,idiag]-1,iblock,idiag]], 
+                                    (row[ind[0:nn[iblock,idiag]-1,iblock,idiag]], col[ind[0:nn[iblock,idiag]-1,iblock,idiag]]) ),
+                                    shape=(block_sizes[iblock], block_sizes[iblock+idiag]) ).tocsr()
             block_nnz = block_csr.nnz                
             v_bcsr[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.data
             col_index[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.indices
             ind_ptr[:,iblock,idiag] = block_csr.ind_ptr
             bcsr_nnz += block_nnz                
-    return v_bcsr,col_index,ind_ptr
+    return v_bcsr,col_index,ind_ptr,bcsr_nnz
 
 
 
