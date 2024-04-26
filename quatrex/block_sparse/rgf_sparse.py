@@ -78,7 +78,7 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
     ind_ptr = np.zeros((np.max(block_sizes),num_blocks,num_diag),dtype=int)
     col_index = np.zeros(nnz,dtype=int)
     v_bcsr = np.zeros(nnz,dtype=v_coo.dtype)
-    block_startidx = np.zeros(num_blocks+1)
+    block_startidx = np.zeros(num_blocks+1,dtype=int)
     ind = np.zeros((nnz//num_blocks*2,num_blocks,num_diag),dtype=int) # 2 is to leave some space
     nn = np.zeros((num_blocks,num_diag),dtype=int) 
     for i in range(num_blocks):
@@ -109,7 +109,7 @@ def bcsr_to_coo(v_bcsr:np.ndarray,col_index:np.ndarray,ind_ptr:np.ndarray,nnz:in
     col = np.zeros(nnz,dtype=int)
     row = np.zeros(nnz,dtype=int)
     v_coo = np.zeros(nnz,dtype=v_bcsr.dtype)
-    block_startidx = np.zeros(num_blocks+1)
+    block_startidx = np.zeros(num_blocks+1,dtype=int)
     for i in range(num_blocks):
         block_startidx[i+1] = block_startidx[i]+block_sizes[i]   
     nnz_coo = 0    
@@ -125,6 +125,32 @@ def bcsr_to_coo(v_bcsr:np.ndarray,col_index:np.ndarray,ind_ptr:np.ndarray,nnz:in
                     v_coo[nnz_coo] = v_bcsr[j]  
                     nnz_coo += 1
     return v_coo,row,col,nnz_coo
+
+
+
+def bcsr_find_sparsity_pattern(operator,num_blocks:int,num_diag:int,
+                               block_sizes:np.ndarray,threshold):
+    nnz=0
+    col_index=[]
+    block_startidx = np.zeros(num_blocks+1, dtype=int)
+    max_blocksize = np.max(block_sizes)
+    ind_ptr = np.zeros((max_blocksize+1,num_blocks,num_diag), dtype = int)
+    for i in range(num_blocks):
+        block_startidx[i+1] = block_startidx[i]+block_sizes[i]   
+    nnz = 0    
+    for iblock in range(num_blocks):
+        for idiag in range(num_diag):            
+            for i in range(block_sizes[iblock]):
+                ind_ptr[i,iblock,idiag] = nnz
+                for j in range(block_sizes[iblock+idiag]):
+                    Hij = operator(i,j,iblock,idiag)
+                    if (np.abs(Hij) > threshold):
+                        col_index.append(j + block_startidx[iblock+idiag])
+                        nnz += 1 
+            ind_ptr[block_sizes[iblock]+1, iblock,idiag] = nnz
+    col_index=np.array(col_index,dtype=int)
+    return col_index, ind_ptr, nnz
+
 
 
 def generate_wannierHam_generator_1d(wannier_hr:np.ndarray, 
@@ -394,7 +420,7 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
         # $$B = H(i,i+1) * A$$
         # $$Jdens(i) = -2 * B$$
         B = Hi1 @ A
-        cur[ix,:,:] = -2.0*B        
+        cur[ix] = -2.0*np.trace(B)        
         # $$GN0 = Gl(i) * H(i,i+1) * G(i+1)$$
         # $$G(i) = Gl(i) + GN0 * H(i+1,i) * Gl(i)$$        
         B = gl[ix,:,:] @ Hi1
@@ -445,43 +471,15 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
 #   
 #   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
 #   `cur` is the current density flowing between adjacent blocks
-def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_function,
-        G_retarded,G_lesser,G_greater,cur,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag):
+def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_boundary_lesser,
+        G_retarded,G_lesser,G_greater,cur,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag,do_backward_pass):
     z = E + 0.0*1j
-    # left boundary selfenergy
-    ix=0
-    inc=-1
-    H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=inc)
-    S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
-                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    H00 += sig_ph_r @ S00
-    g00 = surface_green_function(z,H00,H10,S00)
-    sig_r_left = H10 @ g00 @ H10.conj().T
-    sig_l_left = - (sig_r_left - sig_r_left.conjg().T) * fd(mu[0],temp[0]) # fluctuation–dissipation relation 
-    # right boundary selfenergy
-    ix=num_diag
-    inc=1
-    H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    H10 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=inc)
-    S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                  num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
-                                       num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-    H00 += sig_ph_r @ S00
-    g00 = surface_green_function(z,H00,H10,S00)
-    sig_r_right = H10 @ g00 @ H10.conj().T
-    sig_l_right = - (sig_r_right - sig_r_right.conjg().T) * fd(mu[1],temp[1]) # fluctuation–dissipation relation 
+    # left boundary selfenergy    
+    sig_r_left = sigma_boundary_retarded[:,:,0]
+    sig_l_left = sigma_boundary_lesser[:,:,0]
+    # right boundary selfenergy    
+    sig_r_right = sigma_boundary_retarded[:,:,-1]
+    sig_l_right = sigma_boundary_lesser[:,:,-1] 
     if (flavor=='lrl'):
         # left-right-left         
         gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
@@ -512,7 +510,8 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_funct
         put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
-        G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=num_blocks-1,end_iblock=0,num_blocks=num_blocks,
+        if (do_backward_pass):
+            G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=num_blocks-1,end_iblock=0,num_blocks=num_blocks,
                                     block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     elif (flavor=='rlr'):
@@ -546,7 +545,8 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_funct
         put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
-        G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=1,end_iblock=num_blocks,
+        if (do_backward_pass):
+            G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=1,end_iblock=num_blocks,
                                     num_blocks=num_blocks,block_size=block_size,col_index=col_index,
                                     ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
@@ -585,10 +585,11 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,mu,temp,fd,surface_green_funct
         put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
-        G_r1,G_l1 = rgf_backward_pass(gl1,gl_lesser1,G_r,G_l,M,start_iblock=ix-1,end_iblock=0,num_blocks=num_blocks,
+        if (do_backward_pass):
+            G_r1,G_l1 = rgf_backward_pass(gl1,gl_lesser1,G_r,G_l,M,start_iblock=ix-1,end_iblock=0,num_blocks=num_blocks,
                                     block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
-        G_r2,G_l2 = rgf_backward_pass(gl2,gl_lesser2,G_r,G_l,M,start_iblock=ix+1,end_iblock=num_blocks,num_blocks=num_blocks,
+            G_r2,G_l2 = rgf_backward_pass(gl2,gl_lesser2,G_r,G_l,M,start_iblock=ix+1,end_iblock=num_blocks,num_blocks=num_blocks,
                                     block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     return 
