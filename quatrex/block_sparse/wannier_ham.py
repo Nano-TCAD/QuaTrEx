@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Callable, Optional
 
+from rgf_sparse import bcsr_find_sparsity_pattern,get_block_from_bcsr
 
 def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
@@ -16,28 +17,89 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             col_ind: int,
                             iblock: int,
                             idiag:int) -> np.complexfloating:
+    '''return a generator function of the upscaled matrix for the Wannier-stype periodic matrix with potential applied to the 
+    diagonal elements. This is a simplified 1D version.
+
+    Parameters
+    ----------  
+    wannier_hr: 
+        the Wannier-style periodic matrix elements 
+        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
+        < m0 | H | nR >  is the matrix element of matrix H
+        see [https://wannier.org/support/] for details on Wannier functions
+
+    potential:
+        on-site (Hartree) potential 
+
+    nb: 
+        number of bands / wannier functions
+    
+    ns:
+        number of unit cells in the transport super cell
+
+    Returns
+    -------
+    wannierHam_generator: function
+        generator function of the upscaled matrix 
+    '''
     r1 = idiag*ns + (col_ind - row_ind) // nb 
     m = row_ind % nb 
     n = col_ind % nb 
     r2 = 0
     r3 = 0
     if (row_ind == col_ind):
-        pot_shift = potential(row_ind + iblock*ns*nb) 
+        pot_shift = potential[row_ind + iblock*ns*nb]
     else:
         pot_shift = 0.0
-    return wannier_hr[r1,r2,r3,m,n] + pot_shift
+    if (r1<wannier_hr.shape[0]):
+        h=wannier_hr[r1,r2,r3,m,n]    
+    else:
+        h=0.0
+    return h + pot_shift
 
 
 def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
                             nb: int,
                             ns: int,
-                            kvec: npt.NDArray[np.floating],
-                            cell: npt.NDArray[np.complexfloating],
                             row_ind: int,
                             col_ind: int,
                             iblock: int,
-                            idiag:int) -> np.complexfloating:
+                            idiag:int,
+                            kvec: npt.NDArray[np.floating] = None,
+                            cell: npt.NDArray[np.complexfloating] = None) -> np.complexfloating:
+    '''return a generator function of the upscaled matrix at a transverse k, 
+    for the Wannier-stype periodic matrix with potential applied to the 
+    diagonal elements. 
+
+    Parameters
+    ----------  
+    wannier_hr: 
+        the Wannier-style periodic matrix elements 
+        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
+        < m0 | H | nR >  is the matrix element of matrix H
+        see [https://wannier.org/support/] for details on Wannier functions
+
+    potential:
+        on-site (Hartree) potential 
+
+    nb: 
+        number of bands / wannier functions
+    
+    ns:
+        number of unit cells in the transport super cell
+
+    kvec:
+        transverse k vector size of [2]      
+
+    cell:
+        unit cell size of [3,3]
+
+    Returns
+    -------
+    wannierHam_generator: function
+        generator function of the upscaled matrix 
+    '''
     a1=cell[:,0]
     a2=cell[:,1]
     a3=cell[:,2]
@@ -54,36 +116,24 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
             h += wannier_hr[r1,r2,r3,m,n] * phi
     
     if (row_ind == col_ind):
-        pot_shift = potential(row_ind + iblock*ns*nb) 
+        pot_shift = potential[row_ind + iblock*ns*nb]
     else:
         pot_shift = 0.0
     return h + pot_shift
 
-
-wannier_map = {1: wannierHam_generator_1d,
-               3: wannierHam_generator_3d}
-
-
 @dataclass(frozen=True)
 class WannierHam:
 
-    key: int
+    func: Callable
     wannier_hr: npt.NDArray[np.complexfloating]
     potential: npt.NDArray[np.floating]
     nb: int
     ns: int
-    kvec: Optional[npt.NDArray[np.floating]] = None
-    cell: Optional[npt.NDArray[np.complexfloating]] = None
+    kwargs: Optional[dict] = None    
 
     def generator(self) -> Callable:
-        if self.key == 1:
-            func = wannierHam_generator_1d
-            return partial(func, self.wannier_hr, self.potential, self.nb, self.ns)
-        elif self.key == 3:
-            func = wannierHam_generator_3d
-            return partial(func, self.wannier_hr, self.potential, self.nb, self.ns, self.kvec, self.cell)
-        else:
-            raise ValueError("Invalid key for WannierHam")
+        kwargs = self.kwargs or dict()
+        return partial(self.func, self.wannier_hr, self.potential, self.nb, self.ns, **kwargs)        
 
 
 if __name__ == "__main__":
@@ -97,9 +147,12 @@ if __name__ == "__main__":
 
     # TODO: Select proper values for the dimensions
     wannier_hr = rng.random((5, 5, 5, 5, 5)) + 1j * rng.random((5, 5, 5, 5, 5))
-    potential = rng.random(50)
+    num_blocks = 10
     nb = 5
     ns = 2
+    block_sizes = np.ones(num_blocks,dtype=int) * nb*ns
+    potential = rng.random(num_blocks*nb*ns)
+    
     kvec = np.array([0.1, 0.2, 0.3])
     cell = rng.random((3, 3)) + 1j * rng.random((3, 3))
 
@@ -109,12 +162,23 @@ if __name__ == "__main__":
     idiag = 1
 
     ref_1d = wannierHam_generator_1d(wannier_hr, potential, nb, ns, row_ind, col_ind, iblock, idiag)
-    ref_3d = wannierHam_generator_3d(wannier_hr, potential, nb, ns, kvec, cell, row_ind, col_ind, iblock, idiag)
+    ref_3d = wannierHam_generator_3d(wannier_hr, potential, nb, ns, row_ind, col_ind, iblock, idiag, kvec, cell)
 
-    wannier_1d = WannierHam(1, wannier_hr, potential, nb, ns).generator()
-    wannier_3d = WannierHam(3, wannier_hr, potential, nb, ns, kvec, cell).generator()
+    wannier_1d = WannierHam(wannierHam_generator_1d, wannier_hr, potential, nb, ns).generator()
+    wannier_3d = WannierHam(wannierHam_generator_3d, wannier_hr, potential, nb, ns, {'kvec':kvec, 'cell':cell}).generator()
     val_1d = wannier_1d(row_ind, col_ind, iblock, idiag)
     val_3d = wannier_3d(row_ind, col_ind, iblock, idiag)
 
     assert np.allclose(ref_1d, val_1d)
     assert np.allclose(ref_3d, val_3d)
+
+
+    col_index, ind_ptr, nnz = bcsr_find_sparsity_pattern(wannier_1d,num_blocks=num_blocks,
+                                                         num_diag=3,
+                                                         block_sizes=block_sizes,threshold=0.1)
+    
+    mat = get_block_from_bcsr(wannier_1d,col_index=col_index,
+                              ind_ptr=ind_ptr,block_sizes=block_sizes,
+                              iblock=1,idiag=0,dtype='complex')
+    
+    print(mat)

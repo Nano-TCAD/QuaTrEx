@@ -1,7 +1,8 @@
 import numpy as np    
-import types
+from typing import Callable
+
 from numpy.linalg import inv
-from scipy.sparse import coo_array,csr_array
+from scipy.sparse import coo_matrix
 
 #  block sparse CSR matrix:
 #     simply stack CSR of each block continuously, with an easy access to the i-th block on i-th diagonal [iblock,idiag]
@@ -40,7 +41,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
         Dense matrix of the wanted block
     """
     mat = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=dtype)
-    if (type(v) == types.functionType):
+    if (isinstance(v, Callable)):
         for i in range(block_sizes[iblock]):
             # get ind_ptr for the block row i
             ptr1 = ind_ptr[i,  iblock, idiag]
@@ -93,7 +94,7 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
     bcsr_nnz=0    
     for iblock in range(num_blocks):
         for idiag in range(num_diag):
-            block_csr = coo_array( ( v_coo[ind[0:nn[iblock,idiag],iblock,idiag]], 
+            block_csr = coo_matrix( ( v_coo[ind[0:nn[iblock,idiag],iblock,idiag]], 
                                     (row[ind[0:nn[iblock,idiag],iblock,idiag]], col[ind[0:nn[iblock,idiag],iblock,idiag]]) ),
                                     shape=(block_sizes[iblock], block_sizes[iblock+idiag]) ).tocsr()
             block_nnz = block_csr.nnz                
@@ -142,118 +143,16 @@ def bcsr_find_sparsity_pattern(operator,num_blocks:int,num_diag:int,
         for idiag in range(num_diag):            
             for i in range(block_sizes[iblock]):
                 ind_ptr[i,iblock,idiag] = nnz
-                for j in range(block_sizes[iblock+idiag]):
+                jblock = max(min(iblock+idiag,num_blocks-1),0)
+                for j in range(block_sizes[jblock]):
                     Hij = operator(i,j,iblock,idiag)
                     if (np.abs(Hij) > threshold):
-                        col_index.append(j + block_startidx[iblock+idiag])
+                        col_index.append(j)
                         nnz += 1 
-            ind_ptr[block_sizes[iblock]+1, iblock,idiag] = nnz
+            ind_ptr[block_sizes[iblock], iblock,idiag] = nnz
     col_index=np.array(col_index,dtype=int)
     return col_index, ind_ptr, nnz
 
-
-
-def generate_wannierHam_generator_1d(wannier_hr:np.ndarray, 
-                                    potential:np.ndarray,
-                                    nb:int, ns:int) :
-    '''return a generator function of the upscaled matrix for the Wannier-stype periodic matrix with potential applied to the 
-    diagonal elements. This is a simplified 1D version.
-
-    Parameters
-    ----------  
-    wannier_hr: 
-        the Wannier-style periodic matrix elements 
-        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
-        < m0 | H | nR >  is the matrix element of matrix H
-        see [https://wannier.org/support/] for details on Wannier functions
-
-    potential:
-        on-site (Hartree) potential 
-
-    nb: 
-        number of bands / wannier functions
-    
-    ns:
-        number of unit cells in the transport super cell
-
-    Returns
-    -------
-    wannierHam_generator: function
-        generator function of the upscaled matrix 
-    '''
-    def wannierHam_generator(row_ind:int,col_ind:int,iblock:int,idiag:int) -> np.complex128:
-        r1 = idiag*ns + (col_ind - row_ind) // nb 
-        m = row_ind % nb 
-        n = col_ind % nb 
-        r2 = 0
-        r3 = 0
-        if (row_ind == col_ind):
-            pot_shift = potential(row_ind + iblock*ns*nb) 
-        else:
-            pot_shift = 0.0
-        return wannier_hr[r1,r2,r3,m,n] + pot_shift
-    return wannierHam_generator
-        
-
-
-def generate_wannierHam_generator_3d(wannier_hr:np.ndarray, 
-                                    potential:np.ndarray,
-                                    nb:int, ns:int, kvec:np.ndarray, cell:np.array) :
-    '''return a generator function of the upscaled matrix at a transverse k, 
-    for the Wannier-stype periodic matrix with potential applied to the 
-    diagonal elements. 
-
-    Parameters
-    ----------  
-    wannier_hr: 
-        the Wannier-style periodic matrix elements 
-        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
-        < m0 | H | nR >  is the matrix element of matrix H
-        see [https://wannier.org/support/] for details on Wannier functions
-
-    potential:
-        on-site (Hartree) potential 
-
-    nb: 
-        number of bands / wannier functions
-    
-    ns:
-        number of unit cells in the transport super cell
-
-    kvec:
-        transverse k vector size of [2]      
-
-    cell:
-        unit cell size of [3,3]
-
-    Returns
-    -------
-    wannierHam_generator: function
-        generator function of the upscaled matrix 
-    '''
-    a1=cell[:,0]
-    a2=cell[:,1]
-    a3=cell[:,2]
-    def wannierHam_generator(row_ind:int,col_ind:int,iblock:int,idiag:int) -> np.complex128:
-        r1 = idiag*ns + (col_ind - row_ind) // nb 
-        m = row_ind % nb 
-        n = col_ind % nb 
-        ny= wannier_hr.shape[1]
-        nz= wannier_hr.shape[2]
-        h = 0.0+1j*0.0
-        for r2 in range(ny):
-            for r3 in range(nz):
-                rt = (r2 - ny//2) * a2 + (r3 - nz//2) * a3 
-                phi = np.exp( - 1j * kvec.dot(rt) )
-                h += wannier_hr[r1,r2,r3,m,n] * phi
-        
-        if (row_ind == col_ind):
-            pot_shift = potential(row_ind + iblock*ns*nb) 
-        else:
-            pot_shift = 0.0
-        return h + pot_shift
-    
-    return wannierHam_generator
 
 
 # compute V'@P@V for iblock in a range of off-diagonal and return the dense blocks for several diagonals
@@ -333,28 +232,29 @@ def matmul_bcsr(M,G,col_index,ind_ptr,nnz,block_size,
 #   `start_iblock` and `end_iblock` are starting and ending block index of the partition
 #   `inc` is the incremental direction of transport axis, + for going from 0 to L and - for opposite
 def rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,sigma_in,sigma_in_lesser,
-                     start_iblock,end_iblock,num_blocks,block_size,
+                     start_iblock,end_iblock,num_blocks,block_sizes,
                      col_index,ind_ptr,nnz,num_diag):
     length = abs(end_iblock - start_iblock) - 1 
     inc = np.sign(end_iblock-start_iblock)
-    gl = np.zeros((length,block_size,block_size),dtype='complex')
-    gl_lesser = np.zeros((length,block_size,block_size),dtype='complex')
-    sigma_out = np.zeros((block_size,block_size),dtype='complex')
-    sigma_out_lesser = np.zeros((block_size,block_size),dtype='complex')
+    max_blocksize=np.max(block_sizes)
+    gl = np.zeros((length,max_blocksize,max_blocksize),dtype='complex')
+    gl_lesser = np.zeros((length,max_blocksize,max_blocksize),dtype='complex')
+    sigma_out = np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    sigma_out_lesser = np.zeros((max_blocksize,max_blocksize),dtype='complex')
     z=E+0.0j
-    H00=np.zeros((block_size,block_size),dtype='complex')    
-    A=np.zeros((block_size,block_size),dtype='complex')
-    B=np.zeros((block_size,block_size),dtype='complex')
+    H00=np.zeros((max_blocksize,max_blocksize),dtype='complex')    
+    A=np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    B=np.zeros((max_blocksize,max_blocksize),dtype='complex')
     for ix in range(start_iblock,end_iblock+inc,inc):
-        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        Hii = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        Hii = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=-inc)
-        Sii = get_block_from_bcsr(S,col_index,ind_ptr,nnz,block_size,
+        Sii = get_block_from_bcsr(S,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         B = sig_ph_r @ Sii 
         H00 = Hii + B
@@ -395,23 +295,24 @@ def rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,sigma_in,sigma_in_lesser
 #   `G_l_prev` and `G_r_prev` are the fully-connected Green functions of the previous block of `start_iblock`
 #   `start_iblock` and `end_iblock` are starting and ending block index of the partition
 #   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
-def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_blocks,block_size,
+def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,num_blocks,block_sizes,
                      col_index,ind_ptr,nnz,num_diag,
                      G_retarded,G_lesser,G_greater,cur):    
     inc = np.sign(end_iblock-start_iblock)
-    A=np.zeros((block_size,block_size),dtype='complex')
-    B=np.zeros((block_size,block_size),dtype='complex')
-    GN0=np.zeros((block_size,block_size),dtype='complex')    
+    max_blocksize = np.max(block_sizes)
+    # A=np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    # B=np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    # GN0=np.zeros((max_blocksize,max_blocksize),dtype='complex')    
     G_l = G_l_prev
     G_r = G_r_prev
-    G_g = np.zeros((block_size,block_size),dtype='complex')
-    G_l_new = np.zeros((block_size,block_size),dtype='complex')
-    G_r_new = np.zeros((block_size,block_size),dtype='complex')
+    G_g = np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    G_l_new = np.zeros((max_blocksize,max_blocksize),dtype='complex')
+    G_r_new = np.zeros((max_blocksize,max_blocksize),dtype='complex')
 
     for ix in range(start_iblock,end_iblock+inc,inc):
-        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        H1i = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix-inc,idiag=inc)
-        Hi1 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        Hi1 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                             num_blocks,num_diag,dtype='complex',iblock=ix,idiag=-inc)
         # $$A = G^<(i+1) * H(i+1,i) * Gl(i)^\dagger + G(i+1) * H(i+1,i) * Gln(i)$$        
         A = G_l @ H1i @ gl[ix,:,:].conj().T
@@ -448,11 +349,11 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
         G_l = G_l_new
         G_r = G_r_new
 
-        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
-        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
-        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
       
     return G_r,G_l
@@ -472,7 +373,7 @@ def rgf_backward_pass(gl,gl_lesser,G_r_prev,G_l_prev,M,start_iblock,end_iblock,n
 #   `G_retarded` and `G_lesser` and `G_greater` are fully-connected Green functions in BCSR form
 #   `cur` is the current density flowing between adjacent blocks
 def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_boundary_lesser,
-        G_retarded,G_lesser,G_greater,cur,num_blocks,block_size,col_index,ind_ptr,nnz,num_diag,do_backward_pass):
+        G_retarded,G_lesser,G_greater,cur,num_blocks,block_sizes,col_index,ind_ptr,nnz,num_diag,do_backward_pass):
     z = E + 0.0*1j
     # left boundary selfenergy    
     sig_r_left = sigma_boundary_retarded[:,:,0]
@@ -488,13 +389,13 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_
                                                                    col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag)        
         # solve fully-connected GF for the ix block with full connections to left and right sides
         ix=num_blocks
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                         num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
-        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_sizes,
                                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_sizes,
                                     num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         A = z*S00 - H00 - sigma_out - sig_r_right - sig_ph_r @ S00
         G_r = inv(A)
@@ -503,33 +404,33 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_
         sig += sig_ph_l @ S00 
         G_l = G_r @ sig @ G_r.conjg().T
         G_g = G_l + (G_r - G_r.conj().T)        
-        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
-        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
-        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
         if (do_backward_pass):
             G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=num_blocks-1,end_iblock=0,num_blocks=num_blocks,
-                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
+                                    block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     elif (flavor=='rlr'):
         # right-left-right        
         gl,gl_lesser,sigma_out,sigma_out_lesser = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
                                                                    sigma_in=sig_r_right,sigma_in_lesser=sig_l_right,
                                                                    start_iblock=num_blocks,end_iblock=0,num_blocks=num_blocks,
-                                                                   block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
+                                                                   block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
                                                                    num_diag=num_diag)                
         # solve fully-connected GF for the ix block with full connections to left and right sides
         ix=0
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                         num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
-        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_sizes,
                                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_sizes,
                                     num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         A = z*S00 - H00 - sigma_out - sig_r_left - sig_ph_r @ S00        
         G_r = inv(A)
@@ -538,16 +439,16 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_
         sig += sig_ph_l @ S00 
         G_l = G_r @ sig @ G_r.conjg().T
         G_g = G_l + (G_r - G_r.conj().T)        
-        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
-        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
-        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
         if (do_backward_pass):
             G_r,G_l = rgf_backward_pass(gl,gl_lesser,G_r,G_l,M,start_iblock=1,end_iblock=num_blocks,
-                                    num_blocks=num_blocks,block_size=block_size,col_index=col_index,
+                                    num_blocks=num_blocks,block_sizes=block_sizes,col_index=col_index,
                                     ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     elif (flavor=='2sided'):
@@ -556,21 +457,21 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_
         gl1,gl_lesser1,sigma_out1,sigma_out_lesser1 = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
                                                                    sigma_in=sig_r_left,sigma_in_lesser=sig_l_left,
                                                                    start_iblock=0,end_iblock=ix,num_blocks=num_blocks,
-                                                                   block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
+                                                                   block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
                                                                    num_diag=num_diag)    
         gl2,gl_lesser2,sigma_out2,sigma_out_lesser2 = rgf_forward_pass(E,M,S,sigma_scat,sigma_scat_lesser,
                                                                    sigma_in=sig_r_right,sigma_in_lesser=sig_l_right,
                                                                    start_iblock=num_blocks,end_iblock=ix,num_blocks=num_blocks,
-                                                                   block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
+                                                                   block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,
                                                                    num_diag=num_diag)    
         # solve fully-connected GF for the ix block with full connections to left and right sides
-        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        H00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                         num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)    
-        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
+        S00 = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_sizes,
                                   num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_size,
+        sig_ph_r = get_block_from_bcsr(sigma_scat,col_index,ind_ptr,nnz,block_sizes,
                                        num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
-        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_size,
+        sig_ph_l = get_block_from_bcsr(sigma_scat_lesser,col_index,ind_ptr,nnz,block_sizes,
                                     num_blocks,num_diag,dtype='complex',iblock=ix,idiag=0)
         A = z*S00 - H00 - sigma_out1 - sigma_out2 - sig_ph_r @ S00        
         G_r = inv(A)
@@ -578,19 +479,19 @@ def rgf(E,M,S,sigma_scat,sigma_scat_lesser,flavor,sigma_boundary_retarded,sigma_
         sig += sig_ph_l @ S00 
         G_l = G_r @ sig @ G_r.conjg().T
         G_g = G_l + (G_r - G_r.conj().T)        
-        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_retarded,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_r)
-        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_lesser,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_l)
-        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_size,
+        put_block_to_bcsr(G_greater,col_index,ind_ptr,nnz,block_sizes,
                           num_blocks,num_diag,iblock=ix,idiag=0,mat=G_g)
         # backward pass
         if (do_backward_pass):
             G_r1,G_l1 = rgf_backward_pass(gl1,gl_lesser1,G_r,G_l,M,start_iblock=ix-1,end_iblock=0,num_blocks=num_blocks,
-                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
+                                    block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
             G_r2,G_l2 = rgf_backward_pass(gl2,gl_lesser2,G_r,G_l,M,start_iblock=ix+1,end_iblock=num_blocks,num_blocks=num_blocks,
-                                    block_size=block_size,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
+                                    block_sizes=block_sizes,col_index=col_index,ind_ptr=ind_ptr,nnz=nnz,num_diag=num_diag,
                                     G_retarded=G_retarded,G_lesser=G_lesser,G_greater=G_greater,cur=cur)
     return 
     
