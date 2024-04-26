@@ -46,7 +46,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
             ptr1 = ind_ptr[i,  iblock, idiag]
             ptr2 = ind_ptr[i+1,iblock, idiag]
             for j in range(ptr1,ptr2):
-                col=col_index[j-offset]
+                col=col_index[j] # no need to substract offset because each MPI-rank keep the entire col_index
                 mat[i, col] = v(i,col,iblock,idiag)   
     else: 
         for i in range(block_sizes[iblock]):
@@ -54,7 +54,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
             ptr1 = ind_ptr[i,  iblock, idiag]
             ptr2 = ind_ptr[i+1,iblock, idiag]
             for j in range(ptr1,ptr2):
-                col=col_index[j-offset]
+                col=col_index[j] # no need to substract offset because each MPI-rank keep the entire col_index
                 mat[i, col] = v[j-offset]   
     return mat        
 
@@ -69,7 +69,7 @@ def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.n
         ptr1 = ind_ptr[i,  iblock, idiag]
         ptr2 = ind_ptr[i+1,iblock, idiag]
         for j in range(ptr1,ptr2):
-            v[j-offset] = mat[i, col_index[j-offset]]
+            v[j-offset] = mat[i, col_index[j]] # no need to substract offset because each MPI-rank keep the entire col_index
     return
 
 
@@ -79,8 +79,8 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
     col_index = np.zeros(nnz,dtype=int)
     v_bcsr = np.zeros(nnz,dtype=v_coo.dtype)
     block_startidx = np.zeros(num_blocks+1)
-    ind = np.zeros(nnz//num_blocks*2,num_blocks,num_diag,dtype=int) # 2 is to leave some space
-    nn = np.zeros(num_blocks,num_diag,dtype=int) 
+    ind = np.zeros((nnz//num_blocks*2,num_blocks,num_diag),dtype=int) # 2 is to leave some space
+    nn = np.zeros((num_blocks,num_diag),dtype=int) 
     for i in range(num_blocks):
         block_startidx[i+1] = block_startidx[i]+block_sizes[i]                
     for i in range(nnz):
@@ -93,16 +93,38 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
     bcsr_nnz=0    
     for iblock in range(num_blocks):
         for idiag in range(num_diag):
-            block_csr = coo_array( ( v_coo[ind[0:nn[iblock,idiag]-1,iblock,idiag]], 
-                                    (row[ind[0:nn[iblock,idiag]-1,iblock,idiag]], col[ind[0:nn[iblock,idiag]-1,iblock,idiag]]) ),
+            block_csr = coo_array( ( v_coo[ind[0:nn[iblock,idiag],iblock,idiag]], 
+                                    (row[ind[0:nn[iblock,idiag],iblock,idiag]], col[ind[0:nn[iblock,idiag],iblock,idiag]]) ),
                                     shape=(block_sizes[iblock], block_sizes[iblock+idiag]) ).tocsr()
             block_nnz = block_csr.nnz                
             v_bcsr[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.data
             col_index[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.indices
-            ind_ptr[:,iblock,idiag] = block_csr.ind_ptr
+            ind_ptr[0:block_sizes[iblock]+1,iblock,idiag] = block_csr.indptr
             bcsr_nnz += block_nnz                
     return v_bcsr,col_index,ind_ptr,bcsr_nnz
 
+
+def bcsr_to_coo(v_bcsr:np.ndarray,col_index:np.ndarray,ind_ptr:np.ndarray,nnz:int,num_blocks:int,
+                num_diag:int,block_sizes:np.ndarray):
+    col = np.zeros(nnz,dtype=int)
+    row = np.zeros(nnz,dtype=int)
+    v_coo = np.zeros(nnz,dtype=v_bcsr.dtype)
+    block_startidx = np.zeros(num_blocks+1)
+    for i in range(num_blocks):
+        block_startidx[i+1] = block_startidx[i]+block_sizes[i]   
+    nnz_coo = 0    
+    for iblock in range(num_blocks):
+        for idiag in range(num_diag):
+             for i in range(block_sizes[iblock]):
+                # get ind_ptr for the i-th block on i-th diagonal
+                ptr1 = ind_ptr[i,  iblock, idiag]
+                ptr2 = ind_ptr[i+1,iblock, idiag]
+                for j in range(ptr1,ptr2):
+                    col[nnz_coo] = col_index[j] + block_startidx[iblock+idiag]
+                    row[nnz_coo] = i + block_startidx[iblock]
+                    v_coo[nnz_coo] = v_bcsr[j]  
+                    nnz_coo += 1
+    return v_coo,row,col,nnz_coo
 
 
 def generate_wannierHam_generator_1d(wannier_hr:np.ndarray, 
