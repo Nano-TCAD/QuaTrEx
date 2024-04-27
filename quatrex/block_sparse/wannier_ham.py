@@ -90,7 +90,7 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
         number of unit cells in the transport super cell
 
     kvec:
-        transverse k vector size of [2]      
+        transverse k vector size of [3]      
 
     cell:
         unit cell size of [3,3]

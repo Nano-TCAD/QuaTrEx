@@ -25,7 +25,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
     col_index:  
         like CSR column indices array but with column index within block matrix of size [nnz ( // comm_size)]
     ind_ptr: 
-        like a CSR row pointer array but for each block of size [max_block_size+1,num_blocks,num_diag,num_dim]
+        like a CSR row pointer array but for each block of size [max_block_size+1,num_blocks,num_diag]
     iblock: 
         block index
     idiag: 
@@ -65,7 +65,7 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
 def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
                         num_diag:int=0,num_dim:int=0):
-    for i in range(block_sizes[iblock,idiag]):
+    for i in range(block_sizes[iblock]):
         # get ind_ptr for the block row i
         ptr1 = ind_ptr[i,  iblock, idiag]
         ptr2 = ind_ptr[i+1,iblock, idiag]
