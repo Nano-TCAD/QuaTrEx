@@ -2,12 +2,12 @@
 
 import numpy as np
 import numpy.typing as npt
-
+import time
 from dataclasses import dataclass, field
 from functools import partial
 from typing import Callable, Optional
 
-from rgf_sparse import bcsr_find_sparsity_pattern,get_block_from_bcsr
+from bcsr_matrix import bcsr_find_sparsity_pattern,get_block_from_bcsr
 
 def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
@@ -17,13 +17,14 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             col_ind: int,
                             iblock: int,
                             idiag:int) -> np.complexfloating:
-    '''return a generator function of the upscaled matrix for the Wannier-stype periodic matrix with potential applied to the 
-    diagonal elements. This is a simplified 1D version.
+    '''return the specific matrix element of the upscaled device matrix for the Wannier-stype 
+    model with the potential applied to the diagonal elements. This is a simplified version 
+    for quasi-1D materials, with less computation needed than the more general 3D version.
 
     Parameters
     ----------  
     wannier_hr: 
-        the Wannier-style periodic matrix elements 
+        a ndarray of Wannier-style periodic matrix elements 
         [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
         < m0 | H | nR >  is the matrix element of matrix H
         see [https://wannier.org/support/] for details on Wannier functions
@@ -39,8 +40,7 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
 
     Returns
     -------
-    wannierHam_generator: function
-        generator function of the upscaled matrix 
+    value of device matrix at a specific position
     '''
     r1 = idiag*ns + (col_ind - row_ind) // nb 
     m = row_ind % nb 
@@ -68,7 +68,7 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
                             idiag:int,
                             kvec: npt.NDArray[np.floating] = None,
                             cell: npt.NDArray[np.complexfloating] = None) -> np.complexfloating:
-    '''return a generator function of the upscaled matrix at a transverse k, 
+    '''return the specific matrix element of the upscaled device matrix at a transverse k, 
     for the Wannier-stype periodic matrix with potential applied to the 
     diagonal elements. 
 
@@ -97,8 +97,7 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
 
     Returns
     -------
-    wannierHam_generator: function
-        generator function of the upscaled matrix 
+    value of device matrix at a specific position
     '''
     a1=cell[:,0]
     a2=cell[:,1]
@@ -109,11 +108,12 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
     ny= wannier_hr.shape[1]
     nz= wannier_hr.shape[2]
     h = 0.0+1j*0.0
-    for r2 in range(ny):
-        for r3 in range(nz):
-            rt = (r2 - ny//2) * a2 + (r3 - nz//2) * a3 
-            phi = np.exp( - 1j * kvec.dot(rt) )
-            h += wannier_hr[r1,r2,r3,m,n] * phi
+    if (r1<wannier_hr.shape[0]):
+        for r2 in range(ny):
+            for r3 in range(nz):
+                rt = (r2 - ny//2) * a2 + (r3 - nz//2) * a3 
+                phi = np.exp( - 1j * kvec.dot(rt) )
+                h += wannier_hr[r1,r2,r3,m,n] * phi
     
     if (row_ind == col_ind):
         pot_shift = potential[row_ind + iblock*ns*nb]
@@ -146,10 +146,10 @@ if __name__ == "__main__":
     num_diags = 3
 
     # TODO: Select proper values for the dimensions
-    wannier_hr = rng.random((5, 5, 5, 5, 5)) + 1j * rng.random((5, 5, 5, 5, 5))
+    wannier_hr = rng.random((5, 5, 5, 500, 500)) + 1j * rng.random((5, 5, 5, 500, 500))
     num_blocks = 10
-    nb = 5
-    ns = 2
+    nb = 500
+    ns = 4
     block_sizes = np.ones(num_blocks,dtype=int) * nb*ns
     potential = rng.random(num_blocks*nb*ns)
     
@@ -176,9 +176,10 @@ if __name__ == "__main__":
     col_index, ind_ptr, nnz = bcsr_find_sparsity_pattern(wannier_1d,num_blocks=num_blocks,
                                                          num_diag=3,
                                                          block_sizes=block_sizes,threshold=0.1)
-    
+    start_time = time.time()
     mat = get_block_from_bcsr(wannier_1d,col_index=col_index,
                               ind_ptr=ind_ptr,block_sizes=block_sizes,
                               iblock=1,idiag=0,dtype='complex')
-    
-    print(mat)
+    end_time = time.time()
+    print('densify a block take seconds =',end_time - start_time)
+    print('dense matrix block size=',mat.shape)
