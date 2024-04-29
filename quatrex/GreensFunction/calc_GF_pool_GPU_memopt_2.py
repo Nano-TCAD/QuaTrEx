@@ -57,7 +57,8 @@ def calc_GF_pool_mpi_split_memopt(
     homogenize=True,
     NCpSC: int = 1,
     mkl_threads: int = 1,
-    worker_num: int = 1        
+    worker_num: int = 1,
+    DOS_hr: npt.NDArray[np.float64] = None        
 ):
     comm.Barrier()
     if rank == 0:
@@ -319,7 +320,8 @@ def calc_GF_pool_mpi_split_memopt(
                             gr_h2g[ie:ie+energy_batchsize, :], gl_h2g[ie:ie+energy_batchsize, :], gg_h2g[ie:ie+energy_batchsize, :],
                             DOS[ie:ie+energy_batchsize, :], nE[ie:ie+energy_batchsize, :],
                             nP[ie:ie+energy_batchsize, :], idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
-                            input_stream = input_stream)
+                            input_stream = input_stream,
+                            DOS_hr = DOS_hr[ie:ie+energy_batchsize, :] if DOS_hr is not None else None)
         
     comm.Barrier()
     if rank == 0:
