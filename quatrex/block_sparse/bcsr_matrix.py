@@ -34,6 +34,12 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
         offset of pointer index of this MPI-rank 
     block_sizes:
         block sizes of the diagonal blocks
+    num_diag:
+        number of off-diagonals (same for upper and lower)
+    num_blocks:
+        number of blocks on diagonal
+    nnz:
+        number of nonzero/specified elements
 
     Returns
     -------
@@ -133,12 +139,12 @@ def bcsr_find_sparsity_pattern(operator,num_blocks:int,num_diag:int,
     v=[]
     block_startidx = np.zeros(num_blocks+1, dtype=int)
     max_blocksize = np.max(block_sizes)
-    ind_ptr = np.zeros((max_blocksize+1,num_blocks,num_diag), dtype = int)
+    ind_ptr = np.zeros((max_blocksize+1,num_blocks,num_diag*2+1), dtype = int)
     for i in range(num_blocks):
         block_startidx[i+1] = block_startidx[i]+block_sizes[i]   
     nnz = 0    
     for iblock in range(num_blocks):
-        for idiag in range(num_diag):            
+        for idiag in range(-num_diag,num_diag+1):            
             for i in range(block_sizes[iblock]):
                 ind_ptr[i,iblock,idiag] = nnz
                 jblock = max(min(iblock+idiag,num_blocks-1),0)

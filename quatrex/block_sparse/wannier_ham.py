@@ -13,6 +13,9 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
                             nb: int,
                             ns: int,
+                            xmin: int,               
+                            ymin: int,
+                            zmin: int,             
                             row_ind: int,
                             col_ind: int,
                             iblock: int,
@@ -38,15 +41,18 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
     ns:
         number of unit cells in the transport super cell
 
+    xmin:
+        min of R1
+
     Returns
     -------
     value of device matrix at a specific position
     '''
-    r1 = idiag*ns + (col_ind - row_ind) // nb 
+    r1 = idiag * ns + int((col_ind - row_ind) / nb) - xmin      
     m = row_ind % nb 
     n = col_ind % nb 
-    r2 = 0
-    r3 = 0
+    r2 = -ymin
+    r3 = -zmin
     if (row_ind == col_ind):
         pot_shift = potential[row_ind + iblock*ns*nb]
     else:
@@ -62,10 +68,13 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
                             nb: int,
                             ns: int,
+                            xmin: int,
+                            ymin: int,
+                            zmin: int,
                             row_ind: int,
                             col_ind: int,
                             iblock: int,
-                            idiag:int,
+                            idiag:int,                            
                             kvec: npt.NDArray[np.floating] = None,
                             cell: npt.NDArray[np.complexfloating] = None) -> np.complexfloating:
     '''return the specific matrix element of the upscaled device matrix at a transverse k, 
@@ -89,11 +98,20 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
     ns:
         number of unit cells in the transport super cell
 
+    xmin: 
+        min of R1
+
     kvec:
         transverse k vector size of [3]      
 
     cell:
         unit cell size of [3,3]
+
+    ymin:
+        min of R2
+    
+    zmin:
+        min of R3
 
     Returns
     -------
@@ -102,7 +120,7 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
     a1=cell[:,0]
     a2=cell[:,1]
     a3=cell[:,2]
-    r1 = idiag*ns + (col_ind - row_ind) // nb 
+    r1 = idiag * ns + int((col_ind - row_ind) / nb) - xmin      
     m = row_ind % nb 
     n = col_ind % nb 
     ny= wannier_hr.shape[1]
@@ -111,7 +129,7 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
     if (r1<wannier_hr.shape[0]):
         for r2 in range(ny):
             for r3 in range(nz):
-                rt = (r2 - ny//2) * a2 + (r3 - nz//2) * a3 
+                rt = (r2 + ymin) * a2 + (r3 + zmin) * a3 
                 phi = np.exp( - 1j * kvec.dot(rt) )
                 h += wannier_hr[r1,r2,r3,m,n] * phi
     
@@ -129,57 +147,116 @@ class WannierHam:
     potential: npt.NDArray[np.floating]
     nb: int
     ns: int
+    xmin: int
+    ymin: int 
+    zmin: int
     kwargs: Optional[dict] = None    
 
     def generator(self) -> Callable:
         kwargs = self.kwargs or dict()
-        return partial(self.func, self.wannier_hr, self.potential, self.nb, self.ns, **kwargs)        
+        return partial(self.func, self.wannier_hr, self.potential, self.nb, self.ns, self.xmin, self.ymin, self.zmin, **kwargs)        
 
 
 if __name__ == "__main__":
     
     rng = np.random.default_rng(0)
 
-    num_rows = 10
-    num_cols = 10
-    num_blocks = 5
-    num_diags = 3
+    hamdat = np.loadtxt('ham_dat')
+    xmin = int(np.min(hamdat[:,0]))
+    xmax = int(np.max(hamdat[:,0]))
+    ymin = int(np.min(hamdat[:,1]))
+    ymax = int(np.max(hamdat[:,1]))
+    zmin = int(np.min(hamdat[:,2]))
+    zmax = int(np.max(hamdat[:,2]))
+    nb = int(np.max(hamdat[:,3])) 
+    nx=xmax-xmin+1
+    ny=ymax-ymin+1
+    nz=zmax-zmin+1
+    print(nx,ny,nz,nb)
+    print(xmin,xmax)
+    wannier_hr = np.zeros((nx,ny,nz,nb,nb),dtype='complex')
+    for i in range(hamdat.shape[0]):
+        wannier_hr[int(hamdat[i,0]-xmin),
+                   int(hamdat[i,1]-ymin),
+                   int(hamdat[i,2]-zmin),
+                   int(hamdat[i,3])-1,
+                   int(hamdat[i,4])-1] = hamdat[i,5] + hamdat[i,6] * 1j 
 
-    # TODO: Select proper values for the dimensions
-    wannier_hr = rng.random((5, 5, 5, 500, 500)) + 1j * rng.random((5, 5, 5, 500, 500))
-    num_blocks = 10
-    nb = 500
-    ns = 4
+    
+    num_diags = 1   # number of off-diagonals 
+    num_blocks = 50    
+    ns = 5
     block_sizes = np.ones(num_blocks,dtype=int) * nb*ns
-    potential = rng.random(num_blocks*nb*ns)
+    potential = rng.random(num_blocks*nb*ns) * 0.0
     
     kvec = np.array([0.1, 0.2, 0.3])
     cell = rng.random((3, 3)) + 1j * rng.random((3, 3))
 
     row_ind = 1
-    col_ind = 2
-    iblock = 1
-    idiag = 1
+    col_ind = 0
+    iblock = 0
+    idiag = 0
 
-    ref_1d = wannierHam_generator_1d(wannier_hr, potential, nb, ns, row_ind, col_ind, iblock, idiag)
-    ref_3d = wannierHam_generator_3d(wannier_hr, potential, nb, ns, row_ind, col_ind, iblock, idiag, kvec, cell)
+    ref_1d = wannierHam_generator_1d(wannier_hr, potential, nb, ns, xmin, ymin, zmin, row_ind, col_ind, iblock, idiag)
+    ref_3d = wannierHam_generator_3d(wannier_hr, potential, nb, ns, xmin, ymin, zmin, row_ind, col_ind, iblock, idiag, kvec, cell)
 
-    wannier_1d = WannierHam(wannierHam_generator_1d, wannier_hr, potential, nb, ns).generator()
-    wannier_3d = WannierHam(wannierHam_generator_3d, wannier_hr, potential, nb, ns, {'kvec':kvec, 'cell':cell}).generator()
+    wannier_1d = WannierHam(wannierHam_generator_1d, wannier_hr, potential, nb, ns, xmin, ymin, zmin).generator()
+    wannier_3d = WannierHam(wannierHam_generator_3d, wannier_hr, potential, nb, ns, xmin, ymin, zmin, {'kvec':kvec, 'cell':cell}).generator()
     val_1d = wannier_1d(row_ind, col_ind, iblock, idiag)
     val_3d = wannier_3d(row_ind, col_ind, iblock, idiag)
 
     assert np.allclose(ref_1d, val_1d)
     assert np.allclose(ref_3d, val_3d)
 
-
+    start_time = time.time()
     col_index, ind_ptr, nnz = bcsr_find_sparsity_pattern(wannier_1d,num_blocks=num_blocks,
-                                                         num_diag=3,
-                                                         block_sizes=block_sizes,threshold=0.1)
+                                                         num_diag=num_diags,
+                                                         block_sizes=block_sizes,threshold=1e-6)
+    end_time = time.time()
+    print('nnz=',nnz)
+    print('sparsity take seconds =',end_time - start_time)
+    
+    print('--- block diag ---')
     start_time = time.time()
     mat = get_block_from_bcsr(wannier_1d,col_index=col_index,
                               ind_ptr=ind_ptr,block_sizes=block_sizes,
-                              iblock=1,idiag=0,dtype='complex')
+                              iblock=iblock,idiag=0,dtype='complex')
     end_time = time.time()
     print('densify a block take seconds =',end_time - start_time)
     print('dense matrix block size=',mat.shape)
+    print('block sparsity ratio=',(ind_ptr[-1,0,0]-ind_ptr[0,0,0])/(mat.shape[0]*mat.shape[1]))
+    H00 = mat
+    
+    print('--- block 1st offdiag ---')
+    start_time = time.time()
+    mat = get_block_from_bcsr(wannier_1d,col_index=col_index,
+                              ind_ptr=ind_ptr,block_sizes=block_sizes,
+                              iblock=iblock,idiag=1,dtype='complex')
+    end_time = time.time()
+    print('densify a block take seconds =',end_time - start_time)
+    print('dense matrix block size=',mat.shape)
+    print('block sparsity ratio=',(ind_ptr[-1,0,1]-ind_ptr[0,0,1])/(mat.shape[0]*mat.shape[1]))
+    H01 = mat
+
+    print('--- block -1st offdiag ---')
+    start_time = time.time()
+    mat = get_block_from_bcsr(wannier_1d,col_index=col_index,
+                              ind_ptr=ind_ptr,block_sizes=block_sizes,
+                              iblock=iblock,idiag=-1,dtype='complex')
+    end_time = time.time()
+    print('densify a block take seconds =',end_time - start_time)
+    print('dense matrix block size=',mat.shape)
+    print('block sparsity ratio=',(ind_ptr[-1,0,1]-ind_ptr[0,0,1])/(mat.shape[0]*mat.shape[1]))
+    H10 = mat
+
+    # np.savetxt('H00.dat',H00)
+    # np.savetxt('H10.dat',H10)
+    # np.savetxt('H01.dat',H01)
+    # np.savetxt('wannier_hr.dat',wannier_hr[-xmin,0,0,:,:])
+    # np.savetxt('col.dat',col_index[ind_ptr[:,iblock,0]])
+    # np.savetxt('indptr1.dat',ind_ptr[:,iblock,-1])
+    # np.savetxt('indptr2.dat',ind_ptr[:,iblock,1])
+
+    assert np.allclose(H00, H00.conj().T)
+    assert np.allclose(H10, H01.conj().T)
+    
