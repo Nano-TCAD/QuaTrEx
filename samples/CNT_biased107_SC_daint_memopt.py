@@ -148,9 +148,11 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-    NCpSC = 2
+    NCpSC = 4
+    # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
+    trace_factor = 2
     Vappl = 0.2
-    energy = np.linspace(-35, 25, 10000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-35, 25, 10200, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -161,7 +163,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix180.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -301,10 +303,12 @@ if __name__ == "__main__":
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
+    remainders = data_shape % size
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
-    count[:, size-1] += data_shape % size
+    count[0, :remainders[0]] += 1
+    count[1, :remainders[1]] += 1
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
@@ -493,7 +497,7 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.5
+    mem_s = 0.75
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
@@ -524,17 +528,18 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_epsR1_n165/'
+    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
                 
-        if((iter_num % 5 == 0) and iter_num > 0):
+        if((iter_num % 2 == 0) and iter_num > 0):
             cp.get_default_memory_pool().free_all_blocks()
 
         # initialize observables----------------------------------------------------
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+        dos_hr = cpx.zeros_pinned(shape=(ne, nb * trace_factor), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
         # occupied states/unoccupied states
@@ -689,7 +694,8 @@ if __name__ == "__main__":
                 homogenize=False,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads)
+                worker_num=gf_worker_threads,
+                DOS_hr=dos_hr[disp[1, rank]:disp[1, rank] + count[1, rank]])
 
         # lower diagonal blocks from physics identity
         #gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
@@ -1062,10 +1068,12 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, dos_hr, op = MPI.SUM, root = 0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+            comm.Reduce(dos_hr, None, op=MPI.SUM, root = 0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
         
         comm.Barrier()
@@ -1075,7 +1083,8 @@ if __name__ == "__main__":
 
         if rank == 0:
             np.savetxt(folder + 'E.dat', energy)
-            np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(folder + 'DOS_NB_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos_hr.view(float))
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)

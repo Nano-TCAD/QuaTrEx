@@ -148,7 +148,9 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([1, 1])
-    NCpSC = 2
+    NCpSC = 4
+    # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
+    trace_factor = 2
     Vappl = 0.2
     energy = np.linspace(-35, 25, 10000, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
@@ -161,7 +163,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix165.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -170,6 +172,7 @@ if __name__ == "__main__":
     if rank ==0:
         time_pickle += time.perf_counter()
         print("Time for Hamiltonian read-in: %.3f s" % time_pickle, flush = True)
+        #np.savetxt(solution_path + 'Vpot_diag.npy', hamiltonian_obj.Vpot)
     # Extract neighbor indices
     #exit(0)
     rows = hamiltonian_obj.rows
@@ -535,6 +538,7 @@ if __name__ == "__main__":
         # initialize observables----------------------------------------------------
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+        dos_hr = cpx.zeros_pinned(shape=(ne, nb * trace_factor), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
         # occupied states/unoccupied states
@@ -689,7 +693,8 @@ if __name__ == "__main__":
                 homogenize=False,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads)
+                worker_num=gf_worker_threads,
+                DOS_hr=dos_hr[disp[1, rank]:disp[1, rank] + count[1, rank]])
 
         # lower diagonal blocks from physics identity
         #gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
@@ -1062,10 +1067,12 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, dos_hr, op = MPI.SUM, root = 0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+            comm.Reduce(dos_hr, None, op=MPI.SUM, root = 0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
         
         comm.Barrier()
@@ -1075,7 +1082,8 @@ if __name__ == "__main__":
 
         if rank == 0:
             np.savetxt(folder + 'E.dat', energy)
-            np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(folder + 'DOS_NB_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(folder + 'DOS_' + str(iter_num) + '.dat', dos_hr.view(float))
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
