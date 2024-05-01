@@ -3,6 +3,57 @@ import numpy.typing as npt
 from typing import Callable, Optional
 from rgf_sparse import get_block_from_bcsr
 
+
+def calc_fork(G_lesser,
+            G_greater,
+            D_lesser,
+            D_greater,
+            col_index,
+            ind_ptr,
+            nnz,
+            nen,
+            iblock,
+            idiag,
+            block_sizes,
+            iw):
+    '''return a Fork self energy that is described by 
+    $G_ij D_ij$
+
+    '''
+    sigma = np.zeros((block_sizes[iblock],block_sizes[iblock]),dtype=np.complexfloating)
+
+    return sigma 
+
+
+
+def calc_fork_with_coupling_matrix(G_lesser,
+                                   G_greater,
+                                   M,
+                                   D_lesser,
+                                   D_greater,
+                                   col_index,
+                                   ind_ptr,
+                                   nnz,
+                                   nen,
+                                   iblock,
+                                   idiag,
+                                   block_sizes,
+                                   iw):
+    '''return a Fork self energy that is described by 
+    $ M_ij G_jk M_kl D_il +
+      M_ij G_jk M_kl D_jk +
+      M_ij G_jk M_kl D_ik +
+      M_ij G_jk M_kl D_jl +$
+
+    '''
+    sigma = np.zeros((block_sizes[iblock],block_sizes[iblock]),dtype=np.complexfloating)
+
+    return sigma 
+
+
+
+
+
 def calc_bubble_four_byElement(G_lesser,
                              G_greater,
                              mapping,iw,nen,

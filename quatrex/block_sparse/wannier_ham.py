@@ -34,15 +34,16 @@ def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
 
     potential:
         on-site (Hartree) potential 
-
     nb: 
-        number of bands / wannier functions
-    
+        number of bands / wannier functions    
     ns:
         number of unit cells in the transport super cell
-
     xmin:
         min of R1
+    ymin:
+        min of R2    
+    zmin:
+        min of R3        
 
     Returns
     -------
@@ -91,27 +92,20 @@ def wannierHam_generator_3d(wannier_hr: npt.NDArray[np.complexfloating],
 
     potential:
         on-site (Hartree) potential 
-
     nb: 
-        number of bands / wannier functions
-    
+        number of bands / wannier functions    
     ns:
         number of unit cells in the transport super cell
-
     xmin: 
         min of R1
-
+    ymin:
+        min of R2    
+    zmin:
+        min of R3    
     kvec:
         transverse k vector size of [3]      
-
     cell:
-        unit cell size of [3,3]
-
-    ymin:
-        min of R2
-    
-    zmin:
-        min of R3
+        unit cell size of [3,3]    
 
     Returns
     -------
@@ -187,7 +181,7 @@ if __name__ == "__main__":
     num_blocks = 50    
     ns = 5
     block_sizes = np.ones(num_blocks,dtype=int) * nb*ns
-    potential = rng.random(num_blocks*nb*ns) * 0.0
+    potential = rng.random(num_blocks*nb*ns) 
     
     kvec = np.array([0.1, 0.2, 0.3])
     cell = rng.random((3, 3)) + 1j * rng.random((3, 3))
@@ -224,7 +218,7 @@ if __name__ == "__main__":
     end_time = time.time()
     print('densify a block take seconds =',end_time - start_time)
     print('dense matrix block size=',mat.shape)
-    print('block sparsity ratio=',(ind_ptr[-1,0,0]-ind_ptr[0,0,0])/(mat.shape[0]*mat.shape[1]))
+    print('block sparsity ratio=',(ind_ptr[-1,iblock,0]-ind_ptr[0,iblock,0])/(mat.shape[0]*mat.shape[1]))
     H00 = mat
     
     print('--- block 1st offdiag ---')
@@ -235,7 +229,7 @@ if __name__ == "__main__":
     end_time = time.time()
     print('densify a block take seconds =',end_time - start_time)
     print('dense matrix block size=',mat.shape)
-    print('block sparsity ratio=',(ind_ptr[-1,0,1]-ind_ptr[0,0,1])/(mat.shape[0]*mat.shape[1]))
+    print('block sparsity ratio=',(ind_ptr[-1,iblock,1]-ind_ptr[0,iblock,1])/(mat.shape[0]*mat.shape[1]))
     H01 = mat
 
     print('--- block -1st offdiag ---')
@@ -246,7 +240,7 @@ if __name__ == "__main__":
     end_time = time.time()
     print('densify a block take seconds =',end_time - start_time)
     print('dense matrix block size=',mat.shape)
-    print('block sparsity ratio=',(ind_ptr[-1,0,1]-ind_ptr[0,0,1])/(mat.shape[0]*mat.shape[1]))
+    print('block sparsity ratio=',(ind_ptr[-1,iblock,-1]-ind_ptr[0,iblock,-1])/(mat.shape[0]*mat.shape[1]))
     H10 = mat
 
     # np.savetxt('H00.dat',H00)
