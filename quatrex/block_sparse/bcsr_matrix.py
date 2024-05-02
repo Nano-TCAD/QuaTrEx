@@ -164,15 +164,16 @@ def bcsr_find_sparsity_pattern(operator,num_blocks:int,num_diag:int,
 
 
 
-# compute V'@P@V for iblock in a range of off-diagonal and return the dense blocks for several diagonals
-def trimul_bcsr(V,P,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype,iblock,outndiag1,outndiag2,obc):
-    mat = np.zeros((outndiag1+outndiag2+1,block_size,block_size),dtype=dtype)
+# compute U@P@V for iblock and idiag-th diagonal and return the dense block 
+def trimul_bcsr(U,V,P,col_index,ind_ptr,block_sizes,
+                        num_blocks,num_diag,dtype,iblock,idiag,obc):    
+    mat = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=dtype)
     # refer iblock as index 0, after 3 jumps will be on diagonal step1+2+3
     i=0
     for step1 in range(-num_diag,num_diag+1):  
         j=i+step1      
         rowB=iblock+j
+        Ublock = get_block_from_bcsr(U,col_index,ind_ptr,block_sizes,iblock,step1)
         for step2 in range(-num_diag,num_diag+1):
             k=j+step2 
             rowC=iblock+k 
@@ -183,26 +184,22 @@ def trimul_bcsr(V,P,col_index,ind_ptr,nnz,block_size,
                 # or case opposite, but to correct boundary effect
                 if (not in_range): 
                     rowB = max(0, min(rowB, num_blocks-1))
-                    rowC = max(0, min(rowC, num_blocks-1))
-                Vblock = get_block_from_bcsr(V,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,iblock,step1)
-                Pblock = get_block_from_bcsr(P,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,rowB,step2)
-                tmp = Vblock.H @ Pblock
+                    rowC = max(0, min(rowC, num_blocks-1))                
+                Pblock = get_block_from_bcsr(P,col_index,ind_ptr,block_sizes,rowB,step2)
+                tmp = Ublock @ Pblock
                 for step3 in range(-num_diag,num_diag+1):
                     l=k+step3
-                    if ((l>=-outndiag1)and(l<=outndiag2)):
-                        Vblock = get_block_from_bcsr(V,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,rowC,step3)
-                        mat[l,:,:]+=tmp @ Vblock
+                    if (l==idiag):
+                        Vblock = get_block_from_bcsr(V,col_index,ind_ptr,block_sizes,rowC,step3)
+                        mat += tmp @ Vblock
 
     return mat
 
 # compute M@G for iblock on idiag-th diagonal and return the dense block
-def matmul_bcsr(M,G,col_index,ind_ptr,nnz,block_size,
-                        num_blocks,num_diag,dtype,iblock,outndiag1,outndiag2,obc):
+def matmul_bcsr(M,G,col_index,ind_ptr,block_sizes,
+                        num_blocks,num_diag,dtype,iblock,idiag,obc):
     
-    mat = np.zeros((outndiag1+outndiag2+1,block_size,block_size),dtype=dtype)
+    mat = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=dtype)
     # refer iblock as index 0, after 2 jumps will be on diagonal step1+2
     i=0
     for step1 in range(-num_diag,num_diag+1):  
@@ -210,19 +207,16 @@ def matmul_bcsr(M,G,col_index,ind_ptr,nnz,block_size,
         rowB=iblock+j
         for step2 in range(-num_diag,num_diag+1):
             k=j+step2 
-            rowC=iblock+k 
             in_range = ((rowB>=0) and (rowB<num_blocks))
             if (in_range or obc):
                 # case `rowB` be inside the matrix 
                 # or case opposite, but to correct boundary effect
                 if (not in_range): 
                     rowB = max(0, min(rowB, num_blocks-1))                    
-                Mblock = get_block_from_bcsr(M,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,iblock,step1)
-                Gblock = get_block_from_bcsr(G,col_index,ind_ptr,nnz,block_size,
-                                    num_blocks,num_diag,rowB,step2)
-                if ((k>=-outndiag1)and(k<=outndiag2)):
-                    mat[k,:,:] += Mblock @ Gblock
+                Mblock = get_block_from_bcsr(M,col_index,ind_ptr,block_sizes,iblock,step1)
+                Gblock = get_block_from_bcsr(G,col_index,ind_ptr,block_sizes,rowB,step2)
+                if (k==idiag):
+                    mat += Mblock @ Gblock
 
     return mat
  
