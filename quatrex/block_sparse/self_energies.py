@@ -1,55 +1,230 @@
 import numpy as np    
 import numpy.typing as npt
 from typing import Callable, Optional
-from rgf_sparse import get_block_from_bcsr
+from bcsr_matrix import get_block_from_bcsr
+from bcsr_tensor import get_block_from_bcsr_tensor
 
 
 def calc_fork(G_lesser,
             G_greater,
             D_lesser,
-            D_greater,
-            col_index,
-            ind_ptr,
+            D_greater,            
             nnz,
-            nen,
-            iblock,
-            idiag,
-            block_sizes,
-            iw):
+            ie,
+            nw,
+            map_ew_pair):
     '''return a Fork self energy that is described by 
-    $G_ij D_ij$
-
+    $ Sig^{<>}_{ij}(E) = \sum_w 
+                        G{<>}_{ij}(E-w) D^{<>}_{ij}(w) + 
+                        G{<>}_{ij}(E+w) D^{><}_{ij}(w) $    
     '''
-    sigma = np.zeros((block_sizes[iblock],block_sizes[iblock]),dtype=np.complexfloating)
+    sig_lesser = np.zeros(nnz,dtype=np.complexfloating)
+    sig_greater = np.zeros(nnz,dtype=np.complexfloating)
+    for iw in range(nw):
+        ie_up   = map_ew_pair(ie,iw,'up')
+        ie_down = map_ew_pair(ie,iw,'down')
+        gl_down = G_lesser[ie_down,:]
+        gl_up   = G_lesser[ie_up,:]
+        gg_down = G_greater[ie_down,:]
+        gg_up   = G_greater[ie_up,:]
+        dl      = D_lesser[iw,:]
+        dg      = D_greater[iw,:]
 
-    return sigma 
+        sig_lesser  += gl_down * dl + gl_up * dg 
+        sig_greater += gg_down * dg + gg_up * dl 
+
+    return sig_lesser,sig_greater 
 
 
 
 def calc_fork_with_coupling_matrix(G_lesser,
-                                   G_greater,
-                                   M,
-                                   D_lesser,
-                                   D_greater,
-                                   col_index,
-                                   ind_ptr,
-                                   nnz,
-                                   nen,
-                                   iblock,
-                                   idiag,
-                                   block_sizes,
-                                   iw):
+                                G_greater,
+                                M,
+                                D_lesser,
+                                D_greater,
+                                col_index,
+                                ind_ptr,
+                                nnz,
+                                ie,
+                                nw,
+                                map_ew_pair,
+                                signature,
+                                iblock,
+                                idiag,
+                                block_sizes,
+                                num_diag,
+                                num_blocks,
+                                obc):
     '''return a Fork self energy that is described by 
-    $ M_ij G_jk M_kl D_il +
-      M_ij G_jk M_kl D_jk +
-      M_ij G_jk M_kl D_ik +
-      M_ij G_jk M_kl D_jl +$
-
+    $ Sig^{<>}_{ij}(E) = \sum_w
+                        M_{ij} G^{<>}_{jk}(E-w) M_{kl} D^{<>}_{il}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E-w) M_{kl} D^{<>}_{jk}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E-w) M_{kl} D^{<>}_{ik}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E-w) M_{kl} D^{<>}_{jl}(w) + 
+                        M_{ij} G^{<>}_{jk}(E+w) M_{kl} D^{><}_{il}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E+w) M_{kl} D^{><}_{jk}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E+w) M_{kl} D^{><}_{ik}(w) +/-
+                        M_{ij} G^{<>}_{jk}(E+w) M_{kl} D^{><}_{jl}(w) $
+    return a dense block at iblock and idiag
     '''
-    sigma = np.zeros((block_sizes[iblock],block_sizes[iblock]),dtype=np.complexfloating)
+    sig_lesser = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=np.complexfloating)
+    sig_greater = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=np.complexfloating)
+    for iw in range(nw):
+        # refer iblock as index 0, after 3 jumps will be on diagonal l=step1+2+3
+        i=0
+        for step1 in range(-num_diag,num_diag+1):  
+            j=i+step1      
+            rowB=iblock+j
+            M1 = get_block_from_bcsr(M,col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                        iblock=iblock,idiag=step1,dtype='complex',nnz=nnz)  
+            for step2 in range(-num_diag,num_diag+1):
+                k=j+step2 
+                rowC=iblock+k 
+                in_range = ((rowB>=0) and (rowB<num_blocks) and 
+                            (rowC>=0) and (rowC<num_blocks))
+                if (in_range or obc):
+                    # case `rowB` and `rowC` be inside the matrix 
+                    # or case opposite, but to correct boundary effect
+                    if (not in_range): 
+                        rowB = max(0, min(rowB, num_blocks-1))
+                        rowC = max(0, min(rowC, num_blocks-1))
+                          
+                    ie_up   = map_ew_pair(ie,iw,'up')
+                    ie_down = map_ew_pair(ie,iw,'down')
 
-    return sigma 
+                    gl_down = get_block_from_bcsr(G_lesser[ie_down,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    gl_up   = get_block_from_bcsr(G_lesser[ie_up,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    gg_down = get_block_from_bcsr(G_greater[ie_down,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    gg_up   = get_block_from_bcsr(G_greater[ie_up,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    
+                    dl      = get_block_from_bcsr(D_lesser[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    dg      = get_block_from_bcsr(D_greater[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=rowB,idiag=step2,dtype='complex',nnz=nnz)
+                    
+                    GldDl = gl_down * dl # G^{<>}_{jk}(E-w) D^{<>}_{jk}(w) 
+                    GgdDg = gg_down * dg
+                    GluDg = gl_up * dg # G^{<>}_{jk}(E+w) D^{><}_{jk}(w) 
+                    GguDl = gg_up * dl
 
+                    M_GldDl = M1 @ GldDl #  M_{ij} G^{<>}_{jk}(E-w) D^{<>}_{jk}(w)
+                    M_GgdDg = M1 @ GgdDg
+                    M_GluDg = M1 @ GluDg
+                    M_GguDl = M1 @ GguDl
+                                    
+                    MGld = M1 @ gl_down # M_{ij} G^{<>}_{jk}(E-w)
+                    MGgd = M1 @ gg_down
+                    MGlu = M1 @ gl_up # M_{ij} G^{<>}_{jk}(E+w)
+                    MGgu = M1 @ gg_up
+
+                    if ((k>=-num_diag) and (k<=num_diag)): 
+                        dl = get_block_from_bcsr(D_lesser[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=iblock,idiag=k,dtype='complex',nnz=nnz)
+                        dg = get_block_from_bcsr(D_greater[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                    iblock=iblock,idiag=k,dtype='complex',nnz=nnz)
+                        
+                        MGldDl = MGld * dl # M_{ij} G^{<>}_{jk}(E-w) D^{<>}_{ik}(w)
+                        MGgdDg = MGgd * dg 
+                        MGluDg = MGlu * dg # M_{ij} G^{<>}_{jk}(E+w) D^{><}_{ik}(w)
+                        MGguDl = MGgu * dl 
+
+                    for step3 in range(-num_diag,num_diag+1):
+                        l=k+step3
+                        if ((l>=-num_diag)and(l<=num_diag)):
+                            M2 = get_block_from_bcsr(M,col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                        iblock=rowC,idiag=step3,dtype='complex',nnz=nnz)  
+                            
+                            GldM =  gl_down @ M2
+                            GgdM =  gg_down @ M2
+                            GluM =  gl_up   @ M2
+                            GguM =  gg_up   @ M2
+
+                            dl = get_block_from_bcsr(D_lesser[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                        iblock=rowB,idiag=step2+step3,dtype='complex',nnz=nnz)
+                            dg = get_block_from_bcsr(D_greater[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                        iblock=rowB,idiag=step2+step3,dtype='complex',nnz=nnz)
+                            
+                            GldMDl = GldM * dl
+                            GgdMDg = GgdM * dg
+                            GluMDg = GluM * dg
+                            GguMDl = GguM * dl
+
+                            M_GldMDl = M1 @ GldMDl        
+                            M_GgdMDg = M1 @ GgdMDg
+                            M_GluMDg = M1 @ GluMDg
+                            M_GguMDl = M1 @ GguMDl
+
+                            sig_lesser  += signature[3] * (M_GldMDl + M_GluMDg)
+                            sig_greater += signature[3] * (M_GgdMDg + M_GguMDl)
+                            
+                            M_GldDl_M = M_GldDl @ M2 #  M_{ij} G^{<>}_{jk}(E-w) D^{<>}_{jk}(w)  M_{kl}
+                            M_GgdDg_M = M_GgdDg @ M2
+                            M_GluDg_M = M_GluDg @ M2
+                            M_GguDl_M = M_GguDl @ M2
+
+                            sig_lesser  += signature[1] * (M_GldDl_M + M_GluDg_M)
+                            sig_greater += signature[1] * (M_GgdDg_M + M_GguDl_M)
+
+                            MGldM = MGld @ M2
+                            MGgdM = MGgd @ M2
+                            MGluM = MGlu @ M2
+                            MGguM = MGgu @ M2
+
+                            dl = get_block_from_bcsr(D_lesser[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                        iblock=iblock,idiag=l,dtype='complex',nnz=nnz)
+                            dg = get_block_from_bcsr(D_greater[iw,:],col_index=col_index,ind_ptr=ind_ptr,block_sizes=block_sizes,
+                                                        iblock=iblock,idiag=l,dtype='complex',nnz=nnz)
+                            
+                            MGldM_Dl = MGldM * dl # M_{ij} G^{<>}_{jk}(E-w) M_{kl} D^{<>}_{il}(w)
+                            MGgdM_Dg = MGgdM * dg
+                            MGluM_Dg = MGluM * dg
+                            MGguM_Dl = MGguM * dl
+                            
+                            sig_lesser  += signature[0] * (MGldM_Dl + MGluM_Dg)
+                            sig_greater += signature[0] * (MGgdM_Dg + MGguM_Dl)
+
+                            if ((k>=-num_diag) and (k<=num_diag)): 
+                                MGldDlM = MGldDl @ M2 # M_{ij} G^{<>}_{jk}(E-w) D^{<>}_{ik}(w) M_{kl} 
+                                MGgdDgM = MGgdDg @ M2
+                                MGluDgM = MGluDg @ M2
+                                MGguDlM = MGguDl @ M2 
+                                sig_lesser  += signature[2] * (MGldDlM + MGluDgM)
+                                sig_greater += signature[2] * (MGgdDgM + MGguDlM)
+    return sig_lesser,sig_greater 
+
+
+
+def calc_fork_with_coupling_tensor(G_lesser,
+                                G_greater,
+                                M,
+                                D_lesser,
+                                D_greater,
+                                col_index,
+                                ind_ptr,
+                                nnz,
+                                ie,
+                                nw,
+                                map_ew_pair,                                   
+                                iblock,
+                                idiag,
+                                block_sizes):
+    '''return a Fork self energy that is described by 
+    $ Sig^{<>}_{ij}(E) = \sum_w  
+                        M_{ij,p} G^{<>}_{jk}(E-w) M_{kl,q} D^{<>}_{pq}(w) +
+                        M_{ij,p} G^{<>}_{jk}(E+w) M_{kl,q} D^{><}_{pq}(w) $
+    return a dense block at iblock and idiag
+    '''
+    sig_lesser = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=np.complexfloating)
+    sig_greater = np.zeros((block_sizes[iblock],block_sizes[iblock+idiag]),dtype=np.complexfloating)
+    for iw in range(nw):
+        ie_up   = map_ew_pair(ie,iw,'up')
+        ie_down = map_ew_pair(ie,iw,'down')
+
+    return sig_lesser,sig_greater 
 
 
 
