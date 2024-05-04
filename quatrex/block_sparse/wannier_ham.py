@@ -9,6 +9,78 @@ from typing import Callable, Optional
 
 from bcsr_matrix import bcsr_find_sparsity_pattern,get_block_from_bcsr
 
+
+
+def wannierCoulomb_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
+                            nb: int,
+                            ns: int,
+                            xmin: int,               
+                            ymin: int,
+                            zmin: int,             
+                            wannier_centers: npt.NDArray[np.floating],
+                            cell: npt.NDArray[np.floating],
+                            eps_screen: float,
+                            r0: float,
+                            ldiag: bool,
+                            row_ind: int,
+                            col_ind: int,
+                            iblock: int,
+                            idiag:int) -> np.complexfloating:
+    '''return the specific matrix element of the upscaled Coulomb matrix for the Wannier-stype 
+    model with the potential applied to the diagonal elements. This is a simplified version 
+    for quasi-1D materials, with less computation needed than the more general 3D version.
+
+    Parameters
+    ----------  
+    wannier_hr: 
+        a ndarray of Wannier-style periodic matrix elements 
+        [R1,R2,R3,m,n] where R=(R1,R2,R3) and |nR> refers to function `n` in unit cell `R`        
+        < m0 | H | nR >  is the matrix element of matrix H        
+    nb: 
+        number of bands / wannier functions    
+    ns:
+        number of unit cells in the transport super cell
+    xmin:
+        min of R1
+    ymin:
+        min of R2    
+    zmin:
+        min of R3        
+    cell:
+        unit cell size of [3,3]    
+    wannier_centers:
+        positions of wannier centers size of [nb][3] in angstrom 
+    eps_screen:
+        screening epsilon
+    r0:
+        screening length    
+
+    Returns
+    -------
+    value of Coulomb matrix at a specific position
+    '''
+    r1 = idiag * ns + int((col_ind - row_ind) / nb) 
+    m = row_ind % nb 
+    n = col_ind % nb 
+    r2 = 0
+    r3 = 0
+    a1=cell[:,0]
+    a2=cell[:,1]
+    a3=cell[:,2]
+    r = r1*a1 + r2*a2 + r3*a3 + wannier_centers[m] - wannier_centers[n]
+    normr = np.linalg.norm(r)
+    e=1.60217663e-19
+    epsilon0=8.854e-12
+    if (normr >0.0):
+        v = (e)/(4.0*np.pi*epsilon0*eps_screen*normr*1.0e-10) * np.tanh(normr/r0)  # in eV
+    else:
+        if (ldiag):
+            v = (e)/(4.0*np.pi*epsilon0*eps_screen*1.0e-10) * (1.0/r0) # self-interaction
+        else:
+            v = 0.0           
+    return v
+
+
 def wannierHam_generator_1d(wannier_hr: npt.NDArray[np.complexfloating],
                             potential: npt.NDArray[np.floating],
                             nb: int,
