@@ -80,6 +80,73 @@ def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.n
     return
 
 
+def create_twobody_space(col_index:np.ndarray,
+                         ind_ptr:np.ndarray,
+                         block_sizes:np.ndarray,
+                         nnz:int,
+                         num_blocks:int,
+                         num_diag:int,
+                         interaction_distance:int=0,
+                         ):
+    '''create the sparsity pattern of a two-body operator $M_{ij;kl}$ expanded from an
+    one-body operator $H_{ij}$, following the definition $M_{ij;kl} = H_{jl} H_{ki}$.
+    The sparsity pattern of $M_{ij;kl}$ is then stored in the BCSR format. The mapping 
+    function from {ij;kl} to {ki} and {jl} is also generated.  This information  
+    allows to generate any block of $M_{ij;kl}$ from $H_{ij}$ whenever needed, and to use 
+    all the functionalities of BCSR in principle.
+
+    Inputs are the `col_index`, `ind_ptr`, `block_sizes`, `nnz` of $H_{ij}$
+    Outputs are the `M_col_index`, `M_ind_ptr`, `M_block_sizes`, `mapping_two_to_onebody` of $M_{ij;kl}$
+    '''
+    M_col_index = np.zeros((nnz*nnz),dtype=int)
+    M_ind_ptr = np.zeros((),dtype=int)
+    M_block_sizes = np.zeros((),dtype=int)
+    M_size = 0
+    ij_list = np.zeros((nnz*nnz),dtype=int)
+    # ordering algo
+    #   put i == j first 
+    block_startidx = np.zeros(num_blocks+1, dtype=int)
+    max_blocksize = np.max(block_sizes)
+    H_size = np.sum(block_sizes)
+    for i in range(num_blocks):
+        block_startidx[i+1] = block_startidx[i]+block_sizes[i]   
+    for iblock in range(num_blocks):
+        for i in range(block_sizes[iblock]):
+            # get ind_ptr for the block row i
+            idiag=0
+            ptr1 = ind_ptr[i,  iblock, idiag]
+            ptr2 = ind_ptr[i+1,iblock, idiag]
+            for j in range(ptr1,ptr2):
+                col=col_index[j] 
+                if (i == col):
+                    # diagonal elements i==j
+                    ij_list[M_size]=j
+                    M_size += 1                    
+    tip_blocksize = M_size                    
+    #   then abs(i-j) <= interaction_distance
+    for iblock in range(num_blocks):
+        for idiag in range(-num_diag,num_diag+1):
+            for i in range(block_sizes[iblock]):
+                # get ind_ptr for the block row i   
+                ptr1 = ind_ptr[i,  iblock, idiag]
+                ptr2 = ind_ptr[i+1,iblock, idiag]
+                for j in range(ptr1,ptr2):
+                    col = col_index[j] + block_startidx[iblock+idiag] 
+                    row = i + block_startidx[iblock] 
+                    if ((row != col) and (abs(row - col) < interaction_distance)):                        
+                        ij_list[M_size]=j
+                        M_size += 1
+    #   the outside interactions are considered zero
+
+    def mapping_two_to_onebody(ijkl:int):
+        ki:int 
+        jl:int
+
+        return ki,jl
+    
+    return M_col_index, M_ind_ptr, M_block_sizes, M_size, M_num_blocks, M_num_diag, mapping_two_to_onebody
+
+
 def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.ndarray,
                 nnz:int,num_blocks:int,num_diag:int):
     ind_ptr = np.zeros((np.max(block_sizes),num_blocks,num_diag),dtype=int)
@@ -219,4 +286,6 @@ def matmul_bcsr(M,G,col_index,ind_ptr,block_sizes,
                     mat += Mblock @ Gblock
 
     return mat
+ 
+
  
