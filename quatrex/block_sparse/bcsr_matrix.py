@@ -68,15 +68,31 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
 
 # put a dense matrix values into the corresponding position of value array `v` 
 #    NOTE: `v` is an array
-def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
+def put_block_to_bcsr_fixed_sparsity(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
-                        num_diag:int=0,num_dim:int=0):
+                        num_diag:int=0):
     for i in range(block_sizes[iblock]):
         # get ind_ptr for the block row i
         ptr1 = ind_ptr[i,  iblock, idiag]
         ptr2 = ind_ptr[i+1,iblock, idiag]
         for j in range(ptr1,ptr2):
             v[j-offset] = mat[i, col_index[j]] # no need to substract offset because each MPI-rank keep the entire col_index
+    return
+
+
+
+# put a dense matrix values > a specified threshold into the value array `v` and generate sparsity information
+#    NOTE: `v` is an array
+def put_block_to_bcsr_variable_sparsity(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
+                        iblock:int,idiag:int,start_pos:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
+                        num_diag:int=0,threshold:float=1e-6):    
+    mask = np.abs(mat) > threshold
+    block_csr=coo_matrix(mat[mask]).tocsr()
+    block_nnz = block_csr.nnz                
+    v[start_pos:start_pos+block_nnz] = block_csr.data
+    col_index[start_pos:start_pos+block_nnz] = block_csr.indices
+    ind_ptr[0:block_sizes[iblock]+1,iblock,idiag] = block_csr.indptr + start_pos
+    nnz += block_nnz
     return
 
 
@@ -101,9 +117,11 @@ def create_twobody_space(col_index:np.ndarray,
     M_col_index = np.zeros((nnz*nnz),dtype=int)
     M_ind_ptr = np.zeros((),dtype=int)
     M_block_sizes = np.zeros((),dtype=int)
+    ijkl_list = np.zeros((nnz*nnz,2),dtype=int) # keep a track of (ij;kl)
     M_size = 0
-    ij_list = np.zeros((nnz*nnz),dtype=int)
-    # ordering algo
+    ij_list = np.zeros((nnz,3),dtype=int) # keep a track of (ij) 
+    
+    # generate a list of ij
     #   put i == j first 
     block_startidx = np.zeros(num_blocks+1, dtype=int)
     max_blocksize = np.max(block_sizes)
@@ -120,7 +138,7 @@ def create_twobody_space(col_index:np.ndarray,
                 col=col_index[j] 
                 if (i == col):
                     # diagonal elements i==j
-                    ij_list[M_size]=j
+                    ij_list[M_size,:]=[j,i+block_startidx[iblock],i+block_startidx[iblock]]
                     M_size += 1                    
     tip_blocksize = M_size                    
     #   then abs(i-j) <= interaction_distance
@@ -134,9 +152,34 @@ def create_twobody_space(col_index:np.ndarray,
                     col = col_index[j] + block_startidx[iblock+idiag] 
                     row = i + block_startidx[iblock] 
                     if ((row != col) and (abs(row - col) < interaction_distance)):                        
-                        ij_list[M_size]=j
+                        ij_list[M_size,:]=[j,row,col]
                         M_size += 1
     #   the outside interactions are considered zero
+        
+    # Find sparsity pattern of $M_{ij;kl}$
+    M_nnz=0
+    for row in range(M_size): 
+        for col in range(M_size):    
+            i = ij_list[row,1]
+            j = ij_list[row,2]
+            k = ij_list[col,1]
+            l = ij_list[col,2]            
+            if ((abs(i-k)<=interaction_distance) and (abs(j-l)<=interaction_distance) and (abs(j-k)<=interaction_distance) and 
+                (abs(i-l)<=interaction_distance) and (abs(i-j)<=interaction_distance) and (abs(k-l)<=interaction_distance)):
+                ijkl_list[M_nnz,:] = [row,col]
+                M_nnz += 1
+    # Extract the sparsity information                
+    M_bandwidth = 0
+    for i in range(M_nnz):
+        row = ijkl_list[i,0]
+        col = ijkl_list[i,1]
+        diag = col-row
+        if (abs(diag)>M_bandwidth):
+            M_bandwidth = abs(diag)
+    M_block_size = M_bandwidth             
+    M_block_sizes = M_block_size
+    M_num_blocks = (M_nnz - tip_blocksize) / M_block_size
+    M_num_diag = 1             
 
     def mapping_two_to_onebody(ijkl:int):
         ki:int 
@@ -144,7 +187,7 @@ def create_twobody_space(col_index:np.ndarray,
 
         return ki,jl
     
-    return M_col_index, M_ind_ptr, M_block_sizes, M_size, M_num_blocks, M_num_diag, mapping_two_to_onebody
+    return M_col_index, M_ind_ptr, M_block_sizes, M_size, M_num_blocks, M_num_diag, M_nnz, mapping_two_to_onebody
 
 
 def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.ndarray,
@@ -173,7 +216,7 @@ def coo_to_bcsr(v_coo:np.ndarray,row:np.ndarray,col:np.ndarray,block_sizes:np.nd
             block_nnz = block_csr.nnz                
             v_bcsr[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.data
             col_index[bcsr_nnz:bcsr_nnz+block_nnz] = block_csr.indices
-            ind_ptr[0:block_sizes[iblock]+1,iblock,idiag] = block_csr.indptr
+            ind_ptr[0:block_sizes[iblock]+1,iblock,idiag] = block_csr.indptr + bcsr_nnz
             bcsr_nnz += block_nnz                
     return v_bcsr,col_index,ind_ptr,bcsr_nnz
 
@@ -225,7 +268,7 @@ def bcsr_find_sparsity_pattern(operator,num_blocks:int,num_diag:int,
             ind_ptr[block_sizes[iblock], iblock,idiag] = nnz
     col_index=np.array(col_index,dtype=int)
     if (return_values):
-        return col_index, ind_ptr, nnz, v 
+        return col_index, ind_ptr, nnz, np.array(v) 
     else:      
         return col_index, ind_ptr, nnz
 
