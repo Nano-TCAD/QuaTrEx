@@ -6,6 +6,7 @@ from mpi4py.MPI import COMM_WORLD as comm
 
 # from numpy.linalg import inv
 from scipy.sparse import coo_matrix
+from scipy.sparse import csr_matrix
 
 #  blocked sparse CSR matrix:
 #     simply stack CSR of each block continuously, with an easy access to the i-th block on i-th diagonal [iblock,idiag]
@@ -68,9 +69,38 @@ def get_block_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np
     return mat        
 
 
+def get_csr_from_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
+                        iblock:int,idiag:int,dtype='complex',nnz:int=0,num_blocks:int=0,
+                        num_diag:int=0,offset:int=0) -> np.ndarray:    
+    bnrow = block_sizes[iblock] # number of rows in the block
+    ptr0 = ind_ptr[0,  iblock, idiag]
+    ptrN = ind_ptr[bnrow+1, iblock, idiag]
+    if (isinstance(v, Callable)):
+        # if v is a function, we need to compute the required values first
+        data=np.zeros((ptrN-ptr0),dtype=dtype)
+        for i in range(bnrow):
+            # get ind_ptr for the block row i
+            ptr1 = ind_ptr[i,  iblock, idiag]
+            ptr2 = ind_ptr[i+1,iblock, idiag]
+            for j in range(ptr1,ptr2):
+                col = col_index[j] 
+                data[j-ptr0] = v(i,col,iblock,idiag)   
+        return csr_matrix((data,
+                           col_index[ptr0:ptrN],
+                           ind_ptr[0 : bnrow+1, iblock, idiag]),
+                           shape=(block_sizes[iblock],block_sizes[iblock+idiag]))        
+    else: 
+        # if v is an array, we can immediately return because the data is contiguous in memory
+        return csr_matrix((v[ptr0-offset : ptrN-offset], # remove the offset due to a possible MPI distribution over ijs
+                           col_index[ptr0:ptrN],
+                           ind_ptr[0 : bnrow+1, iblock, idiag]),
+                           shape=(block_sizes[iblock],block_sizes[iblock+idiag]))
+        
+
+
 # put a dense matrix values into the corresponding position of value array `v` 
 #    NOTE: `v` is an array
-def put_block_to_bcsr_fixed_sparsity(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
+def put_block_to_bcsr(v,col_index:np.ndarray,ind_ptr:np.ndarray,block_sizes:np.ndarray,
                         iblock:int,idiag:int,mat,nnz:int=0,offset:int=0,num_blocks:int=0,
                         num_diag:int=0):
     for i in range(block_sizes[iblock]):
@@ -459,8 +489,7 @@ def trimul_bcsr(U,V,P,col_index,ind_ptr,block_sizes,
     i=0
     for step1 in range(-num_diag,num_diag+1):  
         j=i+step1      
-        rowB=iblock+j
-        Ublock = get_block_from_bcsr(U,col_index,ind_ptr,block_sizes,iblock,step1)
+        rowB=iblock+j        
         for step2 in range(-num_diag,num_diag+1):
             k=j+step2 
             rowC=iblock+k 
@@ -471,7 +500,8 @@ def trimul_bcsr(U,V,P,col_index,ind_ptr,block_sizes,
                 # or case opposite, but to correct boundary effect
                 if (not in_range): 
                     rowB = max(0, min(rowB, num_blocks-1))
-                    rowC = max(0, min(rowC, num_blocks-1))                
+                    rowC = max(0, min(rowC, num_blocks-1))       
+                Ublock = get_block_from_bcsr(U,col_index,ind_ptr,block_sizes,iblock,step1)         
                 Pblock = get_block_from_bcsr(P,col_index,ind_ptr,block_sizes,rowB,step2)
                 tmp = Ublock @ Pblock
                 for step3 in range(-num_diag,num_diag+1):
@@ -528,7 +558,7 @@ if __name__ == "__main__":
     local_nnz = nnz//comm.size
     local_nek = num_energies//comm.size
     
-    data = np.arange(local_nek * local_nnz * comm.size).reshape(local_nek, local_nnz*comm.size) + rank*local_nek*local_nnz*comm.size    
+    data = (1.0+1.0j) * (np.arange(local_nek * local_nnz * comm.size).reshape(local_nek, local_nnz*comm.size) + rank*local_nek*local_nnz*comm.size)    
 
     ref_data=data.copy()
     
