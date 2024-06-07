@@ -46,9 +46,11 @@ class Hamiltonian:
     NA = None
     NB = None
     TB = None
+
+    Vpot_new = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0):
+    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -110,9 +112,28 @@ class Hamiltonian:
                 self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
                 self.Vpot = self.get_unit_cell_potential()
             elif (potential_type == 'atomic'):
-                self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                if not poisson_path:
+                    self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                else:
+                    self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
                 self.Vpot = self.get_atomic_potential()
             self.add_potential()
+
+            if poisson_path:
+                self.poisson_atom_index = read_file_to_float_ndarray(poisson_path + '/atom_index.dat').astype('int').reshape((-1,))
+                self.poisson_gate_index = read_file_to_float_ndarray(poisson_path + '/gate_index.dat').astype('int').reshape((-1,))
+                self.poisson_grid = read_file_to_float_ndarray(poisson_path + '/grid.dat').astype('int')
+                self.grid_index = np.ones(len(self.poisson_grid[:, 0]), dtype=bool)
+                self.grid_index[self.poisson_gate_index] = 0
+                self.grid_index = np.where(self.grid_index)[0]
+                self.poisson_doping = read_file_to_float_ndarray(poisson_path + '/doping.dat').reshape((-1,))
+                self.Vpoiss = np.loadtxt(poisson_path + '/Vpot.dat').reshape((-1,))
+                self.poisson_Vg = np.mean(self.Vpoiss[self.poisson_gate_index[0]])
+                self.stiffness_head = np.loadtxt(poisson_path + '/FitMat_dat', max_rows = 3 ,dtype = int)
+                self.stiffness = np.loadtxt(poisson_path + '/FitMat_dat', skiprows = 3)
+                self.stiffness_mat = sparse.csc_matrix((self.stiffness[:, 2], (self.stiffness[:, 0] - 1, self.stiffness[:,1] - 1)), shape =(self.stiffness_head[0], self.poisson_grid.shape[0]))
+
+            print('Hamiltonian class initialized')
 
     #Helper function to initialise all hamiltonians
     def read_sparse_matrix(self, fname='./H_4.bin'):

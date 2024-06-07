@@ -400,7 +400,7 @@ def p2w_pool_mpi_gpu_split(
     #                         factor)
 
 
-    energy_batchsize = 4
+    energy_batchsize = 2
     energy_batch = np.arange(0, ne, energy_batchsize)
     for ie in energy_batch:
         vh_repetitions = np.min((energy_batchsize, ne - ie))

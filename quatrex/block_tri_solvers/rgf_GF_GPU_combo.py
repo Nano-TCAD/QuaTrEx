@@ -197,7 +197,9 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                     SigLB_left_host, SigLB_right_host,  # Lesser boundary conditions, dense format
                     SigGB_left_host, SigGB_right_host,  # Greater boundary conditions, dense format
                     GR_host, GL_host, GG_host,  # Output Green's Functions, (NE, NNZ) format
-                    DOS, nE, nP, idE,  # Output Observables
+                    DOS, nE, nP,
+                    n_orb, p_orb,
+                    idE,  # Output Observables
                     Bmin_fi, Bmax_fi,  # Indices
                     solve: bool = True,
                     input_stream: cp.cuda.Stream = None,
@@ -289,6 +291,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         trace_factor = DOS_hr.shape[1] // (num_blocks)
     nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
     nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
+    norb_gpu = cp.empty((batch_size, n_orb.shape[1]), dtype=float)
+    porb_gpu = cp.empty((batch_size, p_orb.shape[1]), dtype=float)
     idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype)
 
     GR_gpu = cp.empty((2, batch_size, block_size, block_size), dtype=dtype)  # Retarded (right)
@@ -544,6 +548,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                     DOS_hr_gpu[:, 0 + i] = 1j * cp.trace(d_mat[:, i*NI_hr:(i+1)*NI_hr, i*NI_hr:(i+1)*NI_hr], axis1=1, axis2=2)
             nE_gpu[:, 0] = -1j * cp.trace(gl[:, 0:NI, 0:NI], axis1=1, axis2=2)
             nP_gpu[:, 0] = 1j * cp.trace(gg[:, 0:NI, 0:NI], axis1=1, axis2=2)
+            norb_gpu[:, Bmin[0]:Bmax[0]+1] =  - cp.real(1j*cp.diagonal(gl[:, 0:NI, 0:NI], axis1=1, axis2=2)) / (2 * cp.pi)
+            porb_gpu[:, Bmin[0]:Bmax[0]+1] =   cp.real(1j*cp.diagonal(gg[:, 0:NI, 0:NI], axis1=1, axis2=2)) / (2 * cp.pi)
             idE_gpu[:, 0] = cp.real(cp.trace(sgb[:, 0:NI, 0:NI] @ gl[:, 0:NI, 0:NI] -
                                              gg[:, 0:NI, 0:NI] @ slb[:, 0:NI, 0:NI], axis1=1, axis2=2))
     
@@ -777,6 +783,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
                 DOS_hr_gpu[:, trace_factor * IB + i] = 1j * cp.trace(d_mat[:, i*NI_hr:(i+1)*NI_hr, i*NI_hr:(i+1)*NI_hr], axis1=1, axis2=2)
         nE_gpu[:, IB] = -1j * cp.trace(GL[:, 0:NI, 0:NI], axis1=1, axis2=2)
         nP_gpu[:, IB] = 1j * cp.trace(GG[:, 0:NI, 0:NI], axis1=1, axis2=2)
+        norb_gpu[:, Bmin[IB]:Bmax[IB]+1] =  - cp.real(1j*cp.diagonal(GL[:, 0:NI, 0:NI], axis1=1, axis2=2)) / (2 * cp.pi)
+        porb_gpu[:, Bmin[IB]:Bmax[IB]+1] =   cp.real(1j*cp.diagonal(GG[:, 0:NI, 0:NI], axis1=1, axis2=2)) / (2 * cp.pi)
 
     slb = SigLB_dev[-1]
     sgb = SigGB_dev[-1]
@@ -797,6 +805,8 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         DOS_hr_gpu.get(out=DOS_hr)
     nE_gpu.get(out=nE)
     nP_gpu.get(out=nP)
+    norb_gpu.get(out=n_orb)
+    porb_gpu.get(out=p_orb)
     idE_gpu.get(out=idE)
     input_stream.synchronize()
     computation_stream.synchronize()

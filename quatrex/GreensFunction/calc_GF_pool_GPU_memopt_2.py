@@ -8,6 +8,7 @@ import time
 import numpy as np
 import numpy.typing as npt
 import mkl
+from mpi4py import MPI
 
 import cupy as cp
 import cupyx as cpx
@@ -56,6 +57,10 @@ def calc_GF_pool_mpi_split_memopt(
     size,
     homogenize=True,
     NCpSC: int = 1,
+    EEdge: npt.NDArray[np.float64] = None,
+    peak_DOS_lim: float = 5.0,
+    n_atom = None,
+    p_atom = None,
     mkl_threads: int = 1,
     worker_num: int = 1,
     DOS_hr: npt.NDArray[np.float64] = None        
@@ -72,6 +77,8 @@ def calc_GF_pool_mpi_split_memopt(
     vfermi = np.vectorize(fermi_function)
     fL = cp.asarray(vfermi(energy, Efl, UT)).reshape(len(energy), 1, 1)
     fR = cp.asarray(vfermi(energy, Efr, UT)).reshape(len(energy), 1, 1)
+
+
 
     # initialize the Green's function in block format with zero
     # number of energy points
@@ -93,6 +100,10 @@ def calc_GF_pool_mpi_split_memopt(
 
     LBsize = bmax[0] - bmin[0] + 1
     RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
+
+    # energy resolved number of electrons/holes per orbital
+    n_orb = cpx.zeros_pinned((ne, DH.NH), dtype = float)
+    p_orb = cpx.zeros_pinned((ne, DH.NH), dtype = float)
 
     SigRBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
     SigRBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
@@ -319,7 +330,8 @@ def calc_GF_pool_mpi_split_memopt(
                             SigGBL[ie:ie+energy_batchsize, :, :], SigGBR[ie:ie+energy_batchsize, :, :],
                             gr_h2g[ie:ie+energy_batchsize, :], gl_h2g[ie:ie+energy_batchsize, :], gg_h2g[ie:ie+energy_batchsize, :],
                             DOS[ie:ie+energy_batchsize, :], nE[ie:ie+energy_batchsize, :],
-                            nP[ie:ie+energy_batchsize, :], idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
+                            nP[ie:ie+energy_batchsize, :], n_orb[ie:ie+energy_batchsize,:], p_orb[ie:ie+energy_batchsize,:],
+                            idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
                             input_stream = input_stream,
                             DOS_hr = DOS_hr[ie:ie+energy_batchsize, :] if DOS_hr is not None else None)
         
@@ -381,12 +393,16 @@ def calc_GF_pool_mpi_split_memopt(
                                        axis=1), [np.max(np.abs(DOS[ne - 1, :] / (buf_recv_r + 1)))]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > peak_DOS_lim) & (dDOSp > peak_DOS_lim)))[0]
 
     for index in ind_zeros:
         gr_h2g[index, :] = 0
         gl_h2g[index, :] = 0
         gg_h2g[index, :] = 0
+        n_orb[index, :] = 0
+        p_orb[index, :] = 0
+    if EEdge is not None:
+        calc_charge(n_orb, p_orb, energy, EEdge, DH, n_atom, p_atom, comm)
         
     comm.Barrier()
     if rank == 0:
@@ -396,3 +412,39 @@ def calc_GF_pool_mpi_split_memopt(
 def generator_rgf_GF(E, DH):
     for i in range(E.shape[0]):
         yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4']
+
+import numpy as np
+
+def calc_charge(nE_orb, pE_orb, E, EEdges, DH, n_at, p_at, comm):
+    Bmax = DH.Bmax - 1
+    Bmin = DH.Bmin - 1
+    NB = DH.Smin[0]
+    NA = DH.Smin[-1]
+
+    # Assuming E is a NumPy array and NE is its length
+    NE = len(E)
+    dE = np.concatenate(([E[1] - E[0]], (E[2:NE] - E[0:NE-2]), [E[NE-1] - E[NE-2]])) / 2
+
+    Smin = np.copy(DH.Smin[1:])
+    Smin[-1] += 1
+
+    for IB in range(NB):
+        indEn = np.where(E > (EEdges[0, IB] + EEdges[1, IB]) / 2)[0]
+        indEp = np.where(E < (EEdges[0, IB] + EEdges[1, IB]) / 2)[0]
+
+        nE_act = np.sum(nE_orb[indEn, Bmin[IB]:Bmax[IB]+1] * (dE[indEn][:, np.newaxis] * np.ones((len(indEn), Bmax[IB] - Bmin[IB] + 1))), axis=0)
+        pE_act = np.sum(pE_orb[indEp, Bmin[IB]:Bmax[IB]+1] * (dE[indEp][:, np.newaxis] * np.ones((len(indEp), Bmax[IB] - Bmin[IB] + 1))), axis=0)
+
+        ind = 0
+        for IA in range(Smin[IB] - 1, Smin[IB+1]-1):
+            no_orb = DH.orb_per_at[IA+1] - DH.orb_per_at[IA]
+
+            # Factor 2 for spin
+            n_at[IA] = 2 * np.sum(nE_act[ind:ind+no_orb])
+            p_at[IA] = 2 * np.sum(pE_act[ind:ind+no_orb])
+
+            ind += no_orb
+
+    # Here we need to perform MPI_Allreduce on n_at and p_at
+    comm.Allreduce(MPI.IN_PLACE, n_at, op=MPI.SUM)
+    comm.Allreduce(MPI.IN_PLACE, p_at, op=MPI.SUM)

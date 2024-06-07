@@ -389,6 +389,12 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+
+    # phonon self energy. Simplified (but more expensive) a2a initialization----------------------------------
+    sg_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sl_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sr_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+
     # # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -466,6 +472,14 @@ if __name__ == "__main__":
 
         # current per energy
         ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+
+        # number of electrons/holes per atom
+        n_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+        p_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+
+        # differential number of electrons/holes with respect to potential gradient
+        dn_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+        dp_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
 
         # # transform from 2D format to list/vector of sparse arrays format-----------
         # sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -965,18 +979,39 @@ if __name__ == "__main__":
         
         start_sephn = time.perf_counter()
 
+        # distribute screened interaction according to h2g step---------------------
+        # create local buffers
+        sgphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        slphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        srphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+
         # Extract diagonal bands
-        gg_diag_band = gg_h2g[:, rows == columns]
-        gl_diag_band = gl_h2g[:, rows == columns]
+        gg_diag_band_T = gg_h2g[:, rows == columns]
+        gl_diag_band_T = gl_h2g[:, rows == columns]
+
+        rows_loc = rows[disp[0, rank]:disp[0, rank] + count[0, rank]]
+        columns_loc = columns[disp[0, rank]:disp[0, rank] + count[0, rank]]
+
+        gg_diag_band = gg_g2p[rows_loc == columns_loc, :]
+        gl_diag_band = gl_g2p[rows_loc == columns_loc, :]
+
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-                                                                            gl_diag_band,
-                                                                            gg_diag_band,
-                                                                            sg_phn,
-                                                                            sl_phn,
-                                                                            sr_phn,
+        # sg_phn1, sl_phn1, sr_phn1 = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+        #                                                                     gl_diag_band_T,
+        #                                                                     gg_diag_band_T,
+        #                                                                     sg_phn1,
+        #                                                                     sl_phn1,
+        #                                                                     sr_phn1,
+        #                                                                     EPHN,
+        #                                                                     DPHN,
+        #                                                                     temp,
+        #                                                                     mem_s)
+        
+        sg_phn_2s, sl_phn_2s, sr_phn_2s = electron_phonon_selfenergy.calc_SE_GF_EPHN_mpi(energy_loc,
+                                                                            gl_g2p,
+                                                                            gg_g2p,
                                                                             EPHN,
                                                                             DPHN,
                                                                             temp,
@@ -986,6 +1021,28 @@ if __name__ == "__main__":
         finish_sephn = time.perf_counter()
         if rank == 0:
             print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
+
+        start_sephn_comm = time.perf_counter()
+        # use of all to all w since not divisible
+        alltoall_p2g(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
+
+        sg_phn_h2g = (1.0 - mem_s) * sgphn_h2g_buf + mem_s * sg_phn_h2g
+        sl_phn_h2g = (1.0 - mem_s) * slphn_h2g_buf + mem_s * sl_phn_h2g
+        sr_phn_h2g = (1.0 - mem_s) * srphn_h2g_buf + mem_s * sr_phn_h2g
+
+        sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
+        sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
+        sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
+
+        #assert(np.isfortran(sg_phn1) == np.isfortran(sg_phn))
+        #print(f"sg_phn new method is fortran order: {np.isfortran(sg_phn)}")
+
+        finish_sephn_comm = time.perf_counter()
+
+        if rank == 0:
+            print(f"SEPHN communication time: {finish_sephn_comm - start_sephn_comm}", flush = True)
 
         start_observables = time.perf_counter()
 
@@ -1035,6 +1092,9 @@ if __name__ == "__main__":
         sphg_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
         sphl_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
         sphr_mpi = np.empty((nao, data_shape[1]), dtype=np.complex128)
+        sphg_mpi1 = np.empty((nao, data_shape[1]), dtype=np.complex128)
+        sphl_mpi1 = np.empty((nao, data_shape[1]), dtype=np.complex128)
+        sphr_mpi1 = np.empty((nao, data_shape[1]), dtype=np.complex128)
 
         gather_master(gg_h2g, gg_mpi, transpose_net=args.net_transpose)
         gather_master(gl_h2g, gl_mpi, transpose_net=args.net_transpose)
@@ -1052,6 +1112,8 @@ if __name__ == "__main__":
         gather_master(sg_phn, sphg_mpi, transpose_net=args.net_transpose)
         gather_master(sl_phn, sphl_mpi, transpose_net=args.net_transpose)
         gather_master(sr_phn, sphr_mpi, transpose_net=args.net_transpose)
+
+        #assert np.allclose(sphg_mpi1, sphg_mpi)
     else:
         # send time to master
         dummy_array = np.empty((nao, data_shape[1]), dtype=np.complex128)
@@ -1072,7 +1134,7 @@ if __name__ == "__main__":
         gather_master(sr_phn, dummy_array, transpose_net=args.net_transpose)
 
     # test against gold solution------------------------------------------------
-
+    #assert np.allclose(sphg_mpi1, sphg_mpi)
     if rank == 0:
         # print difference to given solution
         # use Frobenius norm
