@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.25
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -2.0662
 
