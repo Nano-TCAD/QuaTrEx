@@ -22,7 +22,8 @@ mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol, get_band_edge_mpi
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge
+from quatrex.Poisson.solve_poisson import solve_poisson
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -55,12 +56,13 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
-    solution_path = os.path.join(scratch_path, "CNT_32_shorttesting/")
-    solution_path_gw = os.path.join(solution_path, "data_GPWS_cf_ephn_memory2_CNTNBC2_0_2V.mat")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire_poisson/")
+    poisson_path = os.path.join(solution_path, "13_bis/")
+    solution_path_gw = os.path.join(solution_path, "data_GPWS_PS_ephnindex_memory3_NBC1_atomicV.mat")
     #solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_memory2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "data_Vh_CF_CNT_0v.mat")
-    solution_path_H = os.path.join(solution_path, "data_H_CF_CNT_0v.mat")
-    solution_path_S = os.path.join(solution_path, "data_S_CF_CNT_0v.mat")
+    solution_path_vh = os.path.join(solution_path, "data_Vh_PS_Si.mat")
+    solution_path_H = os.path.join(solution_path, "data_H_PS_SI.mat")
+    solution_path_S = os.path.join(solution_path, "data_S_PS_SI.mat")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(description="Example of the first GW iteration with MPI+CUDA")
     parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
@@ -86,17 +88,15 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([1,1])
+    no_orb = np.array([1,4])
     # Factor to extract smaller matrix blocks (factor * unit cell size < current block size based on Smin_dat)
     NCpSC = 4
-    # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
-    trace_factor = 2
-    Vappl = 0.2
-    energy = np.linspace(-30, 20, 126, endpoint=True, dtype=float)  # Energy Vector
+    Vappl = 0.6
+    energy = np.linspace(-8, 1, 61, endpoint=True, dtype=float)  # Energy Vector
     Idx_e = np.arange(energy.shape[0])  # Energy Index Vector
-    EPHN = np.array([0.0])  # Phonon energy
-    DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'read_in_diag', Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = NCpSC)
+    EPHN = np.array([300.0e-3])  # Phonon energy
+    DPHN = np.array([5.0e-3])  # Electron-phonon coupling
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, potential_type = 'atomic', bias_point = 0, Vappl=Vappl, rank=rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -212,15 +212,15 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.6
+    energy_fl = -2.0362
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 3.0
     # DFT Conduction Band Minimum
-    ECmin = -3.524
+    ECmin = -2.0846
 
     # Phyiscal Constants -----------
 
@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
     # Fermi Level to Band Edge Difference
     dEfL_EC = energy_fl - ECmin
-    dEfR_EC = energy_fr - ECmin
+    dEfR_EC = energy_fr - ECmin + Vappl
 
     # create the corresponding factor to mask
     # number of points to smooth the edges of the Green's Function
@@ -248,7 +248,7 @@ if __name__ == "__main__":
     vh1d = np.asarray(vh[rows, columns].reshape(-1))
 
     assert np.allclose(V_sparse.toarray(), vh.toarray())
-    assert np.allclose(H_in.toarray(), hamiltonian_obj.Hamiltonian['H_4'].toarray())
+    #assert np.allclose(H_in.toarray(), hamiltonian_obj.Hamiltonian['H_4'].toarray())
     assert np.allclose(S_in.toarray(), hamiltonian_obj.Overlap['H_4'].toarray())
 
     # calculation of data distribution per rank---------------------------------
@@ -391,6 +391,11 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    # phonon self energy. Simplified (but more expensive) a2a initialization----------------------------------
+    sg_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sl_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sr_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+
     # # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -413,18 +418,23 @@ if __name__ == "__main__":
     wr_p2w = cpx.zeros_pinned((count[1, rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.75
+    mem_s = 0.5
     mem_g = 0.0
     mem_w = 0.0
 
     # initialize the index of the lowest conduction band of the contact band structure
-    ind_ek = -1
+    ind_ek_cb_l = -1
+    ind_ek_cb_r = -1
+
     # max number of iterations
 
     max_iter = 3
-    ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
+    ECmin_vec = np.zeros((2, max_iter + 1))
+    ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
+    EVmax_vec = np.zeros((2, max_iter))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
+    cond_vec = np.zeros((max_iter,), dtype = float)
 
     #Start and end index of the energy range
     ne_s = 0
@@ -456,7 +466,6 @@ if __name__ == "__main__":
         # initialize observables----------------------------------------------------
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
-        dos_hr = cpx.zeros_pinned(shape=(ne, nb * trace_factor), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
         # occupied states/unoccupied states
@@ -509,12 +518,12 @@ if __name__ == "__main__":
         start_band_edge = time.perf_counter()
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
+        (ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num], ind_ek_cb_l) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[0,iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
                                                     sr_rgf,
-                                                    ind_ek,
+                                                    ind_ek_cb_l,
                                                     bmin,
                                                     bmax,
                                                     comm,
@@ -524,6 +533,24 @@ if __name__ == "__main__":
                                                     disp,
                                                     'left',
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        (ECmin_vec[1, iter_num + 1], EVmax_vec[1, iter_num], ind_ek_cb_r) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[1,iter_num],
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek_cb_r,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    'right',
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        EEdge = get_spatial_band_edge(DH, ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num])
         
         comm.Barrier()
         finish_band_edge = time.perf_counter()
@@ -552,10 +579,11 @@ if __name__ == "__main__":
         #                                             side='left')
         
         if rank == 0:
-            print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
+            print(f"ECmin: {ECmin_vec[0, iter_num + 1]}", flush = True)
         
-        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+        if (iter_num > 0):
+            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
@@ -618,12 +646,12 @@ if __name__ == "__main__":
                 size,
                 homogenize=False,
                 NCpSC=NCpSC,
-                EEdge=None,
+                EEdge=EEdge,
+                peak_DOS_lim = 10.0 * 2 * np.pi,
                 n_atom=n_atom,
                 p_atom=p_atom,
                 mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads,
-                DOS_hr=dos_hr[disp[1, rank]:disp[1, rank] + count[1, rank]])
+                worker_num=gf_worker_threads)
 
         # lower diagonal blocks from physics identity
         #gg_lower = -gg_upper.conjugate().transpose((0, 1, 3, 2))
@@ -686,7 +714,36 @@ if __name__ == "__main__":
         #                                                                    no,
         #                                                                    count[1, rank],
         #                                                                    energy_contiguous=False) + mem_g * gr_h2g
+        comm.Barrier()
+        start_poisson_solver = time.perf_counter()
+
+        solve_poisson(hamiltonian_obj, n_atom, p_atom, dn_atom, dp_atom, temp, comm, rank)
+        hamiltonian_obj.Vatom = hamiltonian_obj.Vpoiss[hamiltonian_obj.poisson_atom_index].reshape((-1,1))
+        Vpot_new = hamiltonian_obj.get_atomic_potential()
+        dEfL_EC -= np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[0]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[0]]) \
+                        / (hamiltonian_obj.Bmax[0] - hamiltonian_obj.Bmin[0] + 1)
+        dEfR_EC -= np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]]) \
+                        / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[-1] + 1)
         
+        hamiltonian_obj.poisson_Vg += np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]]) \
+                        / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[0] + 1)
+        
+        hamiltonian_obj.Vpot = -hamiltonian_obj.Vpot
+        hamiltonian_obj.add_potential()
+
+        hamiltonian_obj.Vpot = Vpot_new
+        hamiltonian_obj.add_potential()
+
+        hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
+
+
+        comm.Barrier()
+        finish_poisson_solver = time.perf_counter()
+        if rank == 0:
+            print(f"Poisson solver time: {finish_poisson_solver - start_poisson_solver}", flush = True)
+            print("Green's function calculated", flush = True)
+
+
         comm.Barrier()
         start_g2p_comm = time.perf_counter()
         
@@ -980,18 +1037,39 @@ if __name__ == "__main__":
         
         start_sephn = time.perf_counter()
 
+# distribute screened interaction according to h2g step---------------------
+        # create local buffers
+        sgphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        slphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        srphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+
         # Extract diagonal bands
-        gg_diag_band = gg_h2g[:, rows == columns]
-        gl_diag_band = gl_h2g[:, rows == columns]
+        gg_diag_band_T = gg_h2g[:, rows == columns]
+        gl_diag_band_T = gl_h2g[:, rows == columns]
+
+        rows_loc = rows[disp[0, rank]:disp[0, rank] + count[0, rank]]
+        columns_loc = columns[disp[0, rank]:disp[0, rank] + count[0, rank]]
+
+        gg_diag_band = gg_g2p[rows_loc == columns_loc, :]
+        gl_diag_band = gl_g2p[rows_loc == columns_loc, :]
+
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-                                                                            gl_diag_band,
-                                                                            gg_diag_band,
-                                                                            sg_phn,
-                                                                            sl_phn,
-                                                                            sr_phn,
+        # sg_phn1, sl_phn1, sr_phn1 = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+        #                                                                     gl_diag_band_T,
+        #                                                                     gg_diag_band_T,
+        #                                                                     sg_phn1,
+        #                                                                     sl_phn1,
+        #                                                                     sr_phn1,
+        #                                                                     EPHN,
+        #                                                                     DPHN,
+        #                                                                     temp,
+        #                                                                     mem_s)
+        
+        sg_phn_2s, sl_phn_2s, sr_phn_2s = electron_phonon_selfenergy.calc_SE_GF_EPHN_mpi(energy_loc,
+                                                                            gl_g2p,
+                                                                            gg_g2p,
                                                                             EPHN,
                                                                             DPHN,
                                                                             temp,
@@ -1001,6 +1079,26 @@ if __name__ == "__main__":
         finish_sephn = time.perf_counter()
         if rank == 0:
             print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
+
+        start_sephn_comm = time.perf_counter()
+        # use of all to all w since not divisible
+        alltoall_p2g(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
+
+        sg_phn_h2g = (1.0 - mem_s) * sgphn_h2g_buf + mem_s * sg_phn_h2g
+        sl_phn_h2g = (1.0 - mem_s) * slphn_h2g_buf + mem_s * sl_phn_h2g
+        sr_phn_h2g = (1.0 - mem_s) * srphn_h2g_buf + mem_s * sr_phn_h2g
+
+        sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
+        sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
+        sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
+
+        #assert(np.isfortran(sg_phn1) == np.isfortran(sg_phn))
+        #print(f"sg_phn new method is fortran order: {np.isfortran(sg_phn)}")
+
+        finish_sephn_comm = time.perf_counter()
+
 
         start_observables = time.perf_counter()
 

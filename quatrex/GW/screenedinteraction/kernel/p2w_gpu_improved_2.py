@@ -132,6 +132,7 @@ def calc_W_pool_mpi_split(
     nbc,
     # Options.
     homogenize=True,
+    start_index_W = 0,
     NCpSC: int = 1,
     return_sigma_boundary=False,
     mkl_threads: int = 1,
@@ -1152,7 +1153,9 @@ def calc_W_pool_mpi_split(
     if idx_e[0] == 0:
         ind_zeros = np.concatenate(([0], ind_zeros))
 
-
+    start_indices = idx_e[idx_e < start_index_W] - idx_e[0]
+    ind_zeros = np.concatenate((start_indices, ind_zeros))
+    
     # Remove the identified peaks and errors
     for index in ind_zeros:
         wr_p2w[index, :] = 0
