@@ -4,7 +4,7 @@ import numpy as np
 import glob
 from scipy import sparse
 from scipy.sparse import identity
-import matplotlib.pylab as plt
+#import matplotlib.pylab as plt
 from scipy.interpolate import griddata
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
@@ -176,36 +176,36 @@ class Hamiltonian:
 
         np.concatenate((np.reshape(head2, (3, 1)), M2)).astype('double').tofile(write_file)
 
-    def spy_hamiltonian(self):
+    # def spy_hamiltonian(self):
 
-        fig, axes = plt.subplots(nrows=1, ncols=len(self.keys))
-        fig.set_figheight = 3
-        fig.set_figwith = 10
+    #     fig, axes = plt.subplots(nrows=1, ncols=len(self.keys))
+    #     fig.set_figheight = 3
+    #     fig.set_figwith = 10
 
-        for i in np.arange(0, len(self.keys)):
-            axes[i].set_title(self.keys[i])
-            axes[i].spy(self.Hamiltonian[self.keys[i]])
-            axes[i].grid(True)
+    #     for i in np.arange(0, len(self.keys)):
+    #         axes[i].set_title(self.keys[i])
+    #         axes[i].spy(self.Hamiltonian[self.keys[i]])
+    #         axes[i].grid(True)
 
-        for ax in axes:
-            ax.set_xticks([])
-            ax.set_yticks([])
-        plt.show()
+    #     for ax in axes:
+    #         ax.set_xticks([])
+    #         ax.set_yticks([])
+    #     plt.show()
 
-    def spy_hamiltonian_grid(self, grid):
+    # def spy_hamiltonian_grid(self, grid):
 
-        fig, axes = plt.subplots()
-        fig.set_figheight = 3
-        fig.set_figwith = 3
-        axes.set_title('H_4')
-        axes.spy(self.Hamiltonian[self.keys[1]])
+    #     fig, axes = plt.subplots()
+    #     fig.set_figheight = 3
+    #     fig.set_figwith = 3
+    #     axes.set_title('H_4')
+    #     axes.spy(self.Hamiltonian[self.keys[1]])
 
-        axes.set_xticks(grid, minor=False)
-        axes.set_yticks(grid, minor=True)
-        axes.xaxis.grid(True, which='major')
-        axes.yaxis.grid(True, which='minor')
-        axes.set_axisbelow(False)
-        plt.show()
+    #     axes.set_xticks(grid, minor=False)
+    #     axes.set_yticks(grid, minor=True)
+    #     axes.xaxis.grid(True, which='major')
+    #     axes.yaxis.grid(True, which='minor')
+    #     axes.set_axisbelow(False)
+    #     plt.show()
 
     def check_hermitivity(self, tol=1e-6):
         #Check if the hamiltonian is hermitean.
