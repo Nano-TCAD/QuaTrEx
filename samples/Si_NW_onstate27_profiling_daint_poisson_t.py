@@ -508,7 +508,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 600
+    max_iter = 5
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -538,7 +538,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_7200_27_PS_eps5_ps5_mems50_standardupdate/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
