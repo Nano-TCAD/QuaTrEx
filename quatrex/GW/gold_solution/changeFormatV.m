@@ -6,7 +6,7 @@ function changeFormatV(pathV)
     % done to avoid tedious stuff in python
     % not really needed for V since only one matrix
     % but for XR, XL, XG it was needed
-    path = '/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32_shorttesting/';
+    path = '/usr/scratch/mont-fort17/dleonard/GW_paper/Si_Nanowire_poisson/';
 
     sr = load(pathV);
     
@@ -22,7 +22,7 @@ function changeFormatV(pathV)
     formatted.imgvh = imag(data);
     
     % save to file
-    filename = [path 'data_Vh_CF_CNT_3v.mat'];
+    filename = [path 'data_Vh_PS_Si.mat'];
     save(filename, "formatted", "-v7.3", "-nocompression");
 
     % V has the full sparsity pattern as all the 
@@ -37,7 +37,7 @@ function changeFormatV(pathV)
     formatted.imgvh = imag(data);
     
     % save to file
-    filename = [path 'data_H_CF_CNT_3v.mat'];
+    filename = [path 'data_H_PS_SI.mat'];
     save(filename, "formatted", "-v7.3", "-nocompression");
 
     % V has the full sparsity pattern as all the 
@@ -52,7 +52,7 @@ function changeFormatV(pathV)
     formatted.imgvh = imag(data);
     
     % save to file
-    filename = [path 'data_S_CF_CNT_3v.mat'];
+    filename = [path 'data_S_PS_SI.mat'];
     save(filename, "formatted", "-v7.3", "-nocompression");
 
 end

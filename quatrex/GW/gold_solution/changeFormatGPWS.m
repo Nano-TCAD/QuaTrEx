@@ -208,5 +208,5 @@ function changeFormatGPWS(path)
 
 
     % save to file
-    save("/usr/scratch/mont-fort17/dleonard/GW_paper/CNT_32_shorttesting/data_GPWS_cf_ephn_memory2_CNTNBC3_0_2V.mat", "formatted","formatted_diag", "-v7.3","-nocompression");
+    save("/usr/scratch/mont-fort17/dleonard/GW_paper/Si_Nanowire_poisson/data_GPWS_PS_ephnindex_memory3_NBC1_atomicV.mat", "formatted","formatted_diag", "-v7.3","-nocompression");
 end

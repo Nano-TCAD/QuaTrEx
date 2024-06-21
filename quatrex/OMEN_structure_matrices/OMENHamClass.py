@@ -113,7 +113,10 @@ class Hamiltonian:
                 self.Vpot = self.get_unit_cell_potential()
             elif (potential_type == 'atomic'):
                 if not poisson_path:
-                    self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                    try:
+                        self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                    except:
+                        self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
                 else:
                     self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
                 self.Vpot = self.get_atomic_potential()
