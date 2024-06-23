@@ -34,7 +34,7 @@ print("Time for mpi import: %.3f s" % time_mpi, flush = True)
 
 time_quatrex = -time.perf_counter()
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
 #from quatrex.GW.screenedinteraction.kernel import p2w_cpu
@@ -262,7 +262,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -2.9147
 
@@ -447,6 +447,11 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    # phonon self energy. Simplified (but more expensive) a2a initialization----------------------------------
+    sg_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sl_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sr_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+
     # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -499,10 +504,14 @@ if __name__ == "__main__":
     # max number of iterations
 
     max_iter = 5
-    ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
+    ECmin_vec = np.zeros((2, max_iter + 1))
+    ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
+    EVmax_vec = np.zeros((2, max_iter))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
-    ind_ek = -1
+    cond_vec = np.zeros((max_iter,), dtype = float)
+    ind_ek_cb_l = -1
+    ind_ek_cb_r = -1
 
         # Preprocess
     DH = hamiltonian_obj
@@ -524,12 +533,12 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
+    folder = '/usr/scratch/tortin19/dleonard/attelas_results/InAs_test'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
                 
-        if((iter_num % 10 == 0) and iter_num > 0):
+        if((iter_num % 2 == 0) and iter_num > 0):
             cp.get_default_memory_pool().free_all_blocks()
 
         # initialize observables----------------------------------------------------
@@ -547,6 +556,14 @@ if __name__ == "__main__":
 
         # current per energy
         ide = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
+
+        # number of electrons/holes per atom
+        n_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+        p_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+
+        # differential number of electrons/holes with respect to potential gradient
+        dn_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
+        dp_atom = cpx.zeros_pinned(shape=(DH.NA,), dtype=float)
 
         # # transform from 2D format to list/vector of sparse arrays format-----------
         # sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -579,12 +596,12 @@ if __name__ == "__main__":
         start_band_edge = time.perf_counter()
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
+        (ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num], ind_ek_cb_l) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[0,iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
                                                     sr_rgf,
-                                                    ind_ek,
+                                                    ind_ek_cb_l,
                                                     bmin,
                                                     bmax,
                                                     comm,
@@ -594,6 +611,24 @@ if __name__ == "__main__":
                                                     disp,
                                                     'left',
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        (ECmin_vec[1, iter_num + 1], EVmax_vec[1, iter_num], ind_ek_cb_r) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[1,iter_num],
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek_cb_r,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    'right',
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        
+        EEdge = get_spatial_band_edge(DH, ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num])
         
         comm.Barrier()
         finish_band_edge = time.perf_counter()
@@ -624,8 +659,9 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
         
-        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+        if (iter_num > 0):
+            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
@@ -688,6 +724,11 @@ if __name__ == "__main__":
                 size,
                 homogenize=False,
                 NCpSC=NCpSC,
+                NCpSC=NCpSC,
+                EEdge=EEdge,
+                peak_DOS_lim = 10.0 * 2 * np.pi,
+                n_atom=n_atom,
+                p_atom=p_atom,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads)
 
@@ -1030,18 +1071,27 @@ if __name__ == "__main__":
         
         start_sephn = time.perf_counter()
 
+# distribute screened interaction according to h2g step---------------------
+        # create local buffers
+        sgphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        slphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        srphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+
         # Extract diagonal bands
-        gg_diag_band = gg_h2g[:, rows == columns]
-        gl_diag_band = gl_h2g[:, rows == columns]
+        gg_diag_band_T = gg_h2g[:, rows == columns]
+        gl_diag_band_T = gl_h2g[:, rows == columns]
+
+        rows_loc = rows[disp[0, rank]:disp[0, rank] + count[0, rank]]
+        columns_loc = columns[disp[0, rank]:disp[0, rank] + count[0, rank]]
+
+        gg_diag_band = gg_g2p[rows_loc == columns_loc, :]
+        gl_diag_band = gl_g2p[rows_loc == columns_loc, :]
         # Add imaginary self energy to broaden peaks (motivated by a zero energy phonon interaction)
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-                                                                            gl_diag_band,
-                                                                            gg_diag_band,
-                                                                            sg_phn,
-                                                                            sl_phn,
-                                                                            sr_phn,
+        sg_phn_2s, sl_phn_2s, sr_phn_2s = electron_phonon_selfenergy.calc_SE_GF_EPHN_mpi(energy_loc,
+                                                                            gl_g2p,
+                                                                            gg_g2p,
                                                                             EPHN,
                                                                             DPHN,
                                                                             temp,
@@ -1051,6 +1101,30 @@ if __name__ == "__main__":
         finish_sephn = time.perf_counter()
         if rank == 0:
             print(f"SEPHN computation time: {finish_sephn - start_sephn}", flush = True)
+
+
+        start_sephn_comm = time.perf_counter()
+        # use of all to all w since not divisible
+        alltoall_p2g(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
+
+        sg_phn_h2g = (1.0 - mem_s) * sgphn_h2g_buf + mem_s * sg_phn_h2g
+        sl_phn_h2g = (1.0 - mem_s) * slphn_h2g_buf + mem_s * sl_phn_h2g
+        sr_phn_h2g = (1.0 - mem_s) * srphn_h2g_buf + mem_s * sr_phn_h2g
+
+        sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
+        sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
+        sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
+
+        #assert(np.isfortran(sg_phn1) == np.isfortran(sg_phn))
+        #print(f"sg_phn new method is fortran order: {np.isfortran(sg_phn)}")
+
+        finish_sephn_comm = time.perf_counter()
+
+        if rank == 0:
+            print(f"SEPHN communication time: {finish_sephn_comm - start_sephn_comm}", flush = True)
+
 
         start_observables = time.perf_counter()
 
@@ -1063,10 +1137,14 @@ if __name__ == "__main__":
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, nE,  op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, nP,  op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
+            comm.Reduce(nE, None,  op=MPI.SUM, root=0)
+            comm.Reduce(nP, None,  op=MPI.SUM, root=0)
         
         comm.Barrier()
         finish_observables = time.perf_counter()
@@ -1079,7 +1157,8 @@ if __name__ == "__main__":
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
-            np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+            np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
+            np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
 
         end_iteration = time.perf_counter()
         if rank == 0:
@@ -1089,7 +1168,11 @@ if __name__ == "__main__":
     if rank == 0:
         np.savetxt(folder + 'EFL.dat', EFL_vec)
         np.savetxt(folder + 'EFR.dat', EFR_vec)
-        np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+        np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
+        np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
+        np.savetxt(folder + 'natom_' + str(iter_num) + '.dat', n_atom)
+        np.savetxt(folder + 'nE_' + str(iter_num) + '.dat', nE.view(float))
+        np.savetxt(folder + 'nP_' + str(iter_num) + '.dat', nP.view(float))
 
     # free datatypes------------------------------------------------------------
 
