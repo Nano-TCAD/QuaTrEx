@@ -256,8 +256,8 @@ def calc_W_pool_mpi_split(
     mempool = cp.get_default_memory_pool()
 
     comm.Barrier()
+    time_pre_OBC = -time.perf_counter()
     if rank == 0:
-        time_pre_OBC = -time.perf_counter()
         print(f"Used bytes: {mempool.used_bytes()}", flush=True)
         print(f"Total bytes: {mempool.total_bytes()}", flush=True)
 
@@ -359,10 +359,9 @@ def calc_W_pool_mpi_split(
     # )
 
     comm.Barrier()
+    time_pre_OBC += time.perf_counter()
     if rank == 0:
-        time_pre_OBC += time.perf_counter()
         print("Time for pre-processing OBC: %.6f s" % time_pre_OBC, flush=True)
-        time_OBC = -time.perf_counter()
 
     # --- Boundary conditions ------------------------------------------
 
