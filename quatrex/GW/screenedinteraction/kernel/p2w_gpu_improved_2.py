@@ -776,20 +776,24 @@ def calc_W_pool_mpi_split(
         print(f"Used bytes: {mempool.used_bytes()}", flush=True)
         print(f"Total bytes: {mempool.total_bytes()}", flush=True)
     
-    comm.Barrier()
+    runtimes = []
+    runtimes.append({'kernel': 'W-K1.1', 'time': time_pre_OBC + true_finish - start_spgemm - time_w})
+    runtimes.append({'kernel': 'W-K1.2', 'time': time_w})
+    
+    # comm.Barrier()
 
-    for r in range(1, size):
-        if rank == r:
-            print("    True runtime for rank %d: %.6f s" % (r, (true_finish - start_spgemm)), flush=True)
-            print("        Time for CopyToDevice: %.6f s" % time_copy_in, flush=True)
-            print("        Time for SpGEMM: %.6f s" % time_spgemm, flush=True)
-            print("        Time for CopyToHost: %.6f s" % time_copy_out, flush=True)
-            print("        Time for Densification: %.6f s" % time_dense, flush=True)
-            print("        Time for OBC MM: %.6f s" % time_obc_mm, flush=True)
-            print("        Time for Beyn W: %.6f s" % time_beyn_w, flush=True)
-            print("        Time for OBC L: %.6f s" % time_obc_l, flush=True)
-            print("        Time for RGF W: %.6f s" % time_w, flush=True)
-        comm.Barrier()
+    # for r in range(1, size):
+    #     if rank == r:
+    #         print("    True runtime for rank %d: %.6f s" % (r, (true_finish - start_spgemm)), flush=True)
+    #         print("        Time for CopyToDevice: %.6f s" % time_copy_in, flush=True)
+    #         print("        Time for SpGEMM: %.6f s" % time_spgemm, flush=True)
+    #         print("        Time for CopyToHost: %.6f s" % time_copy_out, flush=True)
+    #         print("        Time for Densification: %.6f s" % time_dense, flush=True)
+    #         print("        Time for OBC MM: %.6f s" % time_obc_mm, flush=True)
+    #         print("        Time for Beyn W: %.6f s" % time_beyn_w, flush=True)
+    #         print("        Time for OBC L: %.6f s" % time_obc_l, flush=True)
+    #         print("        Time for RGF W: %.6f s" % time_w, flush=True)
+    #     comm.Barrier()
 
     # imag_lim = 1e-4
     # R = 1e4
@@ -914,7 +918,7 @@ def calc_W_pool_mpi_split(
         )
 
     if not post_process:
-        return
+        return runtimes
 
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(dosw - (new + npw)) / (np.abs(dosw) + 1e-6), axis=1)
@@ -1031,6 +1035,9 @@ def calc_W_pool_mpi_split(
     if rank == 0:
         time_post_proc += time.perf_counter()
         print("Time for post-processing: %.6f s" % time_post_proc, flush=True)
+    
+    runtimes.append({'kernel': 'W-post', 'time': time_post_proc})
+    return runtimes
 
 
 if __name__ == "__main__":

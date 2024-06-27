@@ -353,9 +353,13 @@ def calc_GF_pool_mpi_split_memopt(
         time_GF += time.perf_counter()
         print("Time for GF: %.6f s" % time_GF, flush = True)
         time_post_proc = -time.perf_counter()
+    
+    runtimes = []
+    runtimes.append({'kernel': 'G-K1.1', 'time': time_pre_OBC + time_OBC})
+    runtimes.append({'kernel': 'G-K1.2', 'time': time_GF})
 
     if not post_process:
-        return
+        return runtimes
     
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
@@ -424,6 +428,9 @@ def calc_GF_pool_mpi_split_memopt(
     if rank == 0:
         time_post_proc += time.perf_counter()
         print("Time for post-processing: %.6f s" % time_post_proc, flush = True)
+    
+    runtimes.append({'kernel': 'G-post', 'time': time_post_proc})
+    return runtimes
     
 def generator_rgf_GF(E, DH):
     for i in range(E.shape[0]):
