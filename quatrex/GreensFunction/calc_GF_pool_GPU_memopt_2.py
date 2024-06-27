@@ -71,8 +71,7 @@ def calc_GF_pool_mpi_split_memopt(
     batchsize: int = None,      
 ):
     comm.Barrier()
-    if rank == 0:
-        time_pre_OBC = -time.perf_counter()
+    time_pre_OBC = -time.perf_counter()
     
     kB = 1.38e-23
     q = 1.6022e-19
@@ -253,10 +252,10 @@ def calc_GF_pool_mpi_split_memopt(
     #                                         SigG01, SigG10, len(bmax))
     comm.Barrier() 
 
+    time_pre_OBC += time.perf_counter()
     if rank == 0:
-        time_pre_OBC += time.perf_counter()
         print("Time for pre-processing OBC: %.6f s" % time_pre_OBC, flush = True)
-        time_OBC = -time.perf_counter()
+    time_OBC = -time.perf_counter()
                 
     # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
     #     executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
@@ -307,10 +306,9 @@ def calc_GF_pool_mpi_split_memopt(
     SigRBR = SigRBR_gpu
     
     comm.Barrier()
+    time_OBC += time.perf_counter()
     if rank == 0:
-        time_OBC += time.perf_counter()
         print("Time for OBC: %.6f s" % time_OBC, flush = True)
-        time_GF_trafo = -time.perf_counter()
 
     l_defect = np.count_nonzero(np.isnan(condL))
     r_defect = np.count_nonzero(np.isnan(condR))
@@ -332,8 +330,7 @@ def calc_GF_pool_mpi_split_memopt(
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()
-    if rank == 0:
-        time_GF = -time.perf_counter()
+    time_GF = -time.perf_counter()
     for ie in energy_batch:
         rgf_GF_GPU_combo.rgf_batched_GPU(energy[ie:ie+energy_batchsize],
                             mapping_diag_dev, mapping_upper_dev, mapping_lower_dev,
@@ -349,10 +346,10 @@ def calc_GF_pool_mpi_split_memopt(
                             input_stream = input_stream)
         
     comm.Barrier()
+    time_GF += time.perf_counter()
     if rank == 0:
-        time_GF += time.perf_counter()
         print("Time for GF: %.6f s" % time_GF, flush = True)
-        time_post_proc = -time.perf_counter()
+    time_post_proc = -time.perf_counter()
     
     runtimes = []
     runtimes.append({'kernel': 'G-K1.1', 'time': time_pre_OBC + time_OBC})
@@ -425,8 +422,8 @@ def calc_GF_pool_mpi_split_memopt(
         gg_h2g[index, :] = 0
         
     comm.Barrier()
+    time_post_proc += time.perf_counter()
     if rank == 0:
-        time_post_proc += time.perf_counter()
         print("Time for post-processing: %.6f s" % time_post_proc, flush = True)
     
     runtimes.append({'kernel': 'G-post', 'time': time_post_proc})
