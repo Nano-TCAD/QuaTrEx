@@ -9,6 +9,7 @@ import mpi4py
 mpi4py.rc.initialize = False  # do not initialize MPI automatically
 mpi4py.rc.finalize = False  # do not finalize MPI automatically
 from mpi4py import MPI
+DOUBLE_COMPLEX = MPI.C_DOUBLE_COMPLEX if MPI.Get_library_version().startswith('Open MPI') else MPI.DOUBLE_COMPLEX
 import os
 import pickle
 import time
@@ -108,8 +109,8 @@ def get_band_edge_mpi(ECmin_DFT,
         else:
             sr_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank, tag=0)
-            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank, tag=1)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank, tag=0)
+            comm.Recv([sr_phn_buf, DOUBLE_COMPLEX], source=send_rank, tag=1)
 
             SigmaR_recv = csc_array((sr_gw_buf, (rows, columns)), shape=(nao, nao))
             SigmaR_PHN_recv = csc_array((sr_phn_buf, (rows, columns)), shape=(nao, nao))
@@ -121,8 +122,8 @@ def get_band_edge_mpi(ECmin_DFT,
         if send_rank == rank:
             sr_gw_buf = SigmaR_GW[min_ind - disp[1, rank]].toarray()[rows, columns]
             sr_phn_buf = SigmaR_PHN[min_ind - disp[1, rank]].toarray()[rows, columns]
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sr_phn_buf, DOUBLE_COMPLEX], dest=0, tag=1)
 
     # Second step: refine the position of the CB edge
     ## Broadcasting minimum index
@@ -153,8 +154,8 @@ def get_band_edge_mpi(ECmin_DFT,
         else:
             sr_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank, tag=0)
-            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank, tag=1)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank, tag=0)
+            comm.Recv([sr_phn_buf, DOUBLE_COMPLEX], source=send_rank, tag=1)
 
             SigmaR_recv = csc_array((sr_gw_buf, (rows, columns)), shape=(nao, nao))
             SigmaR_PHN_recv = csc_array((sr_phn_buf, (rows, columns)), shape=(nao, nao))
@@ -166,8 +167,8 @@ def get_band_edge_mpi(ECmin_DFT,
         if send_rank == rank:
             sr_gw_buf = SigmaR_GW[min_ind - disp[1, rank]].toarray()[rows, columns]
             sr_phn_buf = SigmaR_PHN[min_ind - disp[1, rank]].toarray()[rows, columns]
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sr_phn_buf, DOUBLE_COMPLEX], dest=0, tag=1)
 
     # Broadcasting the band edge
     if rank == 0:
@@ -411,10 +412,10 @@ def send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, 
             sl_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sg_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=0)
-            comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=1)
-            comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=2)
-            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=3)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank_1, tag=0)
+            comm.Recv([sl_gw_buf, DOUBLE_COMPLEX], source=send_rank_1, tag=1)
+            comm.Recv([sg_gw_buf, DOUBLE_COMPLEX], source=send_rank_1, tag=2)
+            comm.Recv([sr_phn_buf, DOUBLE_COMPLEX], source=send_rank_1, tag=3)
 
             SigmaR_GW_vec[0] = csc_array((sr_gw_buf, (rows, columns)), shape=(nao, nao))
             SigmaL_GW_vec[0] = csc_array((sl_gw_buf, (rows, columns)), shape=(nao, nao))
@@ -427,10 +428,10 @@ def send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, 
             sl_gw_buf = SigmaL_GW[min_ind - disp[1, rank]].toarray()[rows, columns]
             sg_gw_buf = SigmaG_GW[min_ind - disp[1, rank]].toarray()[rows, columns]
             sr_phn_buf = SigmaR_PHN[min_ind - disp[1, rank]].toarray()[rows, columns]
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
-            comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
-            comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sl_gw_buf, DOUBLE_COMPLEX], dest=0, tag=1)
+            comm.Send([sg_gw_buf, DOUBLE_COMPLEX], dest=0, tag=2)
+            comm.Send([sr_phn_buf, DOUBLE_COMPLEX], dest=0, tag=3)
 
     
     if rank == 0:
@@ -444,10 +445,10 @@ def send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, 
             sl_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sg_gw_buf = np.empty(rows.shape[0], dtype=np.complex128)
             sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=0)
-            comm.Recv([sl_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=1)
-            comm.Recv([sg_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=2)
-            comm.Recv([sr_phn_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=3)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank_2, tag=0)
+            comm.Recv([sl_gw_buf, DOUBLE_COMPLEX], source=send_rank_2, tag=1)
+            comm.Recv([sg_gw_buf, DOUBLE_COMPLEX], source=send_rank_2, tag=2)
+            comm.Recv([sr_phn_buf, DOUBLE_COMPLEX], source=send_rank_2, tag=3)
 
             SigmaR_GW_vec[1] = csc_array((sr_gw_buf, (rows, columns)), shape=(nao, nao))
             SigmaL_GW_vec[1] = csc_array((sl_gw_buf, (rows, columns)), shape=(nao, nao))
@@ -460,10 +461,10 @@ def send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, 
             sl_gw_buf = SigmaL_GW[min_ind + 1 - disp[1, rank]].toarray()[rows, columns]
             sg_gw_buf = SigmaG_GW[min_ind + 1 - disp[1, rank]].toarray()[rows, columns]
             sr_phn_buf = SigmaR_PHN[min_ind + 1 - disp[1, rank]].toarray()[rows, columns]
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
-            comm.Send([sl_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=1)
-            comm.Send([sg_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=2)
-            comm.Send([sr_phn_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=3)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sl_gw_buf, DOUBLE_COMPLEX], dest=0, tag=1)
+            comm.Send([sg_gw_buf, DOUBLE_COMPLEX], dest=0, tag=2)
+            comm.Send([sr_phn_buf, DOUBLE_COMPLEX], dest=0, tag=3)
 
 
 def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, nnz):
@@ -492,14 +493,14 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
             # sr_gw_buf = np.empty(nnz, dtype=np.complex128)
             sr_gw_buf = cp.empty(nnz, dtype=np.complex128)
             cp.cuda.get_current_stream().synchronize()
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_1, tag=0)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank_1, tag=0)
             SigmaR_GW_vec[0] = sr_gw_buf
 
     else:
         if send_rank_1 == rank:
             sr_gw_buf = SigmaR_GW[min_ind - disp[1, rank]]
             cp.cuda.get_current_stream().synchronize()
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
 
     
     if rank == 0:
@@ -509,14 +510,14 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
             # sr_gw_buf = np.empty(nnz, dtype=np.complex128)
             sr_gw_buf = cp.empty(nnz, dtype=np.complex128)
             cp.cuda.get_current_stream().synchronize()
-            comm.Recv([sr_gw_buf, MPI.DOUBLE_COMPLEX], source=send_rank_2, tag=0)
+            comm.Recv([sr_gw_buf, DOUBLE_COMPLEX], source=send_rank_2, tag=0)
             SigmaR_GW_vec[1] = sr_gw_buf
 
     else:
         if send_rank_2 == rank:
             sr_gw_buf = SigmaR_GW[min_ind + 1 - disp[1, rank]]
             cp.cuda.get_current_stream().synchronize()
-            comm.Send([sr_gw_buf, MPI.DOUBLE_COMPLEX], dest=0, tag=0)
+            comm.Send([sr_gw_buf, DOUBLE_COMPLEX], dest=0, tag=0)
 
 
 if __name__ == '__main__':
