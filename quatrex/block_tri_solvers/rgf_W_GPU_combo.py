@@ -31,7 +31,7 @@ def _get_coulomb_batch(
         ir = bid % block_size
 
         # NOTE: The buffer size here should ideally not be hardcoded.
-        buf = cpx.jit.shared_memory(cp.complex128, 416)
+        buf = cpx.jit.shared_memory(cp.complex128, 546)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
