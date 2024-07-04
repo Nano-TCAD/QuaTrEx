@@ -35,7 +35,7 @@ print("Time for mpi import: %.3f s" % time_mpi, flush = True)
 
 time_quatrex = -time.perf_counter()
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge, get_cband_edge_mpi_interpol_2_allblocks
 from quatrex.Poisson.solve_poisson import solve_poisson
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
@@ -76,8 +76,8 @@ if __name__ == "__main__":
     # path to solution
     scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "Si_Nanowire_poisson/")
-    poisson_path = os.path.join(solution_path, "13_bis/")
+    solution_path = os.path.join(scratch_path, "Si_Nanowire_poisson_18/")
+    poisson_path = os.path.join(solution_path, "18_bis/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -164,7 +164,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -259,17 +259,17 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -2.0362
+    energy_fl = -2.0836588
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 3.0
     # DFT Conduction Band Minimum
     ECmin = -2.0846
     # Poisson Solver
-    poisson_solver = 5
+    poisson_solver = 1
 
     # Phyiscal Constants -----------
 
@@ -508,7 +508,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 5
+    max_iter = 500
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -538,12 +538,12 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
+    folder = '/scratch/snx3000/ldeuschl/results/Si_longNW_7200_50_PS_eps3_ps1_mems50/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
                 
-        if((iter_num % 10 == 0) and iter_num > 0):
+        if((iter_num % 2 == 0) and iter_num > 0):
             cp.get_default_memory_pool().free_all_blocks()
 
         # initialize observables----------------------------------------------------
@@ -664,9 +664,9 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"ECmin: {ECmin_vec[0, iter_num + 1]}", flush = True)
         
-        if (iter_num > 0):
-            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
+        # if (iter_num > 0):
+        #     energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+        #     energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
         # if ((iter_num > 0) and iter_num < 51):
         #     dEf = (dEfL_EC + dEfR_EC) / 2
         #     energy_fl = ECmin_vec[0, iter_num + 1] + dEf
@@ -1150,6 +1150,35 @@ if __name__ == "__main__":
         np.savetxt(folder + 'EFR.dat', EFR_vec)
         np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
         np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
+        # if rank == 0:
+    # np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+    # np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+    sl_rgf_dev = cp.asarray(sl_h2g)
+    sg_rgf_dev = cp.asarray(sg_h2g)
+    sr_rgf_dev = cp.asarray(sr_h2g)
+    sl_phn_dev = cp.asarray(sl_phn)
+    sg_phn_dev = cp.asarray(sg_phn)
+    sr_phn_dev = cp.asarray(sr_phn)
+    rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+    sr_rgf = cp.asnumpy(sr_rgf_dev)
+
+    CB_edge = get_cband_edge_mpi_interpol_2_allblocks(EEdge,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek_cb_l,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+
+    if rank == 0: 
+        np.savetxt(folder + 'CB_EDGE.dat', CB_edge)
 
     # free datatypes------------------------------------------------------------
 

@@ -148,9 +148,9 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 4])
-    NCpSC = 5
+    NCpSC = 2
     Vappl = 0.5
-    energy = np.linspace(-20, 15, 1600, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-10, 5, 1800, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -200,6 +200,7 @@ if __name__ == "__main__":
     nb = hamiltonian_obj.Bmin.shape[0]
     #nbc = 2
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
+    nbc = 3
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -503,7 +504,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 5
+    max_iter = 500
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -533,7 +534,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/InAs_test/'
+    folder = '/scratch/snx3000/ldeuschl/results/InAs_TFET_epsR3_1800/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -661,9 +662,9 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"ECmin: {ECmin_vec[0, iter_num + 1]}", flush = True)
         
-        if (iter_num > 0):
-            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
+        # if (iter_num > 0):
+        #     energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+        #     energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr

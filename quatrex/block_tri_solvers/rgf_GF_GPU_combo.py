@@ -61,6 +61,7 @@ def self_energy_preprocess_2d(sl, sg, sr, sl_phn, sg_phn, sr_phn, rows, columns,
     sl[:] = (sl - sl[:, ij2ji].conj()) / 2
     sg[:] = (sg - sg[:, ij2ji].conj()) / 2
     sr[:] = np.real(sr) + (sg - sl) / 2
+    #sr[:] = 1j * np.imag(sg - sl) / 2
 
     sl[:, rows == columns] += sl_phn
     sg[:, rows == columns] += sg_phn

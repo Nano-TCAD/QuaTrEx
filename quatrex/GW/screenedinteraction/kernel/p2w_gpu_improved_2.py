@@ -39,7 +39,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
                 out[bid, j - scol] = data[i]
 
 
-def spgemm(A, B, rows: int = 512):
+def spgemm(A, B, rows: int = 156):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -51,7 +51,7 @@ def spgemm(A, B, rows: int = 512):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 512):
+def spgemm_direct(A, B, C, rows: int = 156):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
