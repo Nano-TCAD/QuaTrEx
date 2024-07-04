@@ -586,7 +586,7 @@ if __name__ == "__main__":
         sl_phn_dev = cp.asarray(sl_phn)
         sg_phn_dev = cp.asarray(sg_phn)
         sr_phn_dev = cp.asarray(sr_phn)
-        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+        rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji), discard_real = True)
         sr_rgf = cp.asnumpy(sr_rgf_dev)
 
         comm.Barrier()

@@ -57,10 +57,14 @@ def csr_to_block_tridiagonal_csr(csr: sp.csr_matrix, bmin, bmax):
     return block_diag, block_upper, block_lower
 
 
-def self_energy_preprocess_2d(sl, sg, sr, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji):
+def self_energy_preprocess_2d(sl, sg, sr, sl_phn, sg_phn, sr_phn, rows, columns, ij2ji, discard_real = False):
     sl[:] = (sl - sl[:, ij2ji].conj()) / 2
     sg[:] = (sg - sg[:, ij2ji].conj()) / 2
-    sr[:] = np.real(sr) + (sg - sl) / 2
+
+    if(discard_real):
+        sr[:] = 1j * np.imag(sg - sl) / 2
+    else:
+        sr[:] = np.real(sr) + (sg - sl) / 2
     #sr[:] = 1j * np.imag(sg - sl) / 2
 
     sl[:, rows == columns] += sl_phn
