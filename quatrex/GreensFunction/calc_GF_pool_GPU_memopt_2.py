@@ -311,7 +311,7 @@ def calc_GF_pool_mpi_split_memopt(
         time_SE = -time.perf_counter()
 
 
-    energy_batchsize = 7
+    energy_batchsize = 8
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()

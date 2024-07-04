@@ -459,7 +459,7 @@ class Hamiltonian:
 
         return Vpot
 
-    def add_potential(self, ):
+    def add_potential(self, orthogonal = False):
         """
         This function adds the linear potential drop to the Hamiltonian.
 
@@ -470,12 +470,19 @@ class Hamiltonian:
         """
         Vpot = self.Vpot
 
-        indi, indj = np.nonzero(self.Overlap['H_4'])
+        if not orthogonal:
 
-        for IP in range(len(indi)):
-            self.Hamiltonian['H_4'][indi[IP],
-                                    indj[IP]] += (Vpot[indi[IP]] + Vpot[indj[IP]]) * self.Overlap['H_4'][indi[IP],
-                                                                                                         indj[IP]] / 2.0
+            indi, indj = np.nonzero(self.Overlap['H_4'])
+
+            for IP in range(len(indi)):
+                self.Hamiltonian['H_4'][indi[IP],
+                                        indj[IP]] += (Vpot[indi[IP]] + Vpot[indj[IP]]) * self.Overlap['H_4'][indi[IP],
+                                                                                                            indj[IP]] / 2.0
+                
+        else:
+            idx = np.arange(self.NH)
+            self.Hamiltonian['H_4'][idx, idx] += Vpot
+        
     def homogenize(self, NCpSC):
         """
         This function homogenizes the Hamiltonian and Overlap matrices.

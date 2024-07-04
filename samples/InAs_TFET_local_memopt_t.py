@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="gpu",
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
@@ -148,9 +148,9 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 4])
-    NCpSC = 5
+    NCpSC = 2
     Vappl = 0.5
-    energy = np.linspace(-20, 15, 7200, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-20, 15, 8, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
@@ -200,6 +200,7 @@ if __name__ == "__main__":
     nb = hamiltonian_obj.Bmin.shape[0]
     #nbc = 2
     nbc = get_number_connected_blocks(hamiltonian_obj.NH, bmin, bmax, rows, columns)
+    nbc = 3
     bmax_mm = bmax[nbc-1:nb:nbc]
     bmin_mm = bmin[0:nb:nbc]
 
@@ -596,39 +597,39 @@ if __name__ == "__main__":
         start_band_edge = time.perf_counter()
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num], ind_ek_cb_l) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[0,iter_num],
-                                                    energy,
-                                                    hamiltonian_obj.Overlap['H_4'],
-                                                    hamiltonian_obj.Hamiltonian['H_4'],
-                                                    sr_rgf,
-                                                    ind_ek_cb_l,
-                                                    bmin,
-                                                    bmax,
-                                                    comm,
-                                                    rank,
-                                                    size,
-                                                    count,
-                                                    disp,
-                                                    'left',
-                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        # (ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num], ind_ek_cb_l) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[0,iter_num],
+        #                                             energy,
+        #                                             hamiltonian_obj.Overlap['H_4'],
+        #                                             hamiltonian_obj.Hamiltonian['H_4'],
+        #                                             sr_rgf,
+        #                                             ind_ek_cb_l,
+        #                                             bmin,
+        #                                             bmax,
+        #                                             comm,
+        #                                             rank,
+        #                                             size,
+        #                                             count,
+        #                                             disp,
+        #                                             'left',
+        #                                             mapping_diag, mapping_upper, mapping_lower, ij2ji)
         
-        (ECmin_vec[1, iter_num + 1], EVmax_vec[1, iter_num], ind_ek_cb_r) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[1,iter_num],
-                                                    energy,
-                                                    hamiltonian_obj.Overlap['H_4'],
-                                                    hamiltonian_obj.Hamiltonian['H_4'],
-                                                    sr_rgf,
-                                                    ind_ek_cb_r,
-                                                    bmin,
-                                                    bmax,
-                                                    comm,
-                                                    rank,
-                                                    size,
-                                                    count,
-                                                    disp,
-                                                    'right',
-                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        # (ECmin_vec[1, iter_num + 1], EVmax_vec[1, iter_num], ind_ek_cb_r) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[1,iter_num],
+        #                                             energy,
+        #                                             hamiltonian_obj.Overlap['H_4'],
+        #                                             hamiltonian_obj.Hamiltonian['H_4'],
+        #                                             sr_rgf,
+        #                                             ind_ek_cb_r,
+        #                                             bmin,
+        #                                             bmax,
+        #                                             comm,
+        #                                             rank,
+        #                                             size,
+        #                                             count,
+        #                                             disp,
+        #                                             'right',
+        #                                             mapping_diag, mapping_upper, mapping_lower, ij2ji)
         
-        EEdge = get_spatial_band_edge(DH, ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num])
+        # EEdge = get_spatial_band_edge(DH, ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num])
         
         comm.Barrier()
         finish_band_edge = time.perf_counter()
@@ -655,13 +656,15 @@ if __name__ == "__main__":
         #                                             count,
         #                                             disp,
         #                                             side='left')
+
+        ECmin_vec[:, iter_num+1] = ECmin_vec[:, iter_num]
         
         if rank == 0:
-            print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
+            print(f"ECmin: {ECmin_vec[0, iter_num + 1]}", flush = True)
         
-        if (iter_num > 0):
-            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
+        # if (iter_num > 0):
+        #     energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+        #     energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
@@ -724,8 +727,7 @@ if __name__ == "__main__":
                 size,
                 homogenize=False,
                 NCpSC=NCpSC,
-                NCpSC=NCpSC,
-                EEdge=EEdge,
+                EEdge=None,
                 peak_DOS_lim = 10.0 * 2 * np.pi,
                 n_atom=n_atom,
                 p_atom=p_atom,

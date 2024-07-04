@@ -949,7 +949,7 @@ def calc_W_pool_mpi_split(
 
     input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    energy_batchsize = 2
+    energy_batchsize = 4
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     for ie in energy_batch:

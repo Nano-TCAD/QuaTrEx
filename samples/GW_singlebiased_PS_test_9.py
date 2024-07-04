@@ -23,7 +23,7 @@ from mpi4py import MPI
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol, get_band_edge_mpi
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge, get_cband_edge_mpi_interpol_2_allblocks
-from quatrex.Poisson.solve_poisson import solve_poisson
+from quatrex.Poisson.solve_poisson import solve_poisson, solve_poisson_gpu
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -135,6 +135,7 @@ if __name__ == "__main__":
                             shape=(nao, nao),
                             dtype=np.complex128).tocsr()
     data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
+    diag_data_shape = np.array([hamiltonian_obj.Hamiltonian['H_4'].shape[0], energy.shape[0]], dtype=np.int32)
 
     # Creating the mask for the energy range of the deleted W elements given by the reference solution
     w_mask = np.ndarray(shape=(energy.shape[0], ), dtype=bool)
@@ -255,13 +256,29 @@ if __name__ == "__main__":
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
+    diag_data_per_rank = diag_data_shape // size
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
     count[:, size - 1] += data_shape % size
+    count_diag = np.repeat(diag_data_per_rank.reshape(-1, 1), size, axis=1)
+    count_diag[:, size - 1] += diag_data_shape % size
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    disp_diag = diag_data_per_rank.reshape(-1, 1) * np.arange(size)
+
+    count_diag = np.zeros((2, size), dtype=np.int32)
+    disp_diag = np.zeros((2, size), dtype=np.int32)
+    for i_rank in range(size):
+        rows_loc = rows[disp[0, i_rank]:disp[0, i_rank] + count[0, i_rank]]
+        columns_loc = columns[disp[0, i_rank]:disp[0, i_rank] + count[0, i_rank]]
+        count_diag[0, i_rank] = np.count_nonzero(rows_loc==columns_loc)
+        count_diag[1, i_rank] = count[1, i_rank]
+        disp_diag[1, i_rank] = disp[1, i_rank]
+        if i_rank < size - 1: 
+            disp_diag[0, i_rank + 1] = disp_diag[0, i_rank] + count_diag[0, i_rank]
+
 
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -302,6 +319,12 @@ if __name__ == "__main__":
     MPI.Datatype.Commit(G2P_S)
     MPI.Datatype.Commit(G2P_S_RIZ)
 
+    # column type of split up in diag nnz
+    DIAG_G2P_S = BASE_TYPE.Create_vector(count_diag[1, rank], 1, diag_data_shape[0])
+    DIAG_G2P_S_RIZ = DIAG_G2P_S.Create_resized(0, base_size)
+    MPI.Datatype.Commit(DIAG_G2P_S)
+    MPI.Datatype.Commit(DIAG_G2P_S_RIZ)
+
     # receive types g2p
     # vector of size of #ranks
     # multi column data type for every rank size #energy not divisible
@@ -312,12 +335,27 @@ if __name__ == "__main__":
         MPI.Datatype.Commit(G2P_R[i])
         MPI.Datatype.Commit(G2P_R_RIZ[i])
 
+    
+    # multi column data type for every rank size #energy not divisible, for diagonal nnz
+    DIAG_G2P_R = np.array([BASE_TYPE.Create_vector(count_diag[0, rank], count_diag[1, i], diag_data_shape[1]) for i in range(size)])
+    DIAG_G2P_R_RIZ = np.empty_like(DIAG_G2P_R)
+    for i in range(size):
+        DIAG_G2P_R_RIZ[i] = DIAG_G2P_R[i].Create_resized(0, base_size)
+        MPI.Datatype.Commit(DIAG_G2P_R[i])
+        MPI.Datatype.Commit(DIAG_G2P_R_RIZ[i])
+
     # send type p2g
     # column type of split up in energy
     P2G_S = BASE_TYPE.Create_vector(count[0, rank], 1, data_shape[1])
     P2G_S_RIZ = P2G_S.Create_resized(0, base_size)
     MPI.Datatype.Commit(P2G_S)
     MPI.Datatype.Commit(P2G_S_RIZ)
+
+    # column type of split up in energy for diagonal nnz
+    DIAG_P2G_S = BASE_TYPE.Create_vector(count_diag[0, rank], 1, diag_data_shape[1])
+    DIAG_P2G_S_RIZ = DIAG_P2G_S.Create_resized(0, base_size)
+    MPI.Datatype.Commit(DIAG_P2G_S)
+    MPI.Datatype.Commit(DIAG_P2G_S_RIZ)
 
     # receive types p2g
     # vector of size of #ranks
@@ -328,6 +366,14 @@ if __name__ == "__main__":
         P2G_R_RIZ[i] = P2G_R[i].Create_resized(0, base_size)
         MPI.Datatype.Commit(P2G_R[i])
         MPI.Datatype.Commit(P2G_R_RIZ[i])
+
+    # multi column data type for every rank size #nnz not divisible, for diagonal nnz
+    DIAG_P2G_R = np.array([BASE_TYPE.Create_vector(count_diag[1, rank], count_diag[0, i], diag_data_shape[0]) for i in range(size)])
+    DIAG_P2G_R_RIZ = np.empty_like(DIAG_P2G_R)
+    for i in range(size):
+        DIAG_P2G_R_RIZ[i] = DIAG_P2G_R[i].Create_resized(0, base_size)
+        MPI.Datatype.Commit(DIAG_P2G_R[i])
+        MPI.Datatype.Commit(DIAG_P2G_R_RIZ[i])
 
     # define helper communication functions-------------------------------------
     # captures all variables from the outside (comm/count/disp/rank/size/types)
@@ -381,6 +427,19 @@ if __name__ == "__main__":
                 np.repeat(BASE_TYPE, size)
             ], [outp, np.repeat([1], size), disp[0, :] * base_size, P2G_R_RIZ])
 
+
+    def alltoall_p2g_diag(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = False):
+        if transpose_net:
+            comm.Alltoallw([inp, count_diag[1, :], disp_diag[1, :] * base_size,
+                            np.repeat(DIAG_P2G_S_RIZ, size)],
+                           [outp, np.repeat([1], size), disp_diag[0, :] * base_size, DIAG_P2G_R_RIZ])
+        else:
+            inp_transposed = np.copy(inp.T, order="C")
+            comm.Alltoallw([
+                inp_transposed, count_diag[1, :] * count_diag[0, rank], disp_diag[1, :] * count_diag[0, rank] * base_size,
+                np.repeat(BASE_TYPE, size)
+            ], [outp, np.repeat([1], size), disp_diag[0, :] * base_size, DIAG_P2G_R_RIZ])
+
     # initialize self energy----------------------------------------------------
     sg_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
     sl_h2g = np.zeros((count[1, rank], no), dtype=np.complex128)
@@ -392,9 +451,9 @@ if __name__ == "__main__":
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
     # phonon self energy. Simplified (but more expensive) a2a initialization----------------------------------
-    sg_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
-    sl_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
-    sr_phn_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
+    sg_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sl_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sr_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
     # # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
@@ -717,9 +776,26 @@ if __name__ == "__main__":
         comm.Barrier()
         start_poisson_solver = time.perf_counter()
 
-        solve_poisson(hamiltonian_obj, n_atom, p_atom, dn_atom, dp_atom, temp, comm, rank)
+        start_solve_step = time.perf_counter()
+
+        solve_poisson_gpu(hamiltonian_obj, n_atom, p_atom, dn_atom, dp_atom, temp, comm, rank)
+
+        comm.Barrier()
+        finish_solve_step = time.perf_counter()
+        if rank == 0:
+            print(f"Solve step time: {finish_solve_step - start_solve_step}", flush = True)
+
+
+        start_update_pot = time.perf_counter()
         hamiltonian_obj.Vatom = hamiltonian_obj.Vpoiss[hamiltonian_obj.poisson_atom_index].reshape((-1,1))
         Vpot_new = hamiltonian_obj.get_atomic_potential()
+
+        finish_update_pot = time.perf_counter()
+        if rank == 0:
+            print(f"Update potential time: {finish_update_pot - start_update_pot}", flush = True)
+
+        start_summing = time.perf_counter()
+
         dEfL_EC -= np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[0]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[0]]) \
                         / (hamiltonian_obj.Bmax[0] - hamiltonian_obj.Bmin[0] + 1)
         dEfR_EC -= np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]]) \
@@ -728,14 +804,28 @@ if __name__ == "__main__":
         hamiltonian_obj.poisson_Vg += np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]]) \
                         / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[0] + 1)
         
+        finish_summing = time.perf_counter()
+        if rank == 0:
+            print(f"Summing time: {finish_summing - start_summing}", flush = True)
+        
+        start_adjust = time.perf_counter()
+        
         hamiltonian_obj.Vpot = -hamiltonian_obj.Vpot
-        hamiltonian_obj.add_potential()
+        hamiltonian_obj.add_potential(orthogonal=True)
 
         hamiltonian_obj.Vpot = Vpot_new
-        hamiltonian_obj.add_potential()
+        hamiltonian_obj.add_potential(orthogonal=True)
+        finish_adjust = time.perf_counter()
+        if rank == 0:
+            print(f"Adjust time: {finish_adjust - start_adjust}", flush = True)
 
+        start_csr_update = time.perf_counter()
         hamiltonian_diag, hamiltonian_upper, hamiltonian_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Hamiltonian['H_4'], bmin - 1, bmax)
 
+
+        finish_csr_update = time.perf_counter()
+        if rank == 0:
+            print(f"CSR update time: {finish_csr_update - start_csr_update}", flush = True)
 
         comm.Barrier()
         finish_poisson_solver = time.perf_counter()
@@ -1039,9 +1129,12 @@ if __name__ == "__main__":
 
     # distribute screened interaction according to h2g step---------------------
         # create local buffers
-        sgphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
-        slphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
-        srphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        sgphn_h2g_buf = np.empty((count[1, rank], hamiltonian_obj.Hamiltonian['H_4'].shape[0]), dtype=np.complex128, order="C")
+        slphn_h2g_buf = np.empty((count[1, rank], hamiltonian_obj.Hamiltonian['H_4'].shape[0]), dtype=np.complex128, order="C")
+        srphn_h2g_buf = np.empty((count[1, rank], hamiltonian_obj.Hamiltonian['H_4'].shape[0]), dtype=np.complex128, order="C")
+        # sgphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        # slphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
+        # srphn_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
         # Extract diagonal bands
         gg_diag_band_T = gg_h2g[:, rows == columns]
@@ -1068,8 +1161,8 @@ if __name__ == "__main__":
         #                                                                     mem_s)
         
         sg_phn_2s, sl_phn_2s, sr_phn_2s = electron_phonon_selfenergy.calc_SE_GF_EPHN_mpi(energy_loc,
-                                                                            gl_g2p,
-                                                                            gg_g2p,
+                                                                            gl_diag_band,
+                                                                            gg_diag_band,
                                                                             EPHN,
                                                                             DPHN,
                                                                             temp,
@@ -1082,17 +1175,27 @@ if __name__ == "__main__":
 
         start_sephn_comm = time.perf_counter()
         # use of all to all w since not divisible
-        alltoall_p2g(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
-        alltoall_p2g(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
-        alltoall_p2g(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
+        # alltoall_p2g(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
+        # alltoall_p2g(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
+        # alltoall_p2g(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
+        sg_phn_2s = np.ascontiguousarray(sg_phn_2s)
+        sl_phn_2s = np.ascontiguousarray(sl_phn_2s)
+        sr_phn_2s = np.ascontiguousarray(sr_phn_2s)
+
+        alltoall_p2g_diag(sg_phn_2s, sgphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g_diag(sl_phn_2s, slphn_h2g_buf, transpose_net=args.net_transpose)
+        alltoall_p2g_diag(sr_phn_2s, srphn_h2g_buf, transpose_net=args.net_transpose)
 
         sg_phn_h2g = (1.0 - mem_s) * sgphn_h2g_buf + mem_s * sg_phn_h2g
         sl_phn_h2g = (1.0 - mem_s) * slphn_h2g_buf + mem_s * sl_phn_h2g
         sr_phn_h2g = (1.0 - mem_s) * srphn_h2g_buf + mem_s * sr_phn_h2g
 
-        sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
-        sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
-        sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
+        # sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
+        # sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
+        # sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
+        sg_phn = np.ascontiguousarray(sg_phn_h2g)
+        sl_phn = np.ascontiguousarray(sl_phn_h2g)
+        sr_phn = np.ascontiguousarray(sr_phn_h2g)
 
         #assert(np.isfortran(sg_phn1) == np.isfortran(sg_phn))
         #print(f"sg_phn new method is fortran order: {np.isfortran(sg_phn)}")
@@ -1274,14 +1377,23 @@ if __name__ == "__main__":
     MPI.Datatype.Free(ROW_RIZ)
     MPI.Datatype.Free(ROW)
     MPI.Datatype.Free(G2P_S_RIZ)
+    MPI.Datatype.Free(DIAG_G2P_S_RIZ)
     MPI.Datatype.Free(G2P_S)
+    MPI.Datatype.Free(DIAG_G2P_S)
     MPI.Datatype.Free(P2G_S_RIZ)
+    MPI.Datatype.Free(DIAG_P2G_S_RIZ)
     MPI.Datatype.Free(P2G_S)
+    MPI.Datatype.Free(DIAG_P2G_S)
     for i in range(size):
         MPI.Datatype.Free(G2P_R_RIZ[i])
         MPI.Datatype.Free(G2P_R[i])
         MPI.Datatype.Free(P2G_R_RIZ[i])
         MPI.Datatype.Free(P2G_R[i])
+
+        MPI.Datatype.Free(DIAG_G2P_R_RIZ[i])
+        MPI.Datatype.Free(DIAG_G2P_R[i])
+        MPI.Datatype.Free(DIAG_P2G_R_RIZ[i])
+        MPI.Datatype.Free(DIAG_P2G_R[i])
 
     # finalize
     MPI.Finalize()

@@ -77,6 +77,7 @@ if __name__ == "__main__":
             print("No gpu available")
             sys.exit(1)
     # print chosen implementation
+
     if args.type in ("cpu"):
         if rank == 0:
             print("Only GPU implementation for this sample", flush=True)
