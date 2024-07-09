@@ -4,7 +4,18 @@
 import concurrent.futures
 from itertools import repeat
 import numpy as np
-import mkl
+
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
+
 import typing
 import numpy.typing as npt
 from scipy import sparse

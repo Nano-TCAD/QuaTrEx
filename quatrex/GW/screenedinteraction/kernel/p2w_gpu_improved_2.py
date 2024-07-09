@@ -4,7 +4,18 @@ from itertools import repeat
 
 import cupy as cp
 import cupyx as cpx
-import mkl
+
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
+
 import numpy as np
 import numpy.typing as npt
 

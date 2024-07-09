@@ -6,7 +6,17 @@ import time
 import numpy as np
 import numpy.typing as npt
 from scipy import sparse
-import mkl
+
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
 
 from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks

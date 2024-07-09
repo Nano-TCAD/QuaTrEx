@@ -7,7 +7,17 @@ import time
 
 import numpy as np
 import numpy.typing as npt
-import mkl
+
+class dummy:
+    def __init__(self):
+        pass
+    def set_num_threads(self, n):
+        pass
+
+try:
+    import mkl
+except (ImportError, ModuleNotFoundError):
+    mkl = dummy()
 
 from quatrex.utils import change_format
 from quatrex.utils.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
