@@ -40,7 +40,7 @@ from quatrex.Poisson.solve_poisson import solve_poisson, solve_poisson_gpu
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
 #from quatrex.GW.screenedinteraction.kernel import p2w_cpu
-from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V_mpi
+from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V_mpi, load_binary_V_mpi
 #from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     poisson_path = os.path.join(solution_path, "13_bis/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
-    solution_path_vh = os.path.join(solution_path, "V.dat")
+    solution_path_vh = os.path.join(solution_path, "coulomb_winface/V_4.bin")
     hamiltonian_path = solution_path
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
@@ -297,6 +297,8 @@ if __name__ == "__main__":
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    vh = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR * 13.60
+    print("on rank" + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -316,8 +318,8 @@ if __name__ == "__main__":
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
-    disp[0, :remainders[0]] += 1
-    disp[1, :remainders[1]] += 1
+    disp[0, 1:(remainders[0]+1)] += 1
+    disp[1, 1:(remainders[1]+1)] += 1
 
     count_diag = np.zeros((2, size), dtype=np.int32)
     disp_diag = np.zeros((2, size), dtype=np.int32)
@@ -325,6 +327,8 @@ if __name__ == "__main__":
         rows_loc = rows[disp[0, i_rank]:disp[0, i_rank] + count[0, i_rank]]
         columns_loc = columns[disp[0, i_rank]:disp[0, i_rank] + count[0, i_rank]]
         count_diag[0, i_rank] = np.count_nonzero(rows_loc==columns_loc)
+        if count_diag[0, i_rank] == 0:
+            print("Rank %d has no diagonal elements" % rank)
         count_diag[1, i_rank] = count[1, i_rank]
         disp_diag[1, i_rank] = disp[1, i_rank]
         if i_rank < size - 1: 
@@ -1176,8 +1180,8 @@ if __name__ == "__main__":
         # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
         # at the beginning of this script. Only diagonal part now!
         sg_phn_2s, sl_phn_2s, sr_phn_2s = electron_phonon_selfenergy.calc_SE_GF_EPHN_mpi(energy_loc,
-                                                                            gg_diag_band,
                                                                             gl_diag_band,
+                                                                            gg_diag_band,
                                                                             EPHN,
                                                                             DPHN,
                                                                             temp,

@@ -471,6 +471,8 @@ def contour_svd_mix(factor: int,
     Rind = np.where(np.abs(RS) > eps_lim)[0]
     # finish = time.time()
     # print('time to calculate svd (1): ', finish - start, flush=True)
+    # if (len(Lind) >= N or len(Rind) >= N):
+    #     print('triggered', flush=True)
 
     if len(Lind) == N or len(Rind) == N:
 

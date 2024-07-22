@@ -1,6 +1,8 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
+import cupy as cp
+from cupy.linalg import eigh
 from scipy.sparse import csc_matrix, diags
 from scipy.linalg import eig
 
@@ -300,6 +302,11 @@ def calc_bandstructure_mpi_interpol_2(E, S, H, E_target, SigmaR_GW_vec, indE, Bm
             S10 = S[-2 * RBsize:-RBsize, -RBsize:].toarray()
 
 
-    Ek = np.sort(np.real(eig(H00 + H01 + H10, b=S00 + S01 + S10, right=False)))
+    #Ek = np.sort(np.real(eig(H00 + H01 + H10, b=S00 + S01 + S10, right=False)))
+
+    # workaround for orthogonal basis on GPU
+    H_GPU = cp.asarray(H00 + H01 + H10)
+    (w, _) = eigh(H_GPU)
+    Ek = w.get()
 
     return Ek
