@@ -256,13 +256,20 @@ if __name__ == "__main__":
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
+    remainders = data_shape % size
 
     # create array with energy size distribution
     count = np.repeat(data_per_rank.reshape(-1, 1), size, axis=1)
-    count[:, size - 1] += data_shape % size
+    #count[:, size - 1] += data_shape % size
+    count[0, :remainders[0]] += 1
+    count[1, :remainders[1]] += 1
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    disp[0, 1:(remainders[0]+1)] += np.arange(remainders[0]) + np.ones((remainders[0],), dtype=np.int32)
+    disp[0, (remainders[0]+1):] += remainders[0]
+    disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
+    disp[1, (remainders[1]+1):] += remainders[1]
 
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]

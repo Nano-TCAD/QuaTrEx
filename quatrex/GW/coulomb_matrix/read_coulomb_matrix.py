@@ -141,9 +141,9 @@ def load_binary_V_mpi(path: str,
             # Reducing the coulomb matrix to the neighbor indices
             if reduce_to_neighbor_indices:
                 V_sparse.eliminate_zeros()
-                V_sparse = V_sparse.toarray()[rows_ni, columns_ni]
-                V_sparse = csc_array((V_sparse, (rows_ni, columns_ni)), shape=(nao, nao))
-                comm.Bcast([V_sparse.data, MPI.DOUBLE_COMPLEX], root=0)
+                V_array = V_sparse.toarray()[rows_ni, columns_ni]
+                V_sparse1 = sparse.coo_array((V_array, (rows_ni, columns_ni)), shape=(nao, nao))
+                comm.Bcast([V_sparse1.data, MPI.DOUBLE_COMPLEX], root=0)
             else:
                 (I, J, V) = find(V_sparse)
                 data_size = I.shape[0]
@@ -152,7 +152,7 @@ def load_binary_V_mpi(path: str,
                 comm.Bcast([J, MPI.INT], root=0)
                 comm.Bcast([V, MPI.DOUBLE_COMPLEX], root=0)
 
-            return V_sparse
+            return V_sparse1.tocsc()
         
         else:
             nao = np.zeros((1, ), dtype=int)
@@ -162,7 +162,7 @@ def load_binary_V_mpi(path: str,
             if reduce_to_neighbor_indices:
                 V_sparse_data = np.empty(rows_ni.shape[0], dtype=np.complex128)
                 comm.Bcast([V_sparse_data, MPI.DOUBLE_COMPLEX], root=0)
-                V_sparse = csc_array((np.array(V_sparse_data), (rows_ni, columns_ni)), shape=(nao, nao))
+                V_sparse = sparse.coo_array((np.array(V_sparse_data), (rows_ni, columns_ni)), shape=(nao, nao))
 
             else:
                 data_size = np.zeros((1, ), dtype=int)
@@ -175,7 +175,7 @@ def load_binary_V_mpi(path: str,
                 comm.Bcast([J, MPI.INT], root=0)
                 comm.Bcast([V, MPI.DOUBLE_COMPLEX], root=0)
                 V_sparse = csc_array((V, (I, J)), shape=(nao, nao))
-            return V_sparse
+            return V_sparse.tocsc()
     
 
 

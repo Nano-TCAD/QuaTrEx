@@ -297,8 +297,28 @@ if __name__ == "__main__":
 
     vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR * 13.60
-    print("on rank" + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
+    vh_bin = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank) / epsR * 13.60
+
+    import matplotlib.pyplot as plt
+    import matplotlib
+
+    # Plotting
+    font = {'family' : 'normal',
+        'weight' : 'normal',
+	'size'   : 30}
+    matplotlib.rc('font', **font)
+
+    fig, ax = plt.subplots(figsize = (13, 8))
+
+    c = ax.pcolormesh(np.real(vh_bin[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
+    plt.savefig("beginning_54_CM_on_rank" + str(rank) + ".png")
+    c = ax.pcolormesh(np.real(vh_bin[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
+    plt.savefig("end_54_CM_on_rank" + str(rank) + ".png")
+
+    sys.exit()
+
+
+    print("on rank " + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -318,8 +338,12 @@ if __name__ == "__main__":
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
-    disp[0, 1:(remainders[0]+1)] += 1
-    disp[1, 1:(remainders[1]+1)] += 1
+    # disp[0, 1:(remainders[0]+1)] += 1
+    # disp[1, 1:(remainders[1]+1)] += 1
+    disp[0, 1:(remainders[0]+1)] += np.arange(remainders[0]) + np.ones((remainders[0],), dtype=np.int32)
+    disp[0, (remainders[0]+1):] += remainders[0]
+    disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
+    disp[1, (remainders[1]+1):] += remainders[1]
 
     count_diag = np.zeros((2, size), dtype=np.int32)
     disp_diag = np.zeros((2, size), dtype=np.int32)
@@ -569,7 +593,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 5
+    max_iter = 10
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -611,6 +635,9 @@ if __name__ == "__main__":
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+
+        if(iter_num == 9):
+            print("Memory pool size: ", cp.get_default_memory_pool().size_bytes(), flush = True)
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
@@ -725,9 +752,9 @@ if __name__ == "__main__":
         if rank == 0:
             print(f"ECmin: {ECmin_vec[0, iter_num + 1]}", flush = True)
         
-        if (iter_num > 0):
-            energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
+        # if (iter_num > 0):
+        #     energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+        #     energy_fr = ECmin_vec[1, iter_num + 1] + dEfR_EC
         # if ((iter_num > 0) and iter_num < 51):
         #     dEf = (dEfL_EC + dEfR_EC) / 2
         #     energy_fl = ECmin_vec[0, iter_num + 1] + dEf
