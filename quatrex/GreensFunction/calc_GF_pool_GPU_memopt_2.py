@@ -74,7 +74,8 @@ def calc_GF_pool_mpi_split_memopt(
     p_atom = None,
     mkl_threads: int = 1,
     worker_num: int = 1,
-    DOS_hr: npt.NDArray[np.float64] = None        
+    DOS_hr: npt.NDArray[np.float64] = None,
+    iter: int = 0        
 ):
     comm.Barrier()
     if rank == 0:
@@ -268,7 +269,23 @@ def calc_GF_pool_mpi_split_memopt(
     if rank == 0:
         time_pre_OBC += time.perf_counter()
         print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
+        time_save = -time.perf_counter()
+
+    # if (rank % 2) == 0 and (iter % 100) < 10:
+    #     path = '/usr/scratch/mont-fort23/dleonard/Si_NW_13cells_54_boundary_blocks/'
+    #     filename = path + "energy_%.4f" % energy[0] + "iter_" + str(iter) + "_rank_" + str(rank) + ".npz"
+    #     np.savez(filename, M00_left = M00_left.get(), M01_left = M01_left.get(), M10_left = M10_left.get(), M00_right = M00_right.get(), M01_right = M01_right.get(), M10_right = M10_right.get())
+
+    comm.Barrier()
+    if rank == 0:
+        time_save += time.perf_counter()
+        print("Time for saving: %.3f s" % time_save, flush = True)
         time_OBC = -time.perf_counter()
+
+    # if rank == 0:
+    #     time_pre_OBC += time.perf_counter()
+    #     print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
+    #     time_OBC = -time.perf_counter()
                 
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
         executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,

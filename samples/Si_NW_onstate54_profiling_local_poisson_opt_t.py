@@ -35,7 +35,7 @@ print("Time for mpi import: %.3f s" % time_mpi, flush = True)
 
 time_quatrex = -time.perf_counter()
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge, get_cband_edge_mpi_interpol_2_allblocks
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_band_edge_mpi_interpol_cb_vb, get_spatial_band_edge, get_cband_edge_mpi_interpol_2_allblocks, get_vband_edge_mpi_interpol_2_allblocks
 from quatrex.Poisson.solve_poisson import solve_poisson, solve_poisson_gpu
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
@@ -299,23 +299,25 @@ if __name__ == "__main__":
     #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
     vh_bin = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank) / epsR * 13.60
 
-    import matplotlib.pyplot as plt
-    import matplotlib
+    # import matplotlib.pyplot as plt
+    # import matplotlib
 
-    # Plotting
-    font = {'family' : 'normal',
-        'weight' : 'normal',
-	'size'   : 30}
-    matplotlib.rc('font', **font)
+    # # Plotting
+    # font = {'family' : 'normal',
+    #     'weight' : 'normal',
+	# 'size'   : 30}
+    # matplotlib.rc('font', **font)
 
-    fig, ax = plt.subplots(figsize = (13, 8))
+    # fig, ax = plt.subplots(figsize = (13, 8))
 
-    c = ax.pcolormesh(np.real(vh_bin[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
-    plt.savefig("beginning_54_CM_on_rank" + str(rank) + ".png")
-    c = ax.pcolormesh(np.real(vh_bin[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
-    plt.savefig("end_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real(vh_bin[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("beginning_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real((-vh_bin[0:416, 0:416]+vh[0:416, 0:416]).toarray()), cmap=plt.cm.coolwarm, vmax = 0.9, vmin = -0.9)
+    # plt.savefig("difference_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real(vh_bin[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("end_54_CM_on_rank" + str(rank) + ".png")
 
-    sys.exit()
+    # sys.exit()
 
 
     print("on rank " + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
@@ -593,7 +595,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 10
+    max_iter = 11
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -636,8 +638,6 @@ if __name__ == "__main__":
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
 
-        if(iter_num == 9):
-            print("Memory pool size: ", cp.get_default_memory_pool().size_bytes(), flush = True)
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
@@ -826,7 +826,8 @@ if __name__ == "__main__":
                 n_atom=n_atom,
                 p_atom=p_atom,
                 mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads)
+                worker_num=gf_worker_threads,
+                iter = iter_num)
 
         comm.Barrier()
         if (iter_num % poisson_solver == 0):
@@ -1288,27 +1289,17 @@ if __name__ == "__main__":
                 np.savetxt(folder + 'nE_' + str(iter_num) + '.dat', nE.view(float))
                 np.savetxt(folder + 'nP_' + str(iter_num) + '.dat', nP.view(float))
 
-        end_iteration = time.perf_counter()
-        if rank == 0:
-            print(f"Time for Iteration: {-start_iteration + end_iteration}", flush = True)
-            print()
+        if(iter_num % 5) == 0:
+            sl_rgf_dev = cp.asarray(sl_h2g)
+            sg_rgf_dev = cp.asarray(sg_h2g)
+            sr_rgf_dev = cp.asarray(sr_h2g)
+            sl_phn_dev = cp.asarray(sl_phn)
+            sg_phn_dev = cp.asarray(sg_phn)
+            sr_phn_dev = cp.asarray(sr_phn)
+            rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+            sr_rgf = cp.asnumpy(sr_rgf_dev)
 
-    if rank == 0:
-        np.savetxt(folder + 'EFL.dat', EFL_vec)
-        np.savetxt(folder + 'EFR.dat', EFR_vec)
-        np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
-        np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
-
-    sl_rgf_dev = cp.asarray(sl_h2g)
-    sg_rgf_dev = cp.asarray(sg_h2g)
-    sr_rgf_dev = cp.asarray(sr_h2g)
-    sl_phn_dev = cp.asarray(sl_phn)
-    sg_phn_dev = cp.asarray(sg_phn)
-    sr_phn_dev = cp.asarray(sr_phn)
-    rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
-    sr_rgf = cp.asnumpy(sr_rgf_dev)
-
-    CB_edge = get_cband_edge_mpi_interpol_2_allblocks(EEdge,
+            CB_edge = get_cband_edge_mpi_interpol_2_allblocks(EEdge,
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
@@ -1322,9 +1313,37 @@ if __name__ == "__main__":
                                                     count,
                                                     disp,
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
+            VB_edge = get_vband_edge_mpi_interpol_2_allblocks(EEdge,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek_cb_l - 1,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
 
-    if rank == 0: 
-        np.savetxt(folder + 'CB_EDGE.dat', CB_edge)
+            
+            if rank == 0: 
+                np.savetxt(folder + 'CB_EDGE.dat', CB_edge)
+                np.savetxt(folder + 'VB_EDGE.dat', VB_edge)
+                np.savetxt(folder + 'Vg_' + str(iter_num) + '.dat', np.array([hamiltonian_obj.poisson_Vg]))
+
+        end_iteration = time.perf_counter()
+        if rank == 0:
+            print(f"Time for Iteration: {-start_iteration + end_iteration}", flush = True)
+            print()
+
+    if rank == 0:
+        np.savetxt(folder + 'EFL.dat', EFL_vec)
+        np.savetxt(folder + 'EFR.dat', EFR_vec)
+        np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
+        np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
 
     # free datatypes------------------------------------------------------------
 
