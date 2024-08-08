@@ -50,7 +50,7 @@ class Hamiltonian:
     Vpot_new = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None):
+    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None, restart_dict = None):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -119,6 +119,8 @@ class Hamiltonian:
                         self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
                 else:
                     self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
+                if restart_dict is not None:
+                    self.Vatom = np.loadtxt(restart_dict['SE_input_path'] + 'Vatom_' + str(restart_dict['iter_num']) + '.dat').reshape((self.NA, -1))
                 self.Vpot = self.get_atomic_potential()
             self.add_potential()
 
@@ -130,8 +132,12 @@ class Hamiltonian:
                 self.grid_index[self.poisson_gate_index] = 0
                 self.grid_index = np.where(self.grid_index)[0]
                 self.poisson_doping = read_file_to_float_ndarray(poisson_path + '/doping.dat').reshape((-1,))
-                self.Vpoiss = np.loadtxt(poisson_path + '/Vpot.dat').reshape((-1,))
-                self.poisson_Vg = np.mean(self.Vpoiss[self.poisson_gate_index[0]])
+                if restart_dict is None:
+                    self.Vpoiss = np.loadtxt(poisson_path + '/Vpot.dat').reshape((-1,))
+                    self.poisson_Vg = np.mean(self.Vpoiss[self.poisson_gate_index[0]])
+                else:
+                    self.Vpoiss = np.loadtxt(restart_dict['SE_input_path'] + 'VPoiss_' + str(restart_dict['iter_num']) + '.dat').reshape((-1,))
+                    self.poisson_Vg = np.loadtxt(restart_dict['SE_input_path'] + 'Vg_' + str(restart_dict['iter_num']) + '.dat') + restart_dict['delta_Vg']
                 self.stiffness_head = np.loadtxt(poisson_path + '/FitMat_dat', max_rows = 3 ,dtype = int)
                 self.stiffness = np.loadtxt(poisson_path + '/FitMat_dat', skiprows = 3)
                 self.stiffness_mat = sparse.csc_matrix((self.stiffness[:, 2], (self.stiffness[:, 0] - 1, self.stiffness[:,1] - 1)), shape =(self.stiffness_head[0], self.poisson_grid.shape[0]))

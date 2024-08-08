@@ -4,6 +4,7 @@ import numpy as np
 import cupy as cp
 import cupyx as cpx
 import numpy as np
+import magmapy as mp
 
 from quatrex.block_tri_solvers.rgf_GF_GPU_combo import (
     _copy_csr_to_gpu,
@@ -96,7 +97,7 @@ def rgf_batched_GPU(
 ):
     # start = time.time()
     # print(f"Starting RGF: {start}")
-
+    queue = mp.create_queue(device_id = 0)
     # Sizes
     batch_size = len(energies)
     num_blocks = len(vh_diag_host)
@@ -313,7 +314,7 @@ def rgf_batched_GPU(
         gpu_identity_batch = cp.repeat(
             gpu_identity[cp.newaxis, :, :], batch_size, axis=0
         )
-        xr[:, 0:NN, 0:NN] = cp.linalg.solve(mrd[:, 0:NN, 0:NN], gpu_identity_batch)
+        xr[:, 0:NN, 0:NN] = mp.linalg.solve(mrd[:, 0:NN, 0:NN], gpu_identity_batch, queue)
     else:
         xr[:, 0:NN, 0:NN] = cp.linalg.inv(mrd[:, 0:NN, 0:NN])
     xr_h = cp.conjugate(xr[:, 0:NN, 0:NN].transpose((0, 2, 1)))
@@ -414,7 +415,7 @@ def rgf_batched_GPU(
             gpu_identity_batch = cp.repeat(
                 gpu_identity[cp.newaxis, :, :], batch_size, axis=0
             )
-            xr[:, 0:NI, 0:NI] = cp.linalg.solve(inv_arg, gpu_identity_batch)
+            xr[:, 0:NI, 0:NI] = mp.linalg.solve(inv_arg, gpu_identity_batch, queue)
         else:
             xr[:, 0:NI, 0:NI] = cp.linalg.inv(inv_arg)
         xr_h = cp.conjugate(xr[:, 0:NI, 0:NI].transpose((0, 2, 1)))

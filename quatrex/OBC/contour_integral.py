@@ -5,6 +5,7 @@ import numpy as np
 try:
     import cupy as cp
     import cupyx as cpx
+    import magmapy as mp
 
     # NOTE: The following kernel is for the original contour integral for double the number of theta points
     compute_theta_kernel = cp.RawKernel(r'''
@@ -308,7 +309,10 @@ def contour_integral_batched_gpu(N: int,  # Reduced block size, i.e., N = block_
                                      N,
                                      np.bool_(side=='L'))
 
-    iT = cp.linalg.inv(T)
+    #iT = cp.linalg.inv(T)
+    #print('Using MAGMA.', flush = True)
+    queue = mp.create_queue(device_id = 0)
+    iT = mp.linalg.inv(T, queue)
 
     P0 = cp.sum(iT*(dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
     P1 = cp.sum(iT*(z*dz_dtheta*dtheta/(2*np.pi*1j)).reshape(len(z), 1, 1), axis=0)
