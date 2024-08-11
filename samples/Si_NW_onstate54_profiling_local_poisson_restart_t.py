@@ -165,7 +165,11 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path)
+
+    restart_dict = {'iter_num': 5,
+                    'SE_input_path': '/usr/scratch/mont-fort23/dleonard/SE_Si_NW_50_test/',
+                    'delta_Vg': 0.0}
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path, restart_dict = restart_dict)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -544,6 +548,52 @@ if __name__ == "__main__":
     sl_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    comm.Barrier()
+    start_restart = time.perf_counter()
+
+    # Restart Section
+    filename_SE_restart = restart_dict['SE_input_path'] + 'SE_' +str(restart_dict['iter_num']) + '_' + str(rank) + '_.dat.npz'
+    npzfiles = np.load(filename_SE_restart)
+    sg_h2g = npzfiles['sge']
+    sl_h2g = npzfiles['sle']
+    sr_h2g = npzfiles['sre']
+
+    sg_phn_h2g = npzfiles['sgp']
+    sl_phn_h2g = npzfiles['slp']
+    sr_phn_h2g = npzfiles['srp']
+
+    sg_phn = np.ascontiguousarray(sg_phn_h2g)
+    sl_phn = np.ascontiguousarray(sl_phn_h2g)
+    sr_phn = np.ascontiguousarray(sr_phn_h2g)
+
+    if(rank == 0):
+        ind_ek_cb_l = np.loadtxt(restart_dict['SE_input_path'] + 'ind_ek_cb_l_' + str(restart_dict['iter_num']) + '.dat').astype(np.int32).item()
+        ind_ek_cb_r = np.loadtxt(restart_dict['SE_input_path'] + 'ind_ek_cb_r_' + str(restart_dict['iter_num']) + '.dat').astype(np.int32).item()
+        ECmin = np.loadtxt(restart_dict['SE_input_path'] + 'ECmin.dat')[restart_dict['iter_num'] + 1, 0]
+
+        comm.Bcast([ECmin, MPI.DOUBLE], root = 0)
+        comm.Bcast([np.array([ind_ek_cb_l]), MPI.INT], root = 0)
+        comm.Bcast([np.array([ind_ek_cb_r]), MPI.INT], root = 0)
+
+    else:
+        ECmin = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        ECmin = ECmin[0]
+
+        ind_ek_cb_l = np.empty(1, dtype = np.float64)
+        comm.Bcast([ind_ek_cb_l, MPI.INT], root = 0)
+        ind_ek_cb_l = ind_ek_cb_l[0]
+
+        ind_ek_cb_r = np.empty(1, dtype = np.float64)
+        comm.Bcast([ind_ek_cb_r, MPI.INT], root = 0)
+        ind_ek_cb_r = ind_ek_cb_r[0]
+
+    comm.Barrier()
+    finish_restart = time.perf_counter()
+    if rank == 0:
+            print(f"Restart-Read-In time: {finish_restart - start_restart}", flush = True)
+
+
     # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -595,15 +645,15 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 11
+    max_iter = 5
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     cond_vec = np.zeros((max_iter,), dtype = float)
-    ind_ek_cb_l = -1
-    ind_ek_cb_r = -1
+    #ind_ek_cb_l = -1
+    #ind_ek_cb_r = -1
 
         # Preprocess
     DH = hamiltonian_obj
@@ -625,7 +675,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/usr/scratch/tortin19/dleonard/attelas_results/Si_NW_50_test/'
+    folder = '/usr/scratch/tortin19/dleonard/attelas_results/Si_NW_50_restart/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -1331,7 +1381,7 @@ if __name__ == "__main__":
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/usr/scratch/mont-fort23/dleonard/SE_Si_NW_50_test/'
+            SE_path = '/usr/scratch/mont-fort23/dleonard/SE_Si_NW_50_restart/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn_h2g, slp = sl_phn_h2g, srp = sr_phn_h2g, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:
@@ -1346,7 +1396,6 @@ if __name__ == "__main__":
                 np.savetxt(folder + 'CB_EDGE.dat', CB_edge)
                 np.savetxt(folder + 'VB_EDGE.dat', VB_edge)
                 np.savetxt(folder + 'Vg_' + str(iter_num) + '.dat', np.array([hamiltonian_obj.poisson_Vg]))
-
 
             comm.Barrier()
             finish_restart = time.perf_counter()
