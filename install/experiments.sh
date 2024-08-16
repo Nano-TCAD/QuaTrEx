@@ -1,4 +1,4 @@
-!#/bin/bash
+#!/bin/bash
 export OMP_NUM_THREADS=1
 export OMP_PROC_BIND=close
 export OMP_PLACES=cores
