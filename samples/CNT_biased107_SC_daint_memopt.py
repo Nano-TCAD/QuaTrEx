@@ -163,7 +163,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix180.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix192.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -249,11 +249,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 6
+    w_worker_threads = 2
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 6
+    gf_worker_threads = 2
 
     # physical parameter -----------
 
@@ -312,6 +312,13 @@ if __name__ == "__main__":
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    # disp[0, 1:(remainders[0]+1)] += 1
+    # disp[1, 1:(remainders[1]+1)] += 1
+    disp[0, 1:(remainders[0]+1)] += np.arange(remainders[0]) + np.ones((remainders[0],), dtype=np.int32)
+    disp[0, (remainders[0]+1):] += remainders[0]
+    disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
+    disp[1, (remainders[1]+1):] += remainders[1]
+
 
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -497,7 +504,7 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.75
+    mem_s = 0.5
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
@@ -528,7 +535,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
+    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB2_epsR1_n192/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -692,6 +699,7 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
+#                peak_DOS_lim = 10.0 * 2 * np.pi,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
