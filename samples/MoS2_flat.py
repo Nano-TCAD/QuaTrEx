@@ -19,6 +19,7 @@ from mpi4py import MPI
 
 main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
+sys.path.append(parent_path)
 
 from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
 from quatrex.GW.polarization.kernel import g2p_cpu
@@ -128,7 +129,7 @@ if __name__ == "__main__":
     Vappl = 0.0
     energy = np.linspace(-10, 15, 1024, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix100.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)

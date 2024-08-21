@@ -32,7 +32,7 @@ def reversal(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
     return out
 
 
-@numba.njit("(c16[:,:],)", parallel=True, cache=True, nogil=True, error_model="numpy")
+#@numba.njit("(c16[:,:],)", parallel=True, cache=True, nogil=True, error_model="numpy")
 def flip(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
     out: npt.NDArray[np.complex128] = np.empty_like(g1)
     no: np.int32 = np.shape(g1)[0]
