@@ -63,6 +63,7 @@ if __name__ == "__main__":
     solution_path_vh = os.path.join(solution_path, "V.dat")
     #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
     hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
+    jiang = True
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -134,7 +135,9 @@ if __name__ == "__main__":
     Vappl = 0.0
     energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    kp_shift = np.array([0, 1/3, 0])
+    if jiang:
+        #kp_shift = np.array([0, 1/3, 0])
+        kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -198,6 +201,9 @@ if __name__ == "__main__":
     ECmin = -0.3187
     # DFT Valence Band Maximum
     EVmax = -2.0026
+    if jiang:
+        ECmin -= 0.9
+        EVmax -= 0.9
     # Fermi Level of Left Contact
     energy_fl = EVmax + (ECmin - EVmax)/2
     # Fermi Level of Right Contact
@@ -394,7 +400,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 20
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
