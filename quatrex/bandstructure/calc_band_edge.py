@@ -16,7 +16,7 @@ import numpy.typing as npt
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.bandstructure.calc_contact_bs import calc_bandstructure, calc_bandstructure_interpol, calc_bandstructure_mpi, calc_bandstructure_mpi_interpol
 from quatrex.bandstructure.calc_contact_bs import calc_bandstructure_mpi_interpol_2
-from quatrex.utils import change_format
+from quatrex.utilss import change_format
 
 
 def get_spatial_band_edge(hamiltonian_obj: OMENHamClass, ECmin, EVmax):

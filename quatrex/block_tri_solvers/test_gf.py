@@ -4,9 +4,9 @@ import numpy as np
 import scipy.sparse as sp
 import time
 
-from quatrex.utils.change_format import (sparse2block_energyhamgen_no_map, sparse2block_energy_forbatchedblockwise,
+from quatrex.utilss.change_format import (sparse2block_energyhamgen_no_map, sparse2block_energy_forbatchedblockwise,
                                          block2sparse_energy_alt)
-from quatrex.utils.matrix_creation import initialize_block_sigma_batched, initialize_block_G_batched
+from quatrex.utilss.matrix_creation import initialize_block_sigma_batched, initialize_block_G_batched
 
 from collections import namedtuple
 csr_matrix = namedtuple('csr_matrix', ['data', 'indices', 'indptr'])

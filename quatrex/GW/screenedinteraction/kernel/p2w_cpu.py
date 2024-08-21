@@ -19,9 +19,9 @@ except (ImportError, ModuleNotFoundError):
 import typing
 import numpy.typing as npt
 from scipy import sparse
-from quatrex.utils import matrix_creation
-from quatrex.utils import change_format
-from quatrex.utils.matrix_creation import homogenize_matrix, homogenize_matrix_Rnosym, \
+from quatrex.utilss import matrix_creation
+from quatrex.utilss import change_format
+from quatrex.utilss.matrix_creation import homogenize_matrix, homogenize_matrix_Rnosym, \
                                             extract_small_matrix_blocks
 from quatrex.block_tri_solvers import rgf_W
 #from quatrex.block_tri_solvers import matrix_inversion_w

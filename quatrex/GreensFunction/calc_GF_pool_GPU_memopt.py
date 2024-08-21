@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError):
 import cupy as cp
 import cupyx as cpx
 
-from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
+from quatrex.utilss.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
 from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 

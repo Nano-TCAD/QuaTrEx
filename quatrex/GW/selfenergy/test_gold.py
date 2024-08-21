@@ -13,12 +13,12 @@ sys.path.append(parent_path)
 
 from GW.selfenergy.kernel import gw2s_cpu
 from GW.gold_solution import read_solution
-from quatrex.utils import utils_gpu
-from quatrex.utils import change_format
+from quatrex.utilss import utils_gpu
+from quatrex.utilss import change_format
 
 if utils_gpu.gpu_avail():
     import cupy as cp
-    from quatrex.utils import linalg_gpu
+    from quatrex.utilss import linalg_gpu
     from GW.selfenergy.kernel import gw2s_gpu
 
 if __name__ == "__main__":

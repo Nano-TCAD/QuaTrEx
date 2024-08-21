@@ -27,7 +27,7 @@ from quatrex.block_tri_solvers import (
 )
 from quatrex.OBC import obc_w_cpu, obc_w_gpu
 from quatrex.OBC.beyn_batched import beyn_new_batched_gpu_3 as beyn_gpu
-from quatrex.utils.matrix_creation import (
+from quatrex.utilss.matrix_creation import (
     extract_small_matrix_blocks,
     homogenize_matrix_Rnosym,
 )

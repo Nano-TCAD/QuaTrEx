@@ -19,7 +19,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     mkl = dummy()
 
-from quatrex.utils.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
+from quatrex.utilss.matrix_creation import initialize_block_G, mat_assembly_fullG, homogenize_matrix, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks
 
 def polarization_preprocess(PL: npt.ArrayLike, PG: npt.ArrayLike, PR: npt.ArrayLike,

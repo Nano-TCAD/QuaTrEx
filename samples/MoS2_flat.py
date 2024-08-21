@@ -29,10 +29,10 @@ from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
 from quatrex.GreensFunction import calc_GF_pool
 from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
-from quatrex.utils import change_format
-from quatrex.utils import utils_gpu
-from quatrex.utils.bsr import bsr_matrix
-from quatrex.utils.matrix_creation import get_number_connected_blocks
+from quatrex.utilss import change_format
+from quatrex.utilss import utils_gpu
+from quatrex.utilss.bsr import bsr_matrix
+from quatrex.utilss.matrix_creation import get_number_connected_blocks
 
 if utils_gpu.gpu_avail():
     try:
@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -124,14 +124,17 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([1, 1])
+    no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
-    energy = np.linspace(-40, 30, 15000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-10, 15, 1024, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix100.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
+    # Modify the Hamiltonian object 
+    hamiltonian_obj.Hamiltonian['H_4'] = hamiltonian_obj.k_Hamiltonian[(0,0,0)]
+    hamiltonian_obj.Overlap['H_4'] = hamiltonian_obj.k_Overlap[(0,0,0)]
     # Extract neighbor indices
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
@@ -182,7 +185,7 @@ if __name__ == "__main__":
     # physical parameter -----------
 
     # Fermi Level of Left Contact
-    energy_fl = -3.85
+    energy_fl = -1.16065
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
@@ -190,7 +193,7 @@ if __name__ == "__main__":
     # relative permittivity
     epsR = 1.0
     # DFT Conduction Band Minimum
-    ECmin = -3.524
+    ECmin = -0.3187
 
     # Phyiscal Constants -----------
 
@@ -216,7 +219,7 @@ if __name__ == "__main__":
 
     # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = hamiltonian_obj.VH
+    vh = hamiltonian_obj.k_Coulomb_matrix([0,0,0])/epsR
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]

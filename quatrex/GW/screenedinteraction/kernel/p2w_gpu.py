@@ -20,9 +20,9 @@ except (ImportError, ModuleNotFoundError):
     mkl = dummy()
 
 import typing
-from quatrex.utils import change_format
-from quatrex.utils import matrix_creation
-from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, \
+from quatrex.utilss import change_format
+from quatrex.utilss import matrix_creation
+from quatrex.utilss.matrix_creation import homogenize_matrix_Rnosym, \
                                             extract_small_matrix_blocks, \
                                             initialize_block_sigma, \
                                             initialize_block_sigma_batched

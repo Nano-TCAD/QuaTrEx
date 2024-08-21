@@ -19,8 +19,8 @@ try:
 except (ImportError, ModuleNotFoundError):
     mkl = dummy()
 
-from quatrex.utils import change_format
-from quatrex.utils.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
+from quatrex.utilss import change_format
+from quatrex.utilss.matrix_creation import initialize_block_G, initialize_block_G_batched, initialize_block_sigma_batched, \
                                             initialize_block_sigma, \
                                             mat_assembly_fullG, \
                                             homogenize_matrix_Rnosym, extract_small_matrix_blocks

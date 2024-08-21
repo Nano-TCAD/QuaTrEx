@@ -17,7 +17,7 @@ import numpy.typing as npt
 import typing
 from scipy import sparse
 
-from quatrex.utils.bsr import bsr_matrix
+from quatrex.utilss.bsr import bsr_matrix
 
 
 def dense2block(
