@@ -32,7 +32,7 @@ from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
 from quatrex.GreensFunction import calc_GF_pool
-from quatrex.OMEN_structure_matrices import OMENHamClass
+from quatrex.OMEN_structure_matrices import Mat_assembler
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.utilss import change_format
 from quatrex.utilss import utils_gpu
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/OMEN2/"
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -133,13 +133,11 @@ if __name__ == "__main__":
     Vappl = 0.0
     energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
+    hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
     # Modify the Hamiltonian object 
-    hamiltonian_obj.Hamiltonian['H_4'] = hamiltonian_obj.k_Hamiltonian[(0,0,0)]
-    hamiltonian_obj.Overlap['H_4'] = hamiltonian_obj.k_Overlap[(0,0,0)]
     # Extract neighbor indices
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
