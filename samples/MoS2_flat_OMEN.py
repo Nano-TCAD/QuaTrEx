@@ -21,7 +21,11 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
 sys.path.append(parent_path)
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
+from quatrex.bandstructure.calc_band_edge import (
+    get_band_edge_mpi, 
+    get_band_edge_mpi_interpol, 
+    get_cv_band_edges_mpi_interpol
+)
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
 from quatrex.GW.gold_solution import read_solution
@@ -127,7 +131,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
-    energy = np.linspace(-17.5, 7.5, 2048, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -185,16 +189,18 @@ if __name__ == "__main__":
 
     # physical parameter -----------
 
-    # Fermi Level of Left Contact
-    energy_fl = -1.16065
-    # Fermi Level of Right Contact
-    energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
     epsR = 1.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
+    # DFT Valence Band Maximum
+    EVmax = -2.0026
+    # Fermi Level of Left Contact
+    energy_fl = EVmax + (ECmin - EVmax)/2
+    # Fermi Level of Right Contact
+    energy_fr = energy_fl - Vappl
 
     # Phyiscal Constants -----------
 
@@ -389,6 +395,7 @@ if __name__ == "__main__":
 
     max_iter = 100
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
+    EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     ind_ek_plus = -1
@@ -477,7 +484,7 @@ if __name__ == "__main__":
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
         sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
         sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1], ind_ek_plus = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
+        ECmin_vec[iter_num+1], EVmax_vec[iter_num+1], ind_ek_plus = get_cv_band_edges_mpi_interpol(ECmin_vec[iter_num]-0.05,
                                                             energy,
                                                             hamiltonian_obj.Overlap['H_4'], 
                                                             hamiltonian_obj.Hamiltonian['H_4'], 
@@ -512,12 +519,15 @@ if __name__ == "__main__":
         #                                                     count, 
         #                                                     disp, 
         #                                                     side = 'left')
-        if iter_num == 0:
-            dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
-            dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
-        else:
-            energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-            energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+        # if iter_num == 0:
+        #     dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
+        #     dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
+        # else:
+        #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
+        #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+
+        energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
+        energy_fr = energy_fl - Vappl
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
