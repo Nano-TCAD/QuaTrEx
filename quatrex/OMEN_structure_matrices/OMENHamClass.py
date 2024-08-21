@@ -513,8 +513,8 @@ import matplotlib.pylab as plt
 from scipy.interpolate import griddata
 
 # TODO: Import only what is needed. If many methods are needed, import the whole module under a shorter name.
-from quatrex.utilities.read_utils import *
-from quatrex.utilities.matrix_creation import extract_small_matrix_blocks, homogenize_matrix_Rnosym
+from quatrex.utilss.read_utils import *
+from quatrex.utilss.matrix_creation import extract_small_matrix_blocks, homogenize_matrix_Rnosym
 
 
 def matlab_fread(fid, nelements, dtype):

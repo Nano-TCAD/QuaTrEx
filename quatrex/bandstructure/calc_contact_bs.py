@@ -1,8 +1,8 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
-import cupy as cp
-from cupy.linalg import eigh
+#import cupy as cp
+#from cupy.linalg import eigh
 from scipy.sparse import csc_matrix, diags
 from scipy.linalg import eig
 
