@@ -134,7 +134,8 @@ if __name__ == "__main__":
     Vappl = 0.0
     energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    kp_shift = np.array([0, 0, 0])
+    kp_shift = np.array([0, 1/3, 0])
+    kp_band_gap = tuple(kp_shift)
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -226,7 +227,7 @@ if __name__ == "__main__":
 
     # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = hamiltonian_obj.k_Coulomb_matrix[(0,0,0)]/epsR
+    vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]/epsR
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
