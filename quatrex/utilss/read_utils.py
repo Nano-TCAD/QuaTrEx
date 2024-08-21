@@ -47,3 +47,25 @@ def read_file_to_float_ndarray(filename, delimiter=" "):
     data = np.array(data, dtype='float64')
 
     return (data)
+
+def read_lattice_dat(path):
+    """
+    Reads the lattice_dat file and returns the lattice vectors and the number of atoms
+
+    Args:
+        filename (str): Name of the file to be read
+
+    Returns:
+        lattice_vectors (np.ndarray): Lattice vectors
+        num_atoms (int): Number of atoms
+    """
+
+    filename = path + '/lattice_dat'
+    print(filename)
+    
+    with open(filename, 'r') as f:
+        lines = f.readlines()
+        lattice_vectors = np.array([list(map(float, line.split())) for line in lines[2:5]])
+        num_atoms = int(lines[0].split()[0])
+
+    return lattice_vectors*0.1, num_atoms  # Convert to nm

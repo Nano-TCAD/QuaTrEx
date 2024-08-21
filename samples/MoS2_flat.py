@@ -127,7 +127,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
-    energy = np.linspace(-10, 15, 1024, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-17.5, 7.5, 2048, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -220,7 +220,7 @@ if __name__ == "__main__":
 
     # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = hamiltonian_obj.k_Coulomb_matrix([0,0,0])/epsR
+    vh = hamiltonian_obj.k_Coulomb_matrix[(0,0,0)]/epsR
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -391,6 +391,7 @@ if __name__ == "__main__":
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
+    ind_ek_plus = -1
 
     # Communication buffers
     # G2P
@@ -474,7 +475,9 @@ if __name__ == "__main__":
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        ECmin_vec[iter_num+1] = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
+        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
+        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
+        ECmin_vec[iter_num+1], ind_ek_plus = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
                                                             energy,
                                                             hamiltonian_obj.Overlap['H_4'], 
                                                             hamiltonian_obj.Hamiltonian['H_4'], 
@@ -482,6 +485,7 @@ if __name__ == "__main__":
                                                             sl_h2g_vec,
                                                             sg_h2g_vec,
                                                             sr_ephn_h2g_vec, 
+                                                            ind_ek_plus,
                                                             rows, 
                                                             columns, 
                                                             bmin, 
@@ -535,6 +539,9 @@ if __name__ == "__main__":
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
                                                                 sg_h2g_vec,
+                                                                sr_ephn_h2g_vec,
+                                                                sl_ephn_h2g_vec,
+                                                                sg_ephn_h2g_vec,
                                                                 energy_fl,
                                                                 energy_fr,
                                                                 temp,
@@ -658,11 +665,10 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined(
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
-                                                gr_g2p,
                                                 gl_transposed_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
@@ -694,7 +700,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
+        #alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -901,8 +907,8 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p, gr_g2p,
-                                                                           wg_gw2s, wl_gw2s, wr_gw2s,
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
                                                                            wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
@@ -998,16 +1004,16 @@ if __name__ == "__main__":
             print()
 
         if rank == 0:
-            np.savetxt(parent_path + folder + 'E.dat', energy)
-            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
-            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+            np.savetxt(scratch_path + 'E.dat', energy)
+            np.savetxt(scratch_path + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(scratch_path + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+            np.savetxt(scratch_path + 'EFL.dat', EFL_vec)
+            np.savetxt(scratch_path + 'EFR.dat', EFR_vec)
+            np.savetxt(scratch_path + 'ECmin.dat', ECmin_vec)
     if rank == 0:
-        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
-        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
-        np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
+        np.savetxt(scratch_path + 'EFL.dat', EFL_vec)
+        np.savetxt(scratch_path + 'EFR.dat', EFR_vec)
+        np.savetxt(scratch_path + 'ECmin.dat', ECmin_vec)
 
     # free datatypes------------------------------------------------------------
 
