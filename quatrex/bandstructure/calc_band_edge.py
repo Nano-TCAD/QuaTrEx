@@ -1,7 +1,7 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
 import numpy as np
-from scipy.sparse import csc_array
+from scipy.sparse import csc_array, csr_array
 
 import mpi4py
 
@@ -256,6 +256,146 @@ def get_band_edge_mpi_interpol(ECmin_DFT,
         ECmin = ECmin[0]
     # returning the band edge and the index of the band edge in the eigenvalue problem
     return ECmin, ind_ek_plus
+
+
+def get_cv_band_edges_mpi_interpol(ECmin_DFT: float,
+                               E: npt.NDArray[np.float64],
+                               S: csr_array,
+                               H: csr_array,
+                               SigmaR_GW: npt.NDArray[csr_array],
+                               SigmaL_GW: npt.NDArray[csr_array],
+                               SigmaG_GW: npt.NDArray[csr_array],
+                               SigmaR_PHN: npt.NDArray[csr_array],
+                               ind_ek_plus: int,
+                               rows: npt.NDArray[np.int64],
+                               columns: npt.NDArray[np.int64],
+                               Bmin: npt.NDArray[np.int64],
+                               Bmax: npt.NDArray[np.int64],
+                               comm: MPI.Comm,
+                               rank: int,
+                               size: int,
+                               count: npt.NDArray[np.int32],
+                               disp: npt.NDArray[np.int32],
+                               side: str = 'left'):
+    """
+    This function calculates the conduction and valence band edge of the system.
+
+    Parameters
+    ----------
+    ECmin_DFT : float
+        DFT conduction band minimum
+    E : npt.NDArray[np.float64]
+        Energy vector
+    S : scipy.sparse.csr_array
+        Overlap matrix
+    H : scipy.sparse.csr_array
+        Hamiltonian matrix
+    SigmaR_GW : npt.NDArray[csr_array]
+        Local SigmaR_GW vector in sparse format
+    SigmaL_GW : npt.NDArray[csr_array]
+        Local SigmaL_GW vector in sparse format
+    SigmaG_GW : npt.NDArray[csr_array]
+        Local SigmaG_GW vector in sparse format
+    SigmaR_PHN : npt.NDArray[csr_array]
+        Local SigmaR_PHN vector in sparse format
+    ind_ek_plus : int
+        Index of the band edge in the eigenvalue problem
+    rows : npt.NDArray[np.int64]
+        Row indices of the sparse matrices
+    columns : npt.NDArray[np.int64]
+        Column indices of the sparse matrices
+    Bmin : npt.NDArray[np.int64]
+        Minimum indices of the blocks
+    Bmax : npt.NDArray[np.int64]
+        Maximum indices of the blocks
+    comm : MPI.Comm
+        MPI communicator
+    rank : int
+        Rank of the current process
+    size : int
+        Number of processes
+    count : npt.NDArray[np.int32]
+        Number of elements per rank
+    disp : npt.NDArray[np.int32]
+        Displacement of elements per rank
+    side : str, optional
+        Side of the band edge, by default 'left'
+    Returns
+    -------
+    ECmin : float
+        Conduction band minimum
+    ind_ek_plus : int
+        Index of the band edge in the eigenvalue problem
+
+    """
+    nao = Bmax[-1] + 1
+    SigmaR_GW_vec = np.ndarray((2, ), dtype=object)
+    SigmaL_GW_vec = np.ndarray((2, ), dtype=object)
+    SigmaG_GW_vec = np.ndarray((2, ), dtype=object)
+    SigmaR_PHN_vec = np.ndarray((2, ), dtype=object)
+
+    # First step: get a first estimate of the CB edge
+    (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(
+        ECmin_DFT, E, comm, rank, size, count, disp)
+    send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec,
+                                   send_rank_1, send_rank_2, min_ind, rank, comm, disp,  SigmaR_GW, SigmaL_GW, SigmaG_GW, SigmaR_PHN, rows, columns, nao)
+    if rank == 0:
+        Ek = calc_bandstructure_mpi_interpol(
+            E, S, H, ECmin_DFT, SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec, min_ind, Bmin, Bmax, side)
+        if (ind_ek_plus == -1):
+            ind_ek_plus = np.argmin(np.abs(Ek - ECmin_DFT))
+        ECmin_int = Ek[ind_ek_plus]
+        EVmax_int = Ek[ind_ek_plus - 1]
+        # broadcasting the band edge (this is actually not necessary, but it is done for consistency), non-root nodes will not use it in get_send_ranks_interpol
+        comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
+        comm.Bcast([EVmax_int, MPI.DOUBLE], root=0)
+    else:
+        ECmin_int = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin_int, MPI.DOUBLE], root=0)
+        ECmin_int = ECmin_int[0]
+        EVmax_int = np.empty(1, dtype=np.float64)
+        comm.Bcast([EVmax_int, MPI.DOUBLE], root=0)
+        EVmax_int = EVmax_int[0]
+
+    # Second step: refine the position of the CB edge
+    (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(
+        ECmin_int, E, comm, rank, size, count, disp)
+    send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec,
+                                   send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, SigmaL_GW, SigmaG_GW, SigmaR_PHN, rows, columns, nao)
+    if rank == 0:
+        Ek = calc_bandstructure_mpi_interpol(
+            E, S, H, ECmin_int, SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec, min_ind, Bmin, Bmax, side)
+        # ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
+        ECmin = Ek[ind_ek_plus]
+        # broadcasting the band edge
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        print("send rank 1 was: " + str(send_rank_1) + " send rank 2 was: " +
+              str(send_rank_2) + " new band edge: " + str(ECmin))
+    else:
+        ECmin = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        ECmin = ECmin[0]
+
+    # Third step: refine the position of the VB edge
+    (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(
+        EVmax_int, E, comm, rank, size, count, disp)
+    send_sigmas_GWRGL_PHNR_to_root(SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec,
+                                   send_rank_1, send_rank_2, min_ind, rank, comm, disp, SigmaR_GW, SigmaL_GW, SigmaG_GW, SigmaR_PHN, rows, columns, nao)
+    if rank == 0:
+        Ek = calc_bandstructure_mpi_interpol(
+            E, S, H, ECmin_int, SigmaR_GW_vec, SigmaL_GW_vec, SigmaG_GW_vec, SigmaR_PHN_vec, min_ind, Bmin, Bmax, side)
+        # ind_ek_plus = np.argmin(np.abs(Ek - ECmin_int))
+        EVmax = Ek[ind_ek_plus - 1]
+        # broadcasting the band edge
+        comm.Bcast([EVmax, MPI.DOUBLE], root=0)
+        print("send rank 1 was: " + str(send_rank_1) + " send rank 2 was: " +
+              str(send_rank_2) + " new band edge: " + str(EVmax))
+    else:
+        EVmax = np.empty(1, dtype=np.float64)
+        comm.Bcast([EVmax, MPI.DOUBLE], root=0)
+        EVmax = EVmax[0]
+    # returning the band edges and the index of the band edge in the eigenvalue problem
+    return ECmin, EVmax, ind_ek_plus
 
 
 def get_band_edge_mpi_interpol_2(ECmin_DFT,
