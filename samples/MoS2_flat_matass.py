@@ -61,9 +61,9 @@ if __name__ == "__main__":
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    jiang = True
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
+    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
+    jiang = False
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -133,10 +133,12 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
-    energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 7.5, 4096, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     if jiang:
         #kp_shift = np.array([0, 1/3, 0])
+        kp_shift = np.array([0, 0, 0])
+    else:
         kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
@@ -196,7 +198,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 2.0
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
     # DFT Valence Band Maximum
@@ -400,7 +402,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 20
+    max_iter = 60
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
