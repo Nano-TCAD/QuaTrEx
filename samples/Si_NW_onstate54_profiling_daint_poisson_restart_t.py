@@ -153,19 +153,23 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
+    #energy = np.linspace(-40, 35, 24, endpoint = True, dtype = float) # Energy Vector
     energy = np.linspace(-40, 35, 7200, endpoint = True, dtype = float) # Energy Vector
-    #energy = np.linspace(-6, 1, 36, endpoint=True, dtype=float)  # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([50.0e-3])  # Phonon energy
-    DPHN = np.array([5.0e-3])  # Electron-phonon coupling
+    DPHN = np.array([0.0e-3])  # Electron-phonon coupling
 
     comm.Barrier()
     if rank == 0:
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path)
+
+    restart_dict = {'iter_num': 125,
+                    'SE_input_path': '/scratch/snx3000/ldeuschl/results/SE_restart/Si_NW_7200_54_GVG_realV_eps5_ps1_mems50_SE_energybal_bias_minus_0_15/',
+                    'delta_Vg': 0.00}
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path, restart_dict = restart_dict)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -252,11 +256,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 6
+    w_worker_threads = 4
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 6
+    gf_worker_threads = 4
 
     # physical parameter -----------
 
@@ -297,8 +301,30 @@ if __name__ == "__main__":
 
     #vh = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR * 13.60
-    #print("on rank" + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
+    vh = load_binary_V_mpi(solution_path_vh, rows, columns, comm, rank) / epsR * 13.60
+
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+
+    # # Plotting
+    # font = {'family' : 'normal',
+    #     'weight' : 'normal',
+	# 'size'   : 30}
+    # matplotlib.rc('font', **font)
+
+    # fig, ax = plt.subplots(figsize = (13, 8))
+
+    # c = ax.pcolormesh(np.real(vh_bin[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("beginning_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real((-vh_bin[0:416, 0:416]+vh[0:416, 0:416]).toarray()), cmap=plt.cm.coolwarm, vmax = 0.9, vmin = -0.9)
+    # plt.savefig("difference_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real(vh_bin[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("end_54_CM_on_rank" + str(rank) + ".png")
+
+    # sys.exit()
+
+
+    #print("on rank " + str(rank) + "norm is: " + str(np.real(np.sum(vh))), flush = True)
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -318,6 +344,8 @@ if __name__ == "__main__":
 
     # displacements in nnz/energy
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
+    # disp[0, 1:(remainders[0]+1)] += 1
+    # disp[1, 1:(remainders[1]+1)] += 1
     disp[0, 1:(remainders[0]+1)] += np.arange(remainders[0]) + np.ones((remainders[0],), dtype=np.int32)
     disp[0, (remainders[0]+1):] += remainders[0]
     disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
@@ -330,7 +358,7 @@ if __name__ == "__main__":
         columns_loc = columns[disp[0, i_rank]:disp[0, i_rank] + count[0, i_rank]]
         count_diag[0, i_rank] = np.count_nonzero(rows_loc==columns_loc)
         if count_diag[0, i_rank] == 0:
-            print("Rank %d has no diagonal elements" % rank, flush = True)
+            print("Rank %d has no diagonal elements" % rank)
         count_diag[1, i_rank] = count[1, i_rank]
         disp_diag[1, i_rank] = disp[1, i_rank]
         if i_rank < size - 1: 
@@ -520,6 +548,52 @@ if __name__ == "__main__":
     sl_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn_h2g = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+    comm.Barrier()
+    start_restart = time.perf_counter()
+
+    # Restart Section
+    filename_SE_restart = restart_dict['SE_input_path'] + 'SE_' +str(restart_dict['iter_num']) + '_' + str(rank) + '_.dat.npz'
+    npzfiles = np.load(filename_SE_restart)
+    sg_h2g = npzfiles['sge']
+    sl_h2g = npzfiles['sle']
+    sr_h2g = npzfiles['sre']
+
+    sg_phn_h2g = npzfiles['sgp']
+    sl_phn_h2g = npzfiles['slp']
+    sr_phn_h2g = npzfiles['srp']
+
+    sg_phn = np.ascontiguousarray(sg_phn_h2g)
+    sl_phn = np.ascontiguousarray(sl_phn_h2g)
+    sr_phn = np.ascontiguousarray(sr_phn_h2g)
+
+    if(rank == 0):
+        ind_ek_cb_l = np.loadtxt(restart_dict['SE_input_path'] + 'ind_ek_cb_l_' + str(restart_dict['iter_num']) + '.dat').astype(np.int32).item()
+        ind_ek_cb_r = np.loadtxt(restart_dict['SE_input_path'] + 'ind_ek_cb_r_' + str(restart_dict['iter_num']) + '.dat').astype(np.int32).item()
+        ECmin = np.loadtxt(restart_dict['SE_input_path'] + 'ECmin.dat')[restart_dict['iter_num'] + 1, 0]
+
+        comm.Bcast([ECmin, MPI.DOUBLE], root = 0)
+        comm.Bcast([np.array([ind_ek_cb_l]), MPI.INT], root = 0)
+        comm.Bcast([np.array([ind_ek_cb_r]), MPI.INT], root = 0)
+
+    else:
+        ECmin = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        ECmin = ECmin[0]
+
+        ind_ek_cb_l = np.empty(1, dtype = np.float64)
+        comm.Bcast([ind_ek_cb_l, MPI.INT], root = 0)
+        ind_ek_cb_l = ind_ek_cb_l[0]
+
+        ind_ek_cb_r = np.empty(1, dtype = np.float64)
+        comm.Bcast([ind_ek_cb_r, MPI.INT], root = 0)
+        ind_ek_cb_r = ind_ek_cb_r[0]
+
+    comm.Barrier()
+    finish_restart = time.perf_counter()
+    if rank == 0:
+            print(f"Restart-Read-In time: {finish_restart - start_restart}", flush = True)
+
+
     # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -566,22 +640,22 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.50
+    mem_s = 0.00
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 450
+    max_iter = 200
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     cond_vec = np.zeros((max_iter,), dtype = float)
-    ind_ek_cb_l = -1
-    ind_ek_cb_r = -1
+    #ind_ek_cb_l = -1
+    #ind_ek_cb_r = -1
 
-    # Preprocess
+        # Preprocess
     DH = hamiltonian_obj
     from quatrex.block_tri_solvers import rgf_GF_GPU_combo
 
@@ -601,8 +675,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/restart_Si_NW_7200_54_GVG_realV_eps5_ps1_mems50/'
-    #folder = '/scratch/snx3000/ldeuschl/results/Si_NW_50_test/'
+    folder = '/scratch/snx3000/ldeuschl/results/energybal_restart_minus_0_15_Si_NW_7200_54_GVG_realV_eps5_ps1_mems50/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -614,6 +687,7 @@ if __name__ == "__main__":
         # density of states
         dos = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
         dosw = cpx.zeros_pinned(shape=(ne, nb // nbc), dtype=np.complex128)
+
 
         # occupied states/unoccupied states
         nE = cpx.zeros_pinned(shape=(ne, nb), dtype=np.complex128)
@@ -828,8 +902,8 @@ if __name__ == "__main__":
             dEfR_EC -= np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[-1] - 1:hamiltonian_obj.Bmax[-1]]) \
                             / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[-1] + 1)
             
-            hamiltonian_obj.poisson_Vg += np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]]) \
-                            / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[0] + 1)
+            # hamiltonian_obj.poisson_Vg += np.sum(-hamiltonian_obj.Vpot[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]] + Vpot_new[hamiltonian_obj.Bmin[0] - 1:hamiltonian_obj.Bmax[-1]]) \
+            #                 / (hamiltonian_obj.Bmax[-1] - hamiltonian_obj.Bmin[0] + 1)
             
             hamiltonian_obj.Vpot = -hamiltonian_obj.Vpot
             hamiltonian_obj.add_potential(orthogonal = True)
@@ -880,8 +954,7 @@ if __name__ == "__main__":
                 n_atom=n_atom,
                 p_atom=p_atom,
                 mkl_threads=gf_mkl_threads,
-                worker_num=gf_worker_threads,
-                iter = 58)
+                worker_num=gf_worker_threads)
 
             if rank ==0:
                 print("Green's function calculated", flush = True)
@@ -1041,8 +1114,7 @@ if __name__ == "__main__":
                 NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads,
-                compute_mode = 1,
-                iter = iter_num
+                compute_mode = 1
             )
 
         # transform from block format to 2D format-----------------------------------
@@ -1216,11 +1288,6 @@ if __name__ == "__main__":
         sl_phn_h2g = (1.0 - mem_s) * slphn_h2g_buf + mem_s * sl_phn_h2g
         sr_phn_h2g = (1.0 - mem_s) * srphn_h2g_buf + mem_s * sr_phn_h2g
 
-
-        # sg_phn = np.ascontiguousarray(sg_phn_h2g[:, rows == columns])
-        # sl_phn = np.ascontiguousarray(sl_phn_h2g[:, rows == columns])
-        # sr_phn = np.ascontiguousarray(sr_phn_h2g[:, rows == columns])
-
         sg_phn = np.ascontiguousarray(sg_phn_h2g)
         sl_phn = np.ascontiguousarray(sl_phn_h2g)
         sr_phn = np.ascontiguousarray(sr_phn_h2g)
@@ -1272,8 +1339,7 @@ if __name__ == "__main__":
                 np.savetxt(folder + 'nE_' + str(iter_num) + '.dat', nE.view(float))
                 np.savetxt(folder + 'nP_' + str(iter_num) + '.dat', nP.view(float))
 
-            
-        if(iter_num % 112) == 0:
+        if(iter_num % 25) == 0:
             sl_rgf_dev = cp.asarray(sl_h2g)
             sg_rgf_dev = cp.asarray(sg_h2g)
             sr_rgf_dev = cp.asarray(sr_h2g)
@@ -1311,11 +1377,11 @@ if __name__ == "__main__":
                                                     count,
                                                     disp,
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
-
+            
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/scratch/snx3000/ldeuschl/results/SE_restart/Si_NW_7200_54_GVG_realV_eps5_ps1_mems50_SE_bias_0_0/'
+            SE_path = '/scratch/snx3000/ldeuschl/results/SE_restart/Si_NW_7200_54_GVG_realV_eps5_ps1_mems50_SE_energybal_bias_minus_0_15/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn_h2g, slp = sl_phn_h2g, srp = sr_phn_h2g, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:
@@ -1336,8 +1402,6 @@ if __name__ == "__main__":
             if rank == 0:
                 print(f"Restart-Write-out time: {finish_restart - start_restart}", flush = True)
 
-
-
         end_iteration = time.perf_counter()
         if rank == 0:
             print(f"Time for Iteration: {-start_iteration + end_iteration}", flush = True)
@@ -1348,8 +1412,6 @@ if __name__ == "__main__":
         np.savetxt(folder + 'EFR.dat', EFR_vec)
         np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
         np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
-
-
 
     # free datatypes------------------------------------------------------------
 
