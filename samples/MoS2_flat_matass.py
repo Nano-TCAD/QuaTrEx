@@ -61,9 +61,9 @@ if __name__ == "__main__":
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    jiang = False
+    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
+    jiang = True
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
-    energy = np.linspace(-15, 7.5, 4096, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     if jiang:
         #kp_shift = np.array([0, 1/3, 0])
@@ -674,6 +674,17 @@ if __name__ == "__main__":
             comm0_time += time.perf_counter()
             print(f"    Comm-0 time: {comm0_time:.3f} s", flush=True)
             g2p_time = -time.perf_counter()
+        
+        # save a diagonal element of the Green's function for experimental purposes
+        if iter_num == 0 and False:
+            mid_el = bmax[-1] // 2
+            ind_in_nnz_list = np.where(rows==columns)[0][mid_el]
+            if count[1, rank] < ind_in_nnz_list < count[1, rank] + count[0, rank]:
+                save_ind = ind_in_nnz_list - count[1, rank]
+                assert np.allclose(gl_g2p[save_ind], gl_transposed_g2p[save_ind])
+                print(f"Saving diagonal element of Green's function", flush=True)
+                np.save(scratch_path + f'gg_diag_{rank}.npy', gg_g2p[save_ind])
+                np.save(scratch_path + f'gl_diag_{rank}.npy', gl_g2p[save_ind])
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("gpu"):
