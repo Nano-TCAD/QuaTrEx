@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
+    scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32_newlayer/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="gpu",
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
@@ -152,8 +152,8 @@ if __name__ == "__main__":
     # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
     trace_factor = 2
     Vappl = 0.2
-    energy = np.linspace(-35, 25, 10200, endpoint = True, dtype = float) # Energy Vector
-    #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
+    #energy = np.linspace(-35, 25, 4, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-4.695, 1.391, 60, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -301,6 +301,22 @@ if __name__ == "__main__":
 
      # calculation of data distribution per rank---------------------------------
 
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+    # # Plotting
+    # font = {'family' : 'normal',
+    #     'weight' : 'normal',
+	# 'size'   : 30}
+    # matplotlib.rc('font', **font)
+
+    # fig, ax = plt.subplots(figsize = (13, 8))
+
+    # c = ax.pcolormesh(np.real(vh[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("CNT_beginning_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real(vh[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("CNT_end_54_CM_on_rank" + str(rank) + ".png")
+
+    # sys.exit()
     # split nnz/energy per rank
     data_per_rank = data_shape // size
     remainders = data_shape % size
@@ -318,8 +334,6 @@ if __name__ == "__main__":
     disp[0, (remainders[0]+1):] += remainders[0]
     disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
     disp[1, (remainders[1]+1):] += remainders[1]
-
-
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
     Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -504,12 +518,12 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.5
+    mem_s = 0.75
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 700
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -535,7 +549,8 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB2_epsR1_n192/'
+    #folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
+    folder = '/usr/scratch/tortin19/dleonard/attelas_results/CNT_107_test/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -699,7 +714,6 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
-#                peak_DOS_lim = 10.0 * 2 * np.pi,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
@@ -1097,6 +1111,37 @@ if __name__ == "__main__":
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
             np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+
+        if(iter_num % 5) == 0:
+            sl_rgf_dev = cp.asarray(sl_h2g)
+            sg_rgf_dev = cp.asarray(sg_h2g)
+            sr_rgf_dev = cp.asarray(sr_h2g)
+            sl_phn_dev = cp.asarray(sl_phn)
+            sg_phn_dev = cp.asarray(sg_phn)
+            sr_phn_dev = cp.asarray(sr_phn)
+            rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+            sr_rgf = cp.asnumpy(sr_rgf_dev)
+            
+            comm.Barrier()
+            start_restart = time.perf_counter()
+
+            SE_path = '/usr/scratch/mont-fort23/dleonard/SE_CNT_107_test/'
+            filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
+            np.savez(filename_SE, sgp = sg_phn, slp = sl_phn, srp = sr_phn_dev, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
+            if rank == 0:
+                np.savetxt(SE_path + 'rows', rows)
+                np.savetxt(SE_path + 'columns', columns)
+                np.savetxt(SE_path + 'ECmin.dat', ECmin_vec)
+                np.savetxt(SE_path + 'EFL.dat', EFL_vec)
+                np.savetxt(SE_path + 'EFR.dat', EFR_vec)
+                np.savetxt(SE_path + 'ind_ek_' + str(iter_num) + '.dat', np.array([ind_ek]))
+            
+
+
+            comm.Barrier()
+            finish_restart = time.perf_counter()
+            if rank == 0:
+                print(f"Restart-Write-out time: {finish_restart - start_restart}", flush = True)
 
         end_iteration = time.perf_counter()
         if rank == 0:

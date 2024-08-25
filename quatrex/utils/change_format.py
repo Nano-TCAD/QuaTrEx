@@ -930,3 +930,33 @@ def find_idx_rt(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32],
     reversal = np.roll(np.flip(np.arange(2 * ne), axis=0), 1, axis=0)
 
     return np.ix_(idx_transposed, reversal)
+
+def find_subarray_rowcolindices(rows: npt.NDArray[np.int32], columns: npt.NDArray[np.int32], rows_old: npt.NDArray[np.int32], columns_old: npt.NDArray[np.int32], nao: np.int32) -> npt.NDArray[np.int32]:
+
+    """Finds and returns the indices of the old subarrays in the new array
+
+    Args:
+        rows (npt.NDArray[np.int32]): row index of non-zero values of a matrix
+        columns (npt.NDArray[np.int32]): column index of non-zero values of a matrix
+        rows_old (npt.NDArray[np.int32]): row index of non-zero values of a matrix
+        columns_old (npt.NDArray[np.int32]): column index of non-zero values of a matrix
+
+    Returns:
+        npt.NDArray[np.int32]: Array with mapping on where to find the elements in the old array in the new array
+    """
+
+    assert np.array_equal(np.shape(rows), np.shape(columns))
+    assert np.array_equal(np.shape(rows_old), np.shape(columns_old))
+
+    # get column major 1D index
+    colmaj_idx_restart = columns_old * nao + rows_old
+    colmaj_idx = columns * nao + rows
+
+    # Warning: Assuming that coljmaj_idx and colmaj_idx_restart are sorted and cojmaj_dix_restart is a subset of colmaj_idx
+    subarray_indices = np.searchsorted(colmaj_idx, colmaj_idx_restart)
+
+    assert np.allclose(rows[subarray_indices], rows_old)
+    assert np.allclose(columns[subarray_indices], columns_old)
+
+    return subarray_indices
+

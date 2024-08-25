@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/scratch/snx3000/ldeuschl/quat_inputs/"
+    scratch_path = "/usr/scratch/mont-fort17/dleonard/GW_paper/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32_newlayer/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
-    parser.add_argument("-t", "--type", default="cpu",
+    parser.add_argument("-t", "--type", default="gpu",
                     choices=["cpu", "gpu"], required=False)
     parser.add_argument("-nt", "--net_transpose", default=False,
                     type=bool, required=False)
@@ -152,8 +152,8 @@ if __name__ == "__main__":
     # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
     trace_factor = 2
     Vappl = 0.2
-    energy = np.linspace(-35, 25, 10200, endpoint = True, dtype = float) # Energy Vector
-    #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
+    #energy = np.linspace(-35, 25, 4, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-4.695, 1.391, 60, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -163,7 +163,11 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix192.dat', homogenize = True)
+    restart_dict = {'iter_num' : 5,
+                    'SE_input_path': '/usr/scratch/mont-fort23/dleonard/SE_CNT_107_restart/'
+                    }
+
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix214.dat', homogenize = True)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -301,6 +305,22 @@ if __name__ == "__main__":
 
      # calculation of data distribution per rank---------------------------------
 
+    # import matplotlib.pyplot as plt
+    # import matplotlib
+    # # Plotting
+    # font = {'family' : 'normal',
+    #     'weight' : 'normal',
+	# 'size'   : 30}
+    # matplotlib.rc('font', **font)
+
+    # fig, ax = plt.subplots(figsize = (13, 8))
+
+    # c = ax.pcolormesh(np.real(vh[0:416, 0:416].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("CNT_beginning_54_CM_on_rank" + str(rank) + ".png")
+    # c = ax.pcolormesh(np.real(vh[-416:, -416:].toarray()), cmap=plt.cm.RdPu)
+    # plt.savefig("CNT_end_54_CM_on_rank" + str(rank) + ".png")
+
+    # sys.exit()
     # split nnz/energy per rank
     data_per_rank = data_shape // size
     remainders = data_shape % size
@@ -318,8 +338,6 @@ if __name__ == "__main__":
     disp[0, (remainders[0]+1):] += remainders[0]
     disp[1, 1:(remainders[1]+1)] += np.arange(remainders[1]) + np.ones((remainders[1],), dtype=np.int32)
     disp[1, (remainders[1]+1):] += remainders[1]
-
-
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
     Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -458,6 +476,94 @@ if __name__ == "__main__":
     sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
     sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
 
+
+    comm.Barrier()
+    start_restart = time.perf_counter()
+
+    # Restart Section
+    if(rank == 0):
+        ind_ek = np.loadtxt(restart_dict['SE_input_path'] + 'ind_ek_' + str(restart_dict['iter_num']) + '.dat').astype(np.int32).item()
+        ECmin = np.loadtxt(restart_dict['SE_input_path'] + 'ECmin.dat')[restart_dict['iter_num'] + 1]
+        energy_fl = np.loadtxt(restart_dict['SE_input_path'] + 'EFL.dat')[restart_dict['iter_num'] + 1]
+        energy_fr = np.loadtxt(restart_dict['SE_input_path'] + 'EFR.dat')[restart_dict['iter_num'] + 1]
+        rows_restart = np.loadtxt(restart_dict['SE_input_path'] + 'rows').astype(np.int32)
+        columns_restart = np.loadtxt(restart_dict['SE_input_path'] + 'columns').astype(np.int32)
+
+        #print(rows_restart[0:10], flush = True)
+
+        nnz_restart = rows_restart.shape[0]
+
+        #print(nnz_restart, flush = True)
+        #print(nnz_restart.dtype, flush = True)
+        #print(ind_ek.dtype, flush = True)
+
+
+        comm.Bcast([ECmin, MPI.DOUBLE], root = 0)
+        comm.Bcast([energy_fl, MPI.DOUBLE], root = 0)
+        comm.Bcast([energy_fr, MPI.DOUBLE], root = 0)
+        comm.Bcast([np.array([ind_ek]), MPI.INT], root = 0)
+        comm.Bcast([np.array([nnz_restart]), MPI.INT], root = 0)
+        comm.Bcast([rows_restart, MPI.INT], root = 0)
+        comm.Bcast([columns_restart, MPI.INT], root = 0)
+
+    else:
+        ECmin = np.empty(1, dtype=np.float64)
+        comm.Bcast([ECmin, MPI.DOUBLE], root=0)
+        ECmin = ECmin[0]
+
+        energy_fl = np.empty(1, dtype=np.float64)
+        comm.Bcast([energy_fl, MPI.DOUBLE], root=0)
+        energy_fl = energy_fl[0]
+
+        energy_fr = np.empty(1, dtype=np.float64)
+        comm.Bcast([energy_fr, MPI.DOUBLE], root=0)
+        energy_fr = energy_fr[0]
+
+        ind_ek = np.empty(1, dtype = np.float64)
+        comm.Bcast([ind_ek, MPI.INT], root = 0)
+        ind_ek = ind_ek[0]
+
+        nnz_restart = np.empty(1, dtype = np.int64)
+        comm.Bcast([nnz_restart, MPI.INT], root = 0)
+        nnz_restart = nnz_restart[0]
+
+        rows_restart = np.empty(nnz_restart, dtype = np.int32)
+        comm.Bcast([rows_restart, MPI.INT], root = 0)
+
+        columns_restart = np.empty(nnz_restart, dtype = np.int32)
+        comm.Bcast([columns_restart, MPI.INT], root = 0)
+
+
+
+    filename_SE_restart = restart_dict['SE_input_path'] + 'SE_' +str(restart_dict['iter_num']) + '_' + str(rank) + '_.dat.npz'
+    npzfiles = np.load(filename_SE_restart)
+    sg_h2g_restart = npzfiles['sge']
+    sl_h2g_restart = npzfiles['sle']
+    sr_h2g_restart = npzfiles['sre']
+
+    subarray_indices = change_format.find_subarray_rowcolindices(rows, columns, rows_restart, columns_restart, nao)
+
+
+    sg_h2g[:, subarray_indices] = sg_h2g_restart
+    sl_h2g[:, subarray_indices] = sl_h2g_restart
+    sr_h2g[:, subarray_indices] = sr_h2g_restart
+
+    sg_phn = npzfiles['sgp']
+    sl_phn = npzfiles['slp']
+    sr_phn = npzfiles['srp']
+
+    # sg_h2g[rows_restart, columns_restart] = sg_h2g_restart
+    # sl_h2g[rows_restart, columns_restart] = sl_h2g_restart
+    # sr_h2g[rows_restart, columns_restart] = sr_h2g_restart
+
+
+
+
+    comm.Barrier()
+    finish_restart = time.perf_counter()
+    if rank == 0:
+            print(f"Restart-Read-In time: {finish_restart - start_restart}", flush = True)
+
     # Transform the hamiltonian to a block tri-diagonal format
     # if args.type in ("gpu"):
     #     nb = hamiltonian_obj.Bmin.shape[0]
@@ -504,12 +610,12 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.5
+    mem_s = 0.75
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 700
+    max_iter = 5
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -535,7 +641,8 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB2_epsR1_n192/'
+    #folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
+    folder = '/usr/scratch/tortin19/dleonard/attelas_results/CNT_107_restart_expand/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -699,7 +806,6 @@ if __name__ == "__main__":
                 rank,
                 size,
                 homogenize=False,
-#                peak_DOS_lim = 10.0 * 2 * np.pi,
                 NCpSC=NCpSC,
                 mkl_threads=gf_mkl_threads,
                 worker_num=gf_worker_threads,
@@ -1097,6 +1203,37 @@ if __name__ == "__main__":
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
             np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+
+        if(iter_num % 5) == 0:
+            sl_rgf_dev = cp.asarray(sl_h2g)
+            sg_rgf_dev = cp.asarray(sg_h2g)
+            sr_rgf_dev = cp.asarray(sr_h2g)
+            sl_phn_dev = cp.asarray(sl_phn)
+            sg_phn_dev = cp.asarray(sg_phn)
+            sr_phn_dev = cp.asarray(sr_phn)
+            rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
+            sr_rgf = cp.asnumpy(sr_rgf_dev)
+            
+            comm.Barrier()
+            start_restart = time.perf_counter()
+
+            SE_path = '/usr/scratch/mont-fort23/dleonard/SE_CNT_107_restart_expand/'
+            filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
+            np.savez(filename_SE, sgp = sg_phn, slp = sl_phn, srp = sr_phn_dev, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
+            if rank == 0:
+                np.savetxt(SE_path + 'rows', rows)
+                np.savetxt(SE_path + 'columns', columns)
+                np.savetxt(SE_path + 'ECmin.dat', ECmin_vec)
+                np.savetxt(SE_path + 'EFL.dat', EFL_vec)
+                np.savetxt(SE_path + 'EFR.dat', EFR_vec)
+                np.savetxt(SE_path + 'ind_ek_' + str(iter_num) + '.dat', np.array([ind_ek]))
+            
+
+
+            comm.Barrier()
+            finish_restart = time.perf_counter()
+            if rank == 0:
+                print(f"Restart-Write-out time: {finish_restart - start_restart}", flush = True)
 
         end_iteration = time.perf_counter()
         if rank == 0:
