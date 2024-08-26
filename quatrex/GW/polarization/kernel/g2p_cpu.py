@@ -352,6 +352,102 @@ def g2p_fft_mpi_cpu_inlined_nopr(
     return (pg[:, :ne], pl[:, :ne])
 
 
+@numba.njit("(c16, i4, c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+def g2p_fixed_conv_cpu(
+    pre_factor: np.complex128, num_energies_below_fermi: np.uint32, 
+    gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculates the polarization with convolution on the cpu(see file description). 
+        The Green's function and a mapping to the transposed indices are needed.
+        Is njit compiled
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end
+        num_energies_below_fermi (np.uint32): number of energies below the fermi level
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ] 
+    """
+
+    # energy
+    ne: np.int32 = gg.shape[1]
+    # nnz
+    no: np.int32 = gg.shape[0]
+
+    # create polarization arrays
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+
+    # evaluate convolution
+    for ij in numba.prange(no):
+        for e in numba.prange(ne):
+            tmpg = 0
+            tmpl = 0
+            for ep in range(max(0, e-num_energies_below_fermi),        #------------------------
+                            min(ne, e+ne-num_energies_below_fermi)):   #--Can prob be improved--
+                epm = ep - e + num_energies_below_fermi                #------------------------
+                tmpg -= pre_factor * gg[ij, ep] * np.conjugate(gl[ij, epm])
+                tmpl -= pre_factor * gl[ij, ep] * np.conjugate(gg[ij, epm])
+            pg[ij, e] = tmpg
+            pl[ij, e] = tmpl
+
+    return (pg, pl)
+
+
+def g2p_fixed_conv_hilb_cpu(
+    pre_factor: np.complex128, num_energies_below_fermi: np.uint32, 
+    hilbert: object,
+    gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculates the polarization with convolution on the cpu(see file description). 
+        The Green's function and a mapping to the transposed indices are needed.
+        Is njit compiled
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end
+        num_energies_below_fermi (np.uint32): number of energies below the fermi level
+        hilbert (object): Hilbert transform object
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ] 
+    """
+
+    # energy
+    ne: np.int32 = gg.shape[1]
+    # nnz
+    no: np.int32 = gg.shape[0]
+
+    # create polarization arrays
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+
+    # evaluate convolution
+    for e in numba.prange(ne):
+        tmpg = np.zeros(no, dtype=np.complex128)
+        tmpl = np.zeros(no, dtype=np.complex128)
+        for ep in range(max(0, e-num_energies_below_fermi),        #------------------------
+                        min(ne, e+ne-num_energies_below_fermi)):   #--Can prob be improved--
+            epm = ep - e + num_energies_below_fermi                #------------------------
+            tmpg -= pre_factor * gg[:, ep] * np.conjugate(gl[:, epm])
+            tmpl -= pre_factor * gl[:, ep] * np.conjugate(gg[:, epm])
+        pg[:, e] = tmpg
+        pl[:, e] = tmpl
+    pr = hilbert(1j*(pg - pl).T).T
+
+    return (pg, pl, pr)
+
+
 # @numba.njit("(c16, i4[:], c16[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 # def g2p_conv_cpu(
 #     pre_factor: np.complex128, ij2ji: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128],
