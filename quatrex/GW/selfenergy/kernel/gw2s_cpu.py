@@ -15,6 +15,162 @@ sys.path.append(parent_path)
 from quatrex.utilss import linalg_cpu
 
 
+def gw2s_fock_part(
+    pre_factor: np.complex128,
+    gl: npt.NDArray[np.complex128],
+    vh1D: npt.NDArray[np.float64]
+) -> npt.NDArray[np.complex128]:
+    """Calculate the Fock part of the self energy.
+
+    Parameters
+    ----------
+    pre_factor : np.complex128
+        pre_factor, multiplied at the end
+    gl : npt.NDArray[np.complex128]
+        Lesser Green's Function, (#orbital, #energy)
+    vh1D : npt.NDArray[np.float64]
+        1D Hartree potential, (#energy)
+    
+    Returns
+    -------
+    npt.NDArray[np.complex128]
+        Fock part of the self energy, (#orbital, #energy)
+    """
+    ne = gl.shape[1]
+
+    gl_density = np.imag(np.sum(gl, axis=1))
+    rSigmaRF = -np.multiply(gl_density, vh1D).reshape((gl_density.shape[0], 1)) * np.abs(pre_factor)
+    rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
+
+    return rSigmaRF
+
+
+@numba.njit("(c16, i4, c16[:,:], c16[:,:], c16[:,:], c16[:,:], f8[:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+def gw2s_fixed_conv_cpu(
+    pre_factor: np.complex128,
+    num_energies_below_fermi: int,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128],
+    wl: npt.NDArray[np.complex128],
+    energy: npt.NDArray[np.float64]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with the convolution on the cpu.
+
+    Parameters
+    ----------
+    pre_factor : np.complex128
+        pre_factor, multiplied at the end
+    gg : npt.NDArray[np.complex128]
+        Greater Green's Function, (#orbital, #energy)
+    gl : npt.NDArray[np.complex128]
+        Lesser Green's Function, (#orbital, #energy)
+    wg : npt.NDArray[np.complex128]
+        Greater screened interaction, (#orbital, #energy)
+    wl : npt.NDArray[np.complex128]
+        Lesser screened interaction, (#orbital, #energy)
+    
+    Returns
+    -------
+    typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]
+        Greater self energy, Lesser self energy, Retarded self energy
+    """
+    # number of energy points and nnz
+    ne = gg.shape[1]
+    no = gg.shape[0]
+
+    # create the self energy arrays
+    sg = np.empty_like(gg)
+    sl = np.empty_like(gl)
+
+    # evaluate the convolution
+    for ij in numba.prange(no):
+        for e in numba.prange(ne):
+            tmp_sg = 0
+            tmp_sl = 0
+            for ep in numba.prange(max(0, num_energies_below_fermi+e-ne+1),
+                            min(ne, num_energies_below_fermi+e+1)):
+                epm = e - ep + num_energies_below_fermi
+                tmp_sg += pre_factor * gg[ij, ep] * wg[ij, epm]
+                tmp_sl += pre_factor * gl[ij, ep] * wl[ij, epm]
+            sg[ij, e] = tmp_sg
+            sl[ij, e] = tmp_sl
+    
+    # Using the principal value integral method for yet another sigma_r
+    NE = len(energy)
+    ne2 = 2*NE
+    dE = energy[1] - energy[0]
+    Evec = np.linspace(0, (NE-1)*dE, NE)
+
+    one_div_by_E = np.concatenate((-1.0/(Evec[-1:0:-1]), np.array([0.0], dtype = np.float64), 1/(Evec[1:]), np.array([1/(Evec[-1] + dE)], dtype = np.float64)))
+    one_div_by_E_t = np.fft.fft(one_div_by_E)
+
+    SGmSL_t = linalg_cpu.fft_numba(1j*np.imag(sg-sl), ne2, no)
+    rSigmaR_t = np.multiply(SGmSL_t, one_div_by_E_t)
+    rSigmaR = linalg_cpu.scalarmul_ifft_cutoff(rSigmaR_t, pre_factor*2, ne2, no)[:, ne-1:-1].astype(np.complex128)
+
+    sr_principale = rSigmaR/2 + (1j*np.imag(sg-sl)/2).astype(np.complex128)
+
+    return (sg, sl, sr_principale)
+
+
+def gw2s_fixed_conv_hilbert_cpu(
+    pre_factor: np.complex128,
+    num_energies_below_fermi: int,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128],
+    wl: npt.NDArray[np.complex128],
+    hilbert: npt.NDArray[np.complex128]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with the convolution on the cpu.
+
+    Parameters
+    ----------
+    pre_factor : np.complex128
+        pre_factor, multiplied at the end
+    gg : npt.NDArray[np.complex128]
+        Greater Green's Function, (#orbital, #energy)
+    gl : npt.NDArray[np.complex128]
+        Lesser Green's Function, (#orbital, #energy)
+    wg : npt.NDArray[np.complex128]
+        Greater screened interaction, (#orbital, #energy)
+    wl : npt.NDArray[np.complex128]
+        Lesser screened interaction, (#orbital, #energy)
+    
+    Returns
+    -------
+    typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]
+        Greater self energy, Lesser self energy, Retarded self energy
+    """
+    # number of energy points and nnz
+    ne = gg.shape[1]
+    no = gg.shape[0]
+
+    # create the self energy arrays
+    sg = np.empty_like(gg)
+    sl = np.empty_like(gl)
+
+    # evaluate the convolution
+    for e in range(ne):
+        tmp_sg = np.zeros(no, dtype = np.complex128)
+        tmp_sl = np.zeros(no, dtype = np.complex128)
+        for ep in range(max(0, num_energies_below_fermi+e-ne+1),
+                        min(ne, num_energies_below_fermi+e+1)):
+            epm = e - ep + num_energies_below_fermi
+            tmp_sg += pre_factor * gg[:, ep] * wg[:, epm]
+            tmp_sl += pre_factor * gl[:, ep] * wl[:, epm]
+        sg[:, e] = tmp_sg
+        sl[:, e] = tmp_sl
+    
+    # Using Hilbert transform for sigma_r
+    sr_hilbert = hilbert(1j*(sg - sl).T).T
+
+    sr = sr_hilbert
+
+    return (sg, sl, sr)
+
+
 # def gw2s_fft_cpu(
 #     pre_factor: np.complex128,
 #     ij2ji: npt.NDArray[np.int32],
