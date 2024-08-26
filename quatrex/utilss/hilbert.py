@@ -16,7 +16,7 @@ class HilbertTransform:
                  blocksize=500):
         """Analytic Hilbert transformation using linear interpolation.
 
-        Quatrex transform (for Polarization)::
+        Quatrex transform (for no symmetry)::
 
            oo
           /           1

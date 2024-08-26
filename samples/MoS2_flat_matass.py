@@ -38,6 +38,7 @@ from quatrex.utilss import change_format
 from quatrex.utilss import utils_gpu
 from quatrex.utilss.bsr import bsr_matrix
 from quatrex.utilss.matrix_creation import get_number_connected_blocks
+from quatrex.utilss.hilbert import HilbertTransform
 
 if utils_gpu.gpu_avail():
     try:
@@ -62,8 +63,8 @@ if __name__ == "__main__":
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
     #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    jiang = True
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
+    jiang = False
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -134,6 +135,7 @@ if __name__ == "__main__":
     no_orb = np.array([3, 3, 5, 3, 3, 5])
     Vappl = 0.0
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
+    hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     if jiang:
         #kp_shift = np.array([0, 1/3, 0])
@@ -211,7 +213,7 @@ if __name__ == "__main__":
     # Fermi Level of Right Contact
     energy_fr = energy_fl - Vappl
 
-    # Phyiscal Constants -----------
+    # Physical Constants -----------
 
     e   = 1.6022e-19
     eps0 = 8.854e-12
@@ -538,6 +540,8 @@ if __name__ == "__main__":
         energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
         energy_fr = energy_fl - Vappl
 
+        num_energies_below_fl = sum(energy < energy_fl)
+
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
 
@@ -695,11 +699,16 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
+            # pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
+            #                                     pre_factor,
+            #                                     gg_g2p,
+            #                                     gl_g2p,
+            #                                     gl_transposed_g2p)
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fixed_conv_cpu(
                                                 pre_factor,
+                                                num_energies_below_fl,
                                                 gg_g2p,
-                                                gl_g2p,
-                                                gl_transposed_g2p)
+                                                gl_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -937,9 +946,27 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
-                                                                           wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+            vh1d_sliced = vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]]
+            sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gg_g2p, vh1d_sliced)
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
+                                                                     num_energies_below_fl,
+                                                                     gg_g2p,
+                                                                     gl_g2p,
+                                                                     wg_gw2s,
+                                                                     wl_gw2s,
+                                                                     energy, 
+                                                                     )
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_hilbert_cpu(-pre_factor/2,
+            #                                                          num_energies_below_fl,
+            #                                                          gg_g2p,
+            #                                                          gl_g2p,
+            #                                                          wg_gw2s,
+            #                                                          wl_gw2s,
+            #                                                          hilbert
+            #                                                          )
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+            #                                                                wg_gw2s, wl_gw2s,
+            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,
@@ -963,6 +990,7 @@ if __name__ == "__main__":
             #                                                     wg_transposed_gw2s,
             #                                                     wl_transposed_gw2s
             #                                                     )
+            sr_gw2s += sr_fock
         else:
             raise ValueError("Argument error, input type not possible")
         
