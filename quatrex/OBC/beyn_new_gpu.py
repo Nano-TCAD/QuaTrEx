@@ -514,6 +514,91 @@ def contour_svd_mix(factor: int,
 
     return LP1, LV, LS, LW, RP1, RV, RS, RW
 
+def contour_gpusvd_mix(factor: int,
+                    matrix_blocks: np.ndarray,
+                    big_N: int,
+                    R: float,
+                    side: str,
+                    YL=None,
+                    YR=None,
+                    eps_lim=1e-8):
+
+    N = big_N // factor
+
+    if factor * N < 100:
+        NM = round(3 * N / 4)
+    else:
+        NM = round(N / 2)
+    NM = factor * NM
+
+    if YL is None:
+        YL = cp.random.rand(N, NM)
+    if YR is None:
+        YR = cp.random.rand(NM, N)
+    
+    P0C1, P1C1 = ci_batched_gpu_internal(N, factor, matrix_blocks, 3.0, 1.0, side)
+    P0C2, P1C2 = ci_batched_gpu_internal(N, factor, matrix_blocks, 1.0 / R, -1.0, side)
+
+    P0 = P0C1 + P0C2
+    P1 = P1C1 + P1C2
+
+    LP0 = P0@YL
+    LP1 = P1@YL
+
+    RP0 = YR@P0
+    RP1 = YR@P1
+
+    # start = time.time()
+    LV, LS, LW = cp.linalg.svd(LP0, full_matrices=False)
+    Lind = cp.where(cp.abs(LS) > eps_lim)[0]
+
+    RV, RS, RW = cp.linalg.svd(RP0, full_matrices=False)
+    Rind = cp.where(cp.abs(RS) > eps_lim)[0]
+    # finish = time.time()
+    # print('time to calculate svd (1): ', finish - start, flush=True)
+    # if (len(Lind) >= N or len(Rind) >= N):
+    #     print('triggered', flush=True)
+
+    if len(Lind) == N or len(Rind) == N:
+
+        P0C3, P1C3 = ci_batched_gpu_internal(N, factor, matrix_blocks, 10.0 / R, -1.0, side)
+
+        P0 = P0C1 + P0C3
+        P1 = P1C1 + P1C3
+
+        LP0 = P0@YL
+        LP1 = P1@YL
+
+        RP0 = YR@P0
+        RP1 = YR@P1
+
+        # start = time.time()
+        LV, LS, LW = cp.linalg.svd(LP0, full_matrices=False)
+        Lind = cp.where(cp.abs(LS) > eps_lim)[0]
+
+        RV, RS, RW = cp.linalg.svd(RP0.get(), full_matrices=False)
+        Rind = cp.where(cp.abs(RS) > eps_lim)[0]
+        # finish = time.time()
+        # print('time to calculate svd (2): ', finish - start, flush=True)
+    
+    # start = time.time()
+    if len(Lind) == 0:
+        Lind = [0]
+    if len(Rind) == 0:
+        Rind = [0]
+
+    LV = LV[:, Lind]
+    LS = cp.diag(LS[Lind])
+    LW = LW[Lind, :].T.conj()
+
+    RV = RV[:, Rind]
+    RS = cp.diag(RS[Rind])
+    RW = RW[Rind, :].T.conj()
+    # finish = time.time()
+    # print('time to prepare eig: ', finish - start, flush=True)
+
+    return LP1, LV, LS, LW, RP1, RV, RS, RW
+
 
 def contour_svd_mix_2(factor: int,
                     matrix_blocks: np.ndarray,
@@ -608,6 +693,18 @@ def beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1):
 
     Llambda, Lu = eig(LV.T.conj() @ LP1.get() @ LW @ np.linalg.inv(LS))
     Rlambda, Ru = eig(np.linalg.inv(RS) @ RV.T.conj() @ RP1.get() @ RW)
+
+    Llambda = cp.asarray(Llambda)
+    Lu = cp.asarray(Lu)
+    Rlambda = cp.asarray(Rlambda)
+    Ru = cp.asarray(Ru)
+
+    return Lu, Llambda, Ru, Rlambda
+
+def beyn_eig_mix_alt(LV, LS, LW, LP1, RV, RS, RW, RP1):
+
+    Llambda, Lu = eig((LV.T.conj() @ LP1 @ LW @ cp.linalg.inv(LS)).get())
+    Rlambda, Ru = eig((cp.linalg.inv(RS) @ RV.T.conj() @ RP1 @ RW).get())
 
     Llambda = cp.asarray(Llambda)
     Lu = cp.asarray(Lu)
@@ -1093,7 +1190,8 @@ def beyn_new_mix(factor: int,
     # LP0, LP1, RP0, RP1 = contour_integral_batched_gpu(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR)
     # LV, LS, LW, RV, RS, RW = beyn_svd_gpu(LP0, RP0, eps_lim=1e-8)
     # start = time.time()
-    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    #LP1, LV, LS, LW, RP1, RV, RS, RW = contour_svd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
+    LP1, LV, LS, LW, RP1, RV, RS, RW = contour_gpusvd_mix(factor, matrix_blocks, M00.shape[0], R, type, YL=YL, YR=YR, eps_lim=1e-8)
     # finish = time.time()
     # print('time to compute contour_svd_mix: ', finish - start, flush=True)
 
@@ -1104,11 +1202,14 @@ def beyn_new_mix(factor: int,
         return Sigma, gR, cond, min_dEk
 
     # start = time.time()
-    Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    # Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    #Lu, Llambda, Ru, Rlambda = beyn_eig_mix(LV, LS, LW, LP1, RV, RS, RW, RP1)
+    Lu, Llambda, Ru, Rlambda = beyn_eig_mix_alt(LV, LS, LW, LP1, RV, RS, RW, RP1)
     # finish = time.time()
     # print('time to compute beyn_eig_mix: ', finish - start, flush=True)
     # start = time.time()
-    kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
+    #kL, kR, phiL, phiR = beyn_phi_gpu(cp.asarray(LV), Lu, Llambda, cp.asarray(RW), Ru, Rlambda, factor, type)
+    kL, kR, phiL, phiR = beyn_phi_gpu(LV, Lu, Llambda, RW, Ru, Rlambda, factor, type)
     # finish = time.time()
     # print('time to compute beyn_phi_gpu: ', finish - start, flush=True)
     # start = time.time()
@@ -1117,6 +1218,8 @@ def beyn_new_mix(factor: int,
     # print('time to compute beyn_sigma_gpu: ', finish - start, flush=True)
 
     return Sigma, gR, cond, min_dEk
+
+
 
 
 def beyn_new_mix_2(factor: int,
