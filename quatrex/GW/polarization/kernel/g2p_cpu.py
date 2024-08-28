@@ -352,9 +352,10 @@ def g2p_fft_mpi_cpu_inlined_nopr(
     return (pg[:, :ne], pl[:, :ne])
 
 
-@numba.njit("(c16, i4, c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+@numba.njit("(c16, i4, f8[:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def g2p_fixed_conv_cpu(
     pre_factor: np.complex128, num_energies_below_fermi: np.uint32, 
+    energy: npt.NDArray[np.float64],
     gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with convolution on the cpu(see file description). 
@@ -382,6 +383,7 @@ def g2p_fixed_conv_cpu(
     # create polarization arrays
     pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
     pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
 
     # evaluate convolution
     for ij in numba.prange(no):
@@ -395,8 +397,19 @@ def g2p_fixed_conv_cpu(
                 tmpl -= pre_factor * gl[ij, ep] * np.conjugate(gg[ij, epm])
             pg[ij, e] = tmpg
             pl[ij, e] = tmpl
+        # Retarded polarization
+        p_gamma = pg[ij] - pl[ij]
+        for ie in numba.prange(ne):
+            tmpr = 0
+            for iep in numba.prange(ne):
+                e_diff = energy[ie] - energy[iep]
+                if e_diff == 0:
+                    tmpr += p_gamma[iep] / (2*np.pi)
+                else:
+                    tmpr += p_gamma[iep] / e_diff
+            pr[ij, ie] = p_gamma[ie] / 2 - pre_factor * tmpr
 
-    return (pg, pl)
+    return (pg, pl, pr)
 
 
 def g2p_fixed_conv_hilb_cpu(

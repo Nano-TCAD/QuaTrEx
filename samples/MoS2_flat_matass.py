@@ -62,9 +62,9 @@ if __name__ == "__main__":
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
     #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    jiang = False
+    jiang = True
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -552,7 +552,7 @@ if __name__ == "__main__":
             print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
             gf_time = -time.perf_counter()
 
-        if iter_num == 50:
+        if iter_num == 60:
             mem_s = 0.3
         # calculate the green's function at every rank------------------------------
         if args.pool:
@@ -608,13 +608,19 @@ if __name__ == "__main__":
                                                                 validate_dace=args.validate_dace
                                                             )
         
+        if (sum(dos[:,0]<0) > 0) and rank == 11: # and iter_num == 1:
+            print("Negative DOS", flush=True)
+            # np.save(scratch_path + f'dos_{rank}.npy', dos)
+            # np.save(scratch_path + f'energy_{rank}.npy', energy_loc)
+            # with open(scratch_path + f'sr_h2g_vec_{rank}.pkl', 'wb') as f:
+            #     pickle.dump(sr_h2g_vec, f)
+        
         comm.Barrier()
 
         if rank == 0:
             gf_time += time.perf_counter()
             print(f"    GF time: {gf_time:.3f} s", flush=True)
             pre_comm0_time = -time.perf_counter()
-            
 
         # lower diagonal blocks from physics identity
         gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
@@ -704,13 +710,20 @@ if __name__ == "__main__":
             #                                     gg_g2p,
             #                                     gl_g2p,
             #                                     gl_transposed_g2p)
-            pg_g2p, pl_g2p = g2p_cpu.g2p_fixed_conv_cpu(
+            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fixed_conv_cpu(
                                                 pre_factor,
                                                 num_energies_below_fl,
+                                                energy,
                                                 gg_g2p,
                                                 gl_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
+        
+        # Remove potential noise from the polarization function
+        for ij in range(pg_g2p.shape[0]):
+            if rows[disp[0,rank]+ij] == columns[disp[0,rank]+ij]:
+                pl_g2p[ij, pl_g2p[ij].imag > 0] = pl_g2p[ij, pl_g2p[ij].imag > 0].conjugate()
+                pg_g2p[ij, pg_g2p[ij].imag > 0] = pg_g2p[ij, pg_g2p[ij].imag > 0].conjugate()
 
         comm.Barrier()
 
@@ -739,7 +752,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        #alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
+        alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -947,7 +960,7 @@ if __name__ == "__main__":
                                                                 )
         elif args.type in ("cpu"):
             vh1d_sliced = vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]]
-            sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gg_g2p, vh1d_sliced)
+            sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gl_g2p, vh1d_sliced)
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
                                                                      num_energies_below_fl,
                                                                      gg_g2p,
@@ -964,6 +977,7 @@ if __name__ == "__main__":
             #                                                          wl_gw2s,
             #                                                          hilbert
             #                                                          )
+            sr_gw2s += sr_fock
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
             #                                                                wg_gw2s, wl_gw2s,
             #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
@@ -990,7 +1004,6 @@ if __name__ == "__main__":
             #                                                     wg_transposed_gw2s,
             #                                                     wl_transposed_gw2s
             #                                                     )
-            sr_gw2s += sr_fock
         else:
             raise ValueError("Argument error, input type not possible")
         
