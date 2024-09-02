@@ -9,6 +9,23 @@ import numba
 from numpy import fft
 import scipy
 
+@numba.njit("(f8[:], f8[:,:], f8)", parallel=True, cache=True, nogil=True, error_model="numpy")  
+def where_kp(kpoint: npt.NDArray[np.float64], kpoints: npt.NDArray[np.float64], rel_tol: float) -> int:
+    """Finds the index of the kpoint in the kpoints array
+    Args:
+        kpoint (npt.NDArray[np.float64]): kpoint to find
+        kpoints (npt.NDArray[np.float64]): array of kpoints
+        rel_tol (float, optional): Relative tolerance. Defaults to 1e-09.
+
+    Returns:
+        int: index of kpoint in kpoints
+    """
+    for kp in numba.prange(kpoints.shape[0]):
+        if np.all(np.abs(kpoint - kpoints[kp]) <= rel_tol*np.max(np.abs(kpoints[kp]))):
+            return kp
+    return -1
+
+    
 
 @numba.njit("(c16[:,:],)", parallel=True, cache=True, nogil=True, error_model="numpy")
 def reversal(g1: npt.NDArray[np.complex128]) -> npt.NDArray[np.complex128]:
