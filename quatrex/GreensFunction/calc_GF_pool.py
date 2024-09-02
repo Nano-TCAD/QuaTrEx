@@ -266,6 +266,7 @@ def calc_GF_pool_mpi_split(
 def calc_GF_pool_mpi(
     DH,
     energy: npt.NDArray[np.float64],
+    k_points: npt.NDArray[np.float64],
     SigR,
     SigL,
     SigG,
@@ -364,7 +365,7 @@ def calc_GF_pool_mpi(
             SigG[ie] = homogenize_matrix_Rnosym(SigG00,
                                          SigG01, SigG10, len(bmax))
 
-    rgf_M = generator_rgf_Hamiltonian(energy, DH, SigR)
+    rgf_M = generator_rgf_k_Hamiltonian(energy, k_points, DH, SigR)
     rgf_H = generator_rgf_currentdens_Hamiltonian(energy, DH)
     index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
@@ -603,6 +604,11 @@ def calc_GF_mpi(
 def generator_rgf_Hamiltonian(E, DH, SigR):
     for i in range(E.shape[0]):
         yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4'] - SigR[i]
+
+def generator_rgf_k_Hamiltonian(E, kp_idx, DH, SigR):
+    for i in range(E.shape[0]):
+        kp_key = tuple(DH.kp[kp_idx[i]])
+        yield (E[i] + 1j * 1e-12) * DH.k_Overlap[kp_key] - DH.k_Hamiltonian[kp_key] - SigR[i]
 
 def generator_rgf_GF(E, DH):
     for i in range(E.shape[0]):

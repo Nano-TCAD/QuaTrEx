@@ -380,9 +380,6 @@ def rgf_GF(M,
     SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
     SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
 
-    IdE = np.zeros(NB)
-    n = np.zeros(NB)
-    p = np.zeros(NB)
     condL = 0.0
     condR = 0.0
 
