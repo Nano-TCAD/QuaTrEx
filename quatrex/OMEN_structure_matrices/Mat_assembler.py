@@ -186,8 +186,10 @@ class Matrices:
             self.nkpts = np.prod(Nk)
             # create k-dependent Hamiltonian
             self.k_Hamiltonian = self.create_k_matrix(self.Hamiltonian)
+            # create Coulomb matrix k-grid
+            self.coul_kp = self.coulomb_k_points(self.kp)
             # create k-dependent Coulomb matrix
-            self.k_Coulomb_matrix = self.create_k_matrix(self.Coulomb_matrix)
+            self.k_Coulomb_matrix = self.create_k_matrix(self.Coulomb_matrix, self.coul_kp)
             # create k-dependent Overlap matrix
             self.k_Overlap = self.create_k_matrix(self.Overlap)
 
@@ -434,6 +436,34 @@ class Matrices:
             raise ValueError(
                 'Only "grid" is yet a valid mode. "line" is comming...')
         return k
+
+    def coulomb_k_points(self, kpoints):
+        """
+        Creates the k-point vector for the Coulomb matrix.
+        This grid can be different from the Hamiltonian k-point grid as it is
+        defined over the differences of the k-points.
+
+        Parameters
+        ----------
+        kp : ndarray
+            k-points
+
+        Returns
+        -------
+        coul_kp : ndarray
+            k-points for the Coulomb matrix
+        """
+        coul_kp = []
+        for kp1 in kpoints:
+            for kp2 in kpoints:
+                kp_diff = (kp1 - kp2 + 1/2) % 1 - 1/2
+                # The above operation introduces some floating point noise
+                # and we don't want to add the "same" k-point twice
+                if len(coul_kp) > 0 and np.isclose(coul_kp, kp_diff).all(axis=1).any():
+                    continue
+                coul_kp.append(kp_diff)
+        return np.array(coul_kp)
+        
 
     def create_k_matrix(self, int_mat=None, kp=None):
         """
