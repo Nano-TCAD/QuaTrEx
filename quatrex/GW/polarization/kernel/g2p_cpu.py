@@ -15,6 +15,8 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, "..", "..", ".."))
 sys.path.append(parent_path)
 
+from quatrex.utilss import linalg_cpu
+
 #from quatrex.utils import linalg_cpu
 
 # create symbol for dace matrix sizes-------------------------------------------
@@ -359,7 +361,6 @@ def g2p_fixed_conv_cpu(
     gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
     """Calculates the polarization with convolution on the cpu(see file description). 
-        The Green's function and a mapping to the transposed indices are needed.
         Is njit compiled
 
     Args:
@@ -390,7 +391,7 @@ def g2p_fixed_conv_cpu(
         for e in numba.prange(ne):
             tmpg = 0
             tmpl = 0
-            for ep in range(max(0, e-num_energies_below_fermi),        #------------------------
+            for ep in numba.prange(max(0, e-num_energies_below_fermi),        #------------------------
                             min(ne, e+ne-num_energies_below_fermi)):   #--Can prob be improved--
                 epm = ep - e + num_energies_below_fermi                #------------------------
                 tmpg -= pre_factor * gg[ij, ep] * np.conjugate(gl[ij, epm])
@@ -457,6 +458,57 @@ def g2p_fixed_conv_hilb_cpu(
         pg[:, e] = tmpg
         pl[:, e] = tmpl
     pr = hilbert(1j*(pg - pl).T).T
+
+    return (pg, pl, pr)
+
+
+@numba.njit("(c16, i4, f8[:], f8[:,:], f8[:,:], c16[:,:], c16[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+def g2p_kpoints(
+    pre_factor: np.complex128, num_energies_below_fermi: np.uint32,
+    energy: npt.NDArray[np.float64], kpoints: npt.NDArray[np.int32],
+    coul_kpoints: npt.NDArray[np.float64],
+    gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculates the polarization with convolution on the cpu(see file description). 
+
+    Args:
+        pre_factor      (np.complex128): pre_factor, multiplied at the end
+        gg (npt.NDArray[np.complex128]): Greater Green's Function,     (#orbital, #energy)
+        gl (npt.NDArray[np.complex128]): Lesser Green's Function,      (#orbital, #energy)
+        gr (npt.NDArray[np.complex128]): Retarded Green's Function,    (#orbital, #energy)
+        gl_tranposed (npt.NDArray[np.complex128]): Transposed in orbital lesser Green's Function,    (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater polarization  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser polarization   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded polarization (#orbital, #energy)
+                    ] 
+    """
+    # number of energy points and nnz
+    nkpts = kpoints.shape[0]
+    ne = int(gg.shape[1]/nkpts)
+    no = gg.shape[0]
+
+    # create polarization arrays
+    pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+
+    for k in range(nkpts):
+        for kp in range(nkpts):
+            coul_k = (kpoints[k] + kpoints[kp] + 1/2) % 1 - 1/2  # This part needs some testing
+            kp1 = k * ne
+            kp2 = kp * ne
+            kp_coul = linalg_cpu.where_kp(coul_k, coul_kpoints, 1e-9)
+            assert kp_coul != -1 
+            tmpg, tmpl, tmpr = g2p_fixed_conv_cpu(pre_factor,
+                                                  num_energies_below_fermi,
+                                                  energy,
+                                                  gg[:, kp1:kp1+ne],
+                                                  gl[:, kp2:kp2+ne])
+            pg[:, kp_coul*ne:(kp_coul+1)*ne] += tmpg
+            pl[:, kp_coul*ne:(kp_coul+1)*ne] += tmpl
+            pr[:, kp_coul*ne:(kp_coul+1)*ne] += tmpr 
 
     return (pg, pl, pr)
 
