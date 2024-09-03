@@ -45,6 +45,45 @@ def gw2s_fock_part(
     return rSigmaRF
 
 
+def gw2s_fock_part_kpoints(
+    pre_factor: np.complex128,
+    kpoints: npt.NDArray[np.float64],
+    coul_kpoints: npt.NDArray[np.float64],
+    gl: npt.NDArray[np.complex128],
+    vh1D: npt.NDArray[np.float64]
+) -> npt.NDArray[np.complex128]:
+    """Calculate the Fock part of the self energy.
+
+    Parameters
+    ----------
+    pre_factor : np.complex128
+        pre_factor, multiplied at the end
+    gl : npt.NDArray[np.complex128]
+        Lesser Green's Function, (#orbital, #energy)
+    vh1D : npt.NDArray[np.float64]
+        1D Hartree potential, (#energy)
+    
+    Returns
+    -------
+    npt.NDArray[np.complex128]
+        Fock part of the self energy, (#orbital, #energy)
+    """
+    nkpts = coul_kpoints.shape[0]
+    ne = int(gl.shape[1]/nkpts)
+
+    rSigmaRF = np.zeros_like(gl)
+
+    for gk in range(nkpts):
+        for ck in range(nkpts):
+            green_k = (kpoints[gk] + coul_kpoints[ck] + 1/2) % 1 - 1/2
+            kp1 = gk * ne
+            kp_green = linalg_cpu.where_kp(green_k, kpoints, 1e-9)
+            assert kp_green != -1
+            temp_rSigmaRF = gw2s_fock_part(pre_factor, gl[:, kp1:kp1+ne], vh1D[ck])
+            rSigmaRF[:, kp_green*ne:(kp_green+1)*ne] += temp_rSigmaRF
+    return rSigmaRF
+
+
 @numba.njit("(c16, i4, c16[:,:], c16[:,:], c16[:,:], c16[:,:], f8[:])", parallel=True, cache=True, nogil=True, error_model="numpy")
 def gw2s_fixed_conv_cpu(
     pre_factor: np.complex128,
@@ -167,6 +206,71 @@ def gw2s_fixed_conv_hilbert_cpu(
     sr_hilbert = hilbert(1j*(sg - sl).T).T
 
     sr = sr_hilbert
+
+    return (sg, sl, sr)
+
+
+@numba.njit("(c16, i4, c16[:,:], c16[:,:], c16[:,:], c16[:,:], f8[:], f8[:,:], f8[:,:])", parallel=True, cache=True, nogil=True, error_model="numpy")
+def gw2s_kpoints(
+    pre_factor: np.complex128,
+    num_energies_below_fermi: int,
+    gg: npt.NDArray[np.complex128],
+    gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128],
+    wl: npt.NDArray[np.complex128],
+    energy: npt.NDArray[np.float64],
+    kpoints: npt.NDArray[np.float64],
+    coul_kpoints: npt.NDArray[np.float64]
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with the convolution on the cpu.
+
+    Parameters
+    ----------
+    pre_factor : np.complex128
+        pre_factor, multiplied at the end
+    gg : npt.NDArray[np.complex128]
+        Greater Green's Function, (#orbital, #energy)
+    gl : npt.NDArray[np.complex128]
+        Lesser Green's Function, (#orbital, #energy)
+    wg : npt.NDArray[np.complex128]
+        Greater screened interaction, (#orbital, #energy)
+    wl : npt.NDArray[np.complex128]
+        Lesser screened interaction, (#orbital, #energy)
+    
+    Returns
+    -------
+    typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]
+        Greater self energy, Lesser self energy, Retarded self energy
+    """
+    # number of energy points and nnz
+    nkpts = coul_kpoints.shape[0]
+    ne = int(gg.shape[1]/nkpts)
+    no = gg.shape[0]
+
+    # create the self energy arrays
+    sg = np.zeros_like(gg)
+    sl = np.zeros_like(gl)
+    sr = np.zeros_like(gl)
+
+    for gk in range(nkpts):
+        for ck in range(nkpts):
+            green_k = (kpoints[gk] + coul_kpoints[ck] + 1/2) % 1 - 1/2
+            kp1 = gk * ne
+            kp2 = ck * ne
+            kp_green = linalg_cpu.where_kp(green_k, kpoints, 1e-9)
+            assert kp_green != -1
+            tmp_sg, tmp_sl, tmp_sr = gw2s_fixed_conv_cpu(
+                pre_factor,
+                num_energies_below_fermi,
+                gg[:, kp1:kp1+ne],
+                gl[:, kp1:kp1+ne],
+                wg[:, kp2:kp2+ne],
+                wl[:, kp2:kp2+ne],
+                energy
+            )
+            sg[:, kp_green*ne:(kp_green+1)*ne] += tmp_sg
+            sl[:, kp_green*ne:(kp_green+1)*ne] += tmp_sl
+            sr[:, kp_green*ne:(kp_green+1)*ne] += tmp_sr
 
     return (sg, sl, sr)
 
