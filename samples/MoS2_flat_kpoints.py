@@ -39,6 +39,7 @@ from quatrex.utilss import utils_gpu
 from quatrex.utilss.bsr import bsr_matrix
 from quatrex.utilss.matrix_creation import get_number_connected_blocks
 from quatrex.utilss.hilbert import HilbertTransform
+from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
@@ -146,6 +147,9 @@ if __name__ == "__main__":
     else:
         kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
+    EPHN = np.array([0.0])  # Phonon energy
+    DPHN = np.array([2.5e-3])  # Electron-phonon coupling
+
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -398,6 +402,11 @@ if __name__ == "__main__":
     sl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
 
+    # phonon self-energy. Only diagonal so far
+    sg_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+    sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
+
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
@@ -492,11 +501,11 @@ if __name__ == "__main__":
         sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
         sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
+        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
+        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
+        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
-        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
         ECmin_vec[iter_num+1], EVmax_vec[iter_num+1], ind_ek_plus = get_cv_band_edges_mpi_interpol(ECmin_vec[iter_num]-0.05,
                                                             energy,
                                                             hamiltonian_obj.k_Overlap[(0,0,0)], 
@@ -826,10 +835,11 @@ if __name__ == "__main__":
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
+                                                                                                    Idx_kp_loc,
                                                                                                     pg_p2w_vec, 
                                                                                                     pl_p2w_vec,
                                                                                                     pr_p2w_vec, 
-                                                                                                    vh, 
+                                                                                                    #vh, 
                                                                                                     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], 
                                                                                                     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],
@@ -971,16 +981,29 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            vh1d_sliced = vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]]
-            sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gl_g2p, vh1d_sliced)
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
-                                                                     num_energies_below_fl,
-                                                                     gg_g2p,
-                                                                     gl_g2p,
-                                                                     wg_gw2s,
-                                                                     wl_gw2s,
-                                                                     energy, 
-                                                                     )
+    # vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
+            vh1d_k = np.asarray([np.squeeze(mat[rows[disp[0, rank]:disp[0, rank] + count[0, rank]],
+                                                columns[disp[0, rank]:disp[0, rank] + count[0, rank]]]) 
+                                                for mat in hamiltonian_obj.k_Coulomb_matrix.values()])
+            sr_fock = gw2s_cpu.gw2s_fock_part_kpoints(-pre_factor/2, hamiltonian_obj.kp, hamiltonian_obj.coul_kp, gl_g2p, vh1d_k)
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_kpoints(-pre_factor/2,
+                                                              num_energies_below_fl,
+                                                              gg_g2p,
+                                                              gl_g2p,
+                                                              wg_gw2s,
+                                                              wl_gw2s,
+                                                              energy, 
+                                                              hamiltonian_obj.kp,
+                                                              hamiltonian_obj.coul_kp
+                                                              )
+            #sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
+            #                                                         num_energies_below_fl,
+            #                                                         gg_g2p,
+            #                                                         gl_g2p,
+            #                                                         wg_gw2s,
+            #                                                         wl_gw2s,
+            #                                                         energy, 
+            #                                                         )
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_hilbert_cpu(-pre_factor/2,
             #                                                          num_energies_below_fl,
             #                                                          gg_g2p,
@@ -989,33 +1012,10 @@ if __name__ == "__main__":
             #                                                          wl_gw2s,
             #                                                          hilbert
             #                                                          )
-            sr_gw2s += sr_fock
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
             #                                                                wg_gw2s, wl_gw2s,
             #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
-
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
-            #                                                     -pre_factor/2,
-            #                                                     gg_g2p,
-            #                                                     gl_g2p,
-            #                                                     gr_g2p,
-            #                                                     wg_gw2s,
-            #                                                     wl_gw2s,
-            #                                                     wr_gw2s,
-            #                                                     wg_transposed_gw2s,
-            #                                                     wl_transposed_gw2s
-            #                                                     )
+            sr_gw2s += sr_fock
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1052,7 +1052,7 @@ if __name__ == "__main__":
         if rank == 0:
             comm3_time += time.perf_counter()
             print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
-            wrapping_up_time = -time.perf_counter()
+            start_phonon_time = time.perf_counter()
 
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
@@ -1064,12 +1064,33 @@ if __name__ == "__main__":
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
-        # if iter_num == max_iter - 1:
-        #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
-        #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
-        #     alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
-
+        # --------------------------------------------------------------------------
+        # ---------------------------Phonon calculation-----------------------------
+        # --------------------------------------------------------------------------
+        # Extract diagonal bands
+        gg_diag_band = gg_h2g[:, rows==columns]
+        gl_diag_band = gl_h2g[:, rows==columns]
+        # Add diagonal imaginary self-energy. This will broaden the peaks and also adds
+        # a bit of stability to the self-energy as negative peaks of the dos has been observed.
+        # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
+        # at the beginning of this script.
+        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
+                                                                            gl_diag_band,
+                                                                            gg_diag_band,
+                                                                            sg_phn,
+                                                                            sl_phn,
+                                                                            sr_phn,
+                                                                            EPHN,
+                                                                            DPHN,
+                                                                            temp,
+                                                                            mem_s)
         
+        comm.Barrier()
+        if rank == 0:
+            end_phonon_time = time.perf_counter()
+            print(f"    Phonon time: {end_phonon_time-start_phonon_time:.3f} s", flush=True)
+            wrapping_up_time = -time.perf_counter()
+
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)

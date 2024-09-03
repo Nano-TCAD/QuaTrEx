@@ -20,6 +20,10 @@ def calc_SE_GF_EPHN(energy, gl_diag, gg_diag, sg_phn_old, sl_phn_old, sr_phn_old
         SigmaL += 1j * np.imag(calc_Sigma_el_phon(gl_diag, NPH, NPH+1, EPHN[IPH], DPHN[IPH], dE))
         SigmaG += 1j * np.imag(calc_Sigma_el_phon(gg_diag, NPH+1, NPH, EPHN[IPH], DPHN[IPH], dE))
 
+    # Correct negative peaks in spectral function
+    SigmaL[SigmaL.imag < 0] *= -1
+    SigmaG[SigmaG.imag > 0] *= -1
+
     SigmaR = (SigmaG - SigmaL) / 2.0
 
     SigmaL = (1 - memory_factor) * SigmaL + memory_factor * sl_phn_old
