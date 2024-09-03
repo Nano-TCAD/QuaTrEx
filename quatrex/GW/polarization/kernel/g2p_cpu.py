@@ -490,9 +490,9 @@ def g2p_kpoints(
     no = gg.shape[0]
 
     # create polarization arrays
-    pg: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    pl: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
-    pr: npt.NDArray[np.complex128] = np.empty_like(gg, dtype=np.complex128)
+    pg: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
+    pl: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
+    pr: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)
 
     for k in range(nkpts):
         for kp in range(nkpts):

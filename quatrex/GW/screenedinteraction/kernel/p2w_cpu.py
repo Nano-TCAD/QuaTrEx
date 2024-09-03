@@ -347,10 +347,11 @@ def p2w_pool_mpi_cpu_split(
 def p2w_pool_mpi_cpu(
     hamiltionian_obj: object,
     energy: npt.NDArray[np.float64],
+    k_points: npt.NDArray[np.float64],
     pg: npt.NDArray[np.complex128],
     pl: npt.NDArray[np.complex128],
     pr: npt.NDArray[np.complex128],
-    vh: npt.NDArray[np.complex128],
+    #vh: npt.NDArray[np.complex128],
     dosw: npt.NDArray[np.complex128],
     new: npt.NDArray[np.complex128],
     npw: npt.NDArray[np.complex128],
@@ -458,6 +459,8 @@ def p2w_pool_mpi_cpu(
                                         PG10,
                                         len(bmax))
 
+    rgf_Coul = generator_rgf_k_Coulomb_matrix(k_points, hamiltionian_obj)
+
     # Create a process pool with num_worker workers
 
     ref_flag = False
@@ -466,7 +469,8 @@ def p2w_pool_mpi_cpu(
         #executor.map(
         results = executor.map(
                     rgf_W.rgf_w_opt,
-                    repeat(vh),
+                    #repeat(vh),
+                    rgf_Coul,
                     pg, pl, pr,
                     repeat(bmax), repeat(bmin),
                     wg_diag, wg_upper,
@@ -929,3 +933,8 @@ def p2w_mpi_cpu_alt(
     print("Time inversion: ", times[4])
     print("Time block: ", times[5])
     return wg, wl, wr
+
+def generator_rgf_k_Coulomb_matrix(kp_idx, DH):
+    for i in range(len(kp_idx)):
+        kp_key = tuple(DH.coul_kp[kp_idx[i]])
+        yield DH.k_Coulomb_matrix[kp_key]
