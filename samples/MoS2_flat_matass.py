@@ -56,7 +56,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -235,9 +235,11 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
+    # Scale the Coulomb matrix
+    hamiltonian_obj.scale_coulomb_matrix(1/epsR)
     # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]/epsR
+    vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]
     vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
     if args.bsr:
         w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
@@ -258,6 +260,8 @@ if __name__ == "__main__":
     # slice energy vector
     energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
     Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
+
+    Idx_kp_loc = np.zeros(count[1, rank], dtype=np.int32)
 
     # split up the factor between the ranks
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -559,6 +563,7 @@ if __name__ == "__main__":
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
                                                                 hamiltonian_obj,
                                                                 energy_loc,
+                                                                Idx_kp_loc,
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
                                                                 sg_h2g_vec,
@@ -720,10 +725,10 @@ if __name__ == "__main__":
             raise ValueError("Argument error, input type not possible")
         
         # Remove potential noise from the polarization function
-        for ij in range(pg_g2p.shape[0]):
-            if rows[disp[0,rank]+ij] == columns[disp[0,rank]+ij]:
-                pl_g2p[ij, pl_g2p[ij].imag > 0] = pl_g2p[ij, pl_g2p[ij].imag > 0].conjugate()
-                pg_g2p[ij, pg_g2p[ij].imag > 0] = pg_g2p[ij, pg_g2p[ij].imag > 0].conjugate()
+        # for ij in range(pg_g2p.shape[0]):
+        #     if rows[disp[0,rank]+ij] == columns[disp[0,rank]+ij]:
+        #         pl_g2p[ij, pl_g2p[ij].imag > 0] = pl_g2p[ij, pl_g2p[ij].imag > 0].conjugate()
+        #         pg_g2p[ij, pg_g2p[ij].imag > 0] = pg_g2p[ij, pg_g2p[ij].imag > 0].conjugate()
 
         comm.Barrier()
 
@@ -814,10 +819,11 @@ if __name__ == "__main__":
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
+                                                                                                    Idx_kp_loc,
                                                                                                     pg_p2w_vec, 
                                                                                                     pl_p2w_vec,
                                                                                                     pr_p2w_vec, 
-                                                                                                    vh, 
+                                                                                                    #vh, 
                                                                                                     dosw[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                                                     nEw[disp[1, rank]:disp[1, rank] + count[1, rank]], 
                                                                                                     nPw[disp[1, rank]:disp[1, rank] + count[1, rank]],

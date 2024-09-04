@@ -391,9 +391,9 @@ def g2p_fixed_conv_cpu(
         for e in numba.prange(ne):
             tmpg = 0
             tmpl = 0
-            for ep in numba.prange(max(0, e-num_energies_below_fermi),        #------------------------
-                            min(ne, e+ne-num_energies_below_fermi)):   #--Can prob be improved--
-                epm = ep - e + num_energies_below_fermi                #------------------------
+            for ep in numba.prange(max(0, e-num_energies_below_fermi),       #------------------------
+                                   min(ne, e+ne-num_energies_below_fermi)):  #--Can prob be improved--
+                epm = ep - e + num_energies_below_fermi                      #------------------------
                 tmpg -= pre_factor * gg[ij, ep] * np.conjugate(gl[ij, epm])
                 tmpl -= pre_factor * gl[ij, ep] * np.conjugate(gg[ij, epm])
             pg[ij, e] = tmpg

@@ -245,6 +245,8 @@ if __name__ == "__main__":
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
+    # Scale the coulomb matrix
+    hamiltonian_obj.scale_coulomb_matrix(1/epsR)
     # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
     # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
     # vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]/epsR
