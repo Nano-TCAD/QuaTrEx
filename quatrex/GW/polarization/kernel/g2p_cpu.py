@@ -496,7 +496,7 @@ def g2p_kpoints(
 
     for k in range(nkpts):
         for kp in range(nkpts):
-            coul_k = (kpoints[k] + kpoints[kp] + 1/2) % 1 - 1/2  # This part needs some testing
+            coul_k = (kpoints[k] - kpoints[kp] + 1/2) % 1 - 1/2  # This part needs some testing
             kp1 = k * ne
             kp2 = kp * ne
             kp_coul = linalg_cpu.where_kp(coul_k, coul_kpoints, 1e-9)
