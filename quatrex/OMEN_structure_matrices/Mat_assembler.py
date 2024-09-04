@@ -203,7 +203,7 @@ class Matrices:
             # assert np.allclose(self.k_Coulomb_matrix[(0, 0, 0)].toarray(), self.k_Coulomb_matrix[(0, 0, 0)].T.toarray()), "Coulomb matrix is not symmetric"
 
             # returns the sparse indices of the k_Coulomb_matrix
-            self.rows, self.columns = self.map_sparse_indices(self.k_Coulomb_matrix[band_gap_kp])
+            self.rows, self.columns = self.map_sparse_indices(self.k_Coulomb_matrix[(0,0,0)])
             # Following part is added just to be compatible with the code
             self.Hamiltonian['H_4'] = self.k_Hamiltonian[band_gap_kp]  
             self.Overlap['H_4'] = self.k_Overlap[band_gap_kp]

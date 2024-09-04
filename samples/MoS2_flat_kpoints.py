@@ -28,6 +28,7 @@ from quatrex.bandstructure.calc_band_edge import (
 )
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
+from quatrex.GW.selfenergy.current_conservation import current_conservation
 from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
@@ -58,6 +59,7 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
+    # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/jiang_matrices/bias/"
     scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
@@ -135,11 +137,11 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
-    Vappl = 0.0
+    Vappl = 0.0  # -0.2
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    num_kpoints = np.array([1, 3, 1])
+    num_kpoints = np.array([1, 1, 1])
     Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
     if jiang:
         #kp_shift = np.array([0, 1/3, 0])
@@ -198,10 +200,10 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 6
+    w_worker_threads = 4
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 6
+    gf_worker_threads = 4
 
     # physical parameter -----------
 
@@ -219,7 +221,7 @@ if __name__ == "__main__":
     # Fermi Level of Left Contact
     energy_fl = EVmax + (ECmin - EVmax)/2
     # Fermi Level of Right Contact
-    energy_fr = energy_fl - Vappl
+    energy_fr = energy_fl + Vappl
 
     # Physical Constants -----------
 
@@ -508,8 +510,8 @@ if __name__ == "__main__":
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
         ECmin_vec[iter_num+1], EVmax_vec[iter_num+1], ind_ek_plus = get_cv_band_edges_mpi_interpol(ECmin_vec[iter_num]-0.05,
                                                             energy,
-                                                            hamiltonian_obj.k_Overlap[(0,0,0)], 
-                                                            hamiltonian_obj.k_Hamiltonian[(0,0,0)], 
+                                                            hamiltonian_obj.k_Overlap[kp_band_gap], 
+                                                            hamiltonian_obj.k_Hamiltonian[kp_band_gap], 
                                                             sr_h2g_vec,
                                                             sl_h2g_vec,
                                                             sg_h2g_vec,
@@ -548,10 +550,10 @@ if __name__ == "__main__":
         #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
-        energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
-        energy_fr = energy_fl - Vappl
+        energy_fl = EVmax_vec[iter_num+1] + (ECmin_vec[iter_num+1] - EVmax_vec[iter_num+1])/2
+        energy_fr = energy_fl + Vappl
 
-        num_energies_below_fl = sum(energy < energy_fl)
+        num_energies_below_fl = sum(energy < energy_fl)  # len(energy) // 2  # Doesn't seem to work with len(energy) // 2. Don't know why
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
@@ -1052,6 +1054,33 @@ if __name__ == "__main__":
         if rank == 0:
             comm3_time += time.perf_counter()
             print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
+            start_cc_time = time.perf_counter()
+
+        # --------------------------------------------------------------------------------
+        # -------------------------Assert current conservation----------------------------
+        # --------------------------------------------------------------------------------
+        current_conserved = current_conservation(sg_h2g_buf, sl_h2g_buf, gg_h2g, gl_h2g)
+        if rank == 0:
+            comm.Reduce(MPI.IN_PLACE, current_conserved, op=MPI.SUM, root=0)
+        else:
+            comm.Reduce(current_conserved, None, op=MPI.SUM, root=0)
+        comm.Barrier()
+
+        if rank == 0:
+            rel_current_conserved = np.abs(current_conserved[0]-current_conserved[1])/np.abs(current_conserved[0])
+            try:
+                assert np.isclose(rel_current_conserved, 0.0, atol=1e-10)
+            except AssertionError:
+                print("Assertion Error: Current conservation not satisfied", flush=True)
+                print(f"Relative error: {rel_current_conserved}", flush=True)
+                print(f"Current conserved 1: {current_conserved[0]}", flush=True)
+                print(f"Current conserved 2: {current_conserved[1]}", flush=True)
+
+        comm.Barrier()
+
+        if rank == 0:
+            end_cc_time = time.perf_counter()
+            print(f"    Current conservation time: {end_cc_time-start_cc_time:.3f} s", flush=True)
             start_phonon_time = time.perf_counter()
 
         if iter_num == 0:
