@@ -24,7 +24,7 @@ def _get_coulomb_batch(
     block_size,
 ):
 
-    tid = cpx.jit.threadIdx.x
+    tid = int(cpx.jit.threadIdx.x)
     if tid < block_size:
         num_threads = cpx.jit.blockDim.x
         bid = cpx.jit.blockIdx.x

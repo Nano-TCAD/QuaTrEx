@@ -37,11 +37,11 @@ from quatrex.GW.screenedinteraction.polarization_preprocess import polarization_
 
 @cpx.jit.rawkernel()
 def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
-    tid = cpx.jit.threadIdx.x
-    bid = cpx.jit.blockIdx.x
+    tid = int(cpx.jit.threadIdx.x)
+    bid = int(cpx.jit.blockIdx.x)
     row = srow + bid
     if row < erow:
-        num_threads = cpx.jit.blockDim.x
+        num_threads = int(cpx.jit.blockDim.x)
         sidx = indptr[row]
         eidx = indptr[row + 1]
         for i in range(sidx + tid, eidx, num_threads):
@@ -441,6 +441,7 @@ def calc_W_pool_mpi_split(
     pg_dev = None
     pl_dev = None
 
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
 
     start_spgemm = time.perf_counter()
@@ -451,6 +452,7 @@ def calc_W_pool_mpi_split(
 
     for ie in range(ne):
 
+        cp.cuda.Stream.null.synchronize()
         time_copy_in -= time.perf_counter()
 
         # if pr_dev is None:
@@ -472,16 +474,16 @@ def calc_W_pool_mpi_split(
         # pg_dev = cp.sparse.csr_matrix((pg_dev, (rows_dev, columns_dev)), shape = (nao, nao))
         # pl_dev = cp.sparse.csr_matrix((pl_dev, (rows_dev, columns_dev)), shape = (nao, nao))
             
+        cp.cuda.Stream.null.synchronize()
         time_copy_in += time.perf_counter()
 
         time_spgemm -= time.perf_counter()
-
-        cp.cuda.Stream.null.synchronize()
 
         mr_dev[0] = (identity - spgemm(vh_dev, pr_dev)).data
         spgemm_direct(spgemm(vh_dev, pg_dev), vh_ct_dev, lg_dev[0])
         spgemm_direct(spgemm(vh_dev, pl_dev), vh_ct_dev, ll_dev[0])
 
+        cp.cuda.Stream.null.synchronize()
         time_spgemm += time.perf_counter()
 
         # #sp_mm_gpu(pr[ie], pg[ie], pl[ie], vh, mr_dev[0], lg_dev[0], ll_dev[0], nao)
@@ -493,6 +495,7 @@ def calc_W_pool_mpi_split(
         lg_host[ie, :] = cp.asnumpy(lg_dev[0])
         ll_host[ie, :] = cp.asnumpy(ll_dev[0])
 
+        cp.cuda.Stream.null.synchronize()
         time_copy_out += time.perf_counter()
 
         # vh_s1[ie] = cp.ascontiguousarray(vh_dev[slb_sd, slb_sd].toarray(order="C"))
@@ -565,6 +568,7 @@ def calc_W_pool_mpi_split(
         # pr_e2[ie] = pr_dev[slb_eo, slb_ed].toarray()
         # pr_e3[ie] = pr_dev[slb_ed, slb_eo].toarray()
 
+        cp.cuda.Stream.null.synchronize()
         time_dense += time.perf_counter()
 
         # obc_w_gpu.obc_w_mm_gpu_2(vh_dev,
@@ -582,6 +586,7 @@ def calc_W_pool_mpi_split(
         #                          rows_dev, columns_dev,
         #                          nbc, NCpSC, block_inv, use_dace, validate_dace, ref_flag)
     
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     finish_spgemm = time.perf_counter()
     if rank == 0:
@@ -600,6 +605,7 @@ def calc_W_pool_mpi_split(
                                 #    mr_s, mr_e, lg_s, lg_e, ll_s, ll_e,
                                    mr_s0, mr_s1, mr_s2, mr_e0, mr_e1, mr_e2, lg_s0, lg_s1, lg_e0, lg_e1, ll_s0, ll_s1, ll_e0, ll_e1,
                                    vh_s, vh_e, mb00, mbNN, nbc, NCpSC)
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     finish_obc_mm = time.perf_counter()
     if rank == 0:
@@ -807,6 +813,7 @@ def calc_W_pool_mpi_split(
         # dmr_ed -= dmr.get()
         # (M01_right @ dxr_ed_gpu @ cp.asarray(vh_e)).get(out=dvh_ed)
 
+        cp.cuda.Stream.null.synchronize()
         comm.Barrier()
         finish_beyn_w = time.perf_counter()
         if rank == 0:
@@ -864,6 +871,7 @@ def calc_W_pool_mpi_split(
                 dxr_ed,
             )
         
+        cp.cuda.Stream.null.synchronize()
         comm.Barrier()
         finish_obc_l = time.perf_counter()
         if rank == 0:
@@ -984,6 +992,7 @@ def calc_W_pool_mpi_split(
     # assert ll_rgf.shape[1] == rows_l.size
     # assert mr_rgf.shape[1] == rows_m.size
 
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     if rank == 0:
         time_GF_trafo += time.perf_counter()
@@ -1036,6 +1045,7 @@ def calc_W_pool_mpi_split(
             input_stream=input_stream,
         )
 
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     if rank == 0:
         time_GF += time.perf_counter()
@@ -1234,6 +1244,7 @@ def calc_W_pool_mpi_split(
 
     assert((np.sum(np.isnan(wr_p2w)) + np.sum(np.isnan(wl_p2w)) + np.sum(np.isnan(wg_p2w))) == 0)
 
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     if rank == 0:
         time_post_proc += time.perf_counter()
