@@ -264,6 +264,7 @@ def calc_GF_pool_mpi_split_memopt(
     #                                                                     SigG[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
     #         SigG[ie] = homogenize_matrix_Rnosym(SigG00,
     #                                         SigG01, SigG10, len(bmax))
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier() 
 
     if rank == 0:
@@ -311,6 +312,7 @@ def calc_GF_pool_mpi_split_memopt(
     # (1j * (fR - 1) * GammaR).get(out=SigGBR)
     # SigRBR_gpu.get(out=SigRBR)
     
+    cp.cuda.Stream.null.synchronize()
     comm.Barrier()
     if rank == 0:
         time_OBC += time.perf_counter()
@@ -362,7 +364,8 @@ def calc_GF_pool_mpi_split_memopt(
                             idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
                             input_stream = input_stream,
                             DOS_hr = DOS_hr[ie:ie+energy_batchsize, :] if DOS_hr is not None else None)
-        
+
+    cp.cuda.Stream.null.synchronize()    
     comm.Barrier()
     if rank == 0:
         time_GF += time.perf_counter()
@@ -431,7 +434,8 @@ def calc_GF_pool_mpi_split_memopt(
         p_orb[index, :] = 0
     if EEdge is not None:
         calc_charge(n_orb, p_orb, energy, EEdge, DH, n_atom, p_atom, comm)
-        
+
+    cp.cuda.Stream.null.synchronize()    
     comm.Barrier()
     if rank == 0:
         time_post_proc += time.perf_counter()

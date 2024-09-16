@@ -97,7 +97,7 @@ def _get_dense_block_batch(compressed_data,  # Input data, (NE, NNZ) format
 
 @cpx.jit.rawkernel()
 def _store_block_compressed(mapping, uncompressed, compressed, batch_size, copy_size, nnz, bsize, lower):
-    tid = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    tid = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
     if tid < batch_size * copy_size:
         ie = tid // copy_size
         idx = tid % copy_size
@@ -157,7 +157,7 @@ def _get_system_matrix(energies,
                        out,
                        batch_size, block_size):
     
-    tid = cpx.jit.threadIdx.x
+    tid = int(cpx.jit.threadIdx.x)
     if tid < block_size:
 
         num_threads = cpx.jit.blockDim.x
