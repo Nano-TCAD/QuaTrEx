@@ -60,11 +60,11 @@ def rgf_standaloneGF(
     LBsize = Bmax[0] - Bmin[0] + 1
     RBsize = Bmax[NB - 1] - Bmin[NB - 1] + 1
 
-    gR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    gL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    gG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    gR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    gL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    gG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Lesser boundary self-energy
+    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Greater boundary self-energy
 
     #Correction terms from OBC
     #M[:LBsize, :LBsize]  -=  SigRBL
@@ -368,17 +368,17 @@ def rgf_GF(M,
     LBsize = Bmax[0] - Bmin[0] + 1
     RBsize = Bmax[NB - 1] - Bmin[NB - 1] + 1
 
-    gR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    gL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    gG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    #GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Retarded GF
-    #GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) #Off-diagonal GR
-    #GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Lesser GF
-    #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GL
-    #GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Greater GF
-    #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
-    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    gR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    gL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    gG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    #GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Retarded GF
+    #GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) #Off-diagonal GR
+    #GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Lesser GF
+    #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) # Off-diagonal GL
+    #GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Greater GF
+    #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) # Off-diagonal GG
+    SigLB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Lesser boundary self-energy
+    SigGB = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Greater boundary self-energy
 
     IdE = np.zeros(NB)
     n = np.zeros(NB)
@@ -673,9 +673,9 @@ if __name__ == '__main__':
 
     H, SL, SG = create_matrices_H(n, nBlocks)
 
-    SBL = sparse.random(n, n, 1, dtype=np.cfloat)
+    SBL = sparse.random(n, n, 1, dtype=np.complex128)
     SBL = (SBL + SBL.T) / 2
-    SBR = sparse.random(n, n, 1, dtype=np.cfloat)
+    SBR = sparse.random(n, n, 1, dtype=np.complex128)
     SBR = (SBR + SBR.T) / 2
     SB = sparse.block_diag((SBL, sparse.csc_matrix((n * (nBlocks - 2), n * (nBlocks - 2))), SBR))
     M = H + SB

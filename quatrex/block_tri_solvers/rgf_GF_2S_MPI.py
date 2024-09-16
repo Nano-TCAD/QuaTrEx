@@ -351,19 +351,19 @@ def rgf_GF_2S_V0(M, SigL, SigG, Bmin, Bmax):
     Bsize = max(Bmax - Bmin + 1)  # Used for declaration of variables
     NB = len(Bmin)
 
-    grR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    grL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    grG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    glR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (left)
-    glL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (left)
-    glG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (left)
+    grR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    grL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    grG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    glR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (left)
+    glL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (left)
+    glG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (left)
 
-    GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded GF
-    GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  #Off-diagonal GR
-    GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser GF
-    GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GL
-    GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater GF
-    GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GG
+    GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded GF
+    GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  #Off-diagonal GR
+    GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser GF
+    GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GL
+    GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater GF
+    GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GG
 
     # First step of iteration
     NN = Bmax[-1] - Bmin[-1] + 1
@@ -727,20 +727,20 @@ def rgf_GF_2S_V1(M, SigL, SigG, Bmin, Bmax):
 
     EI = int(NB / 2)  # Exchange index
 
-    grR = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    grL = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    grG = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
+    grR = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    grL = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    grG = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
 
-    glR = np.zeros((EI, Bsize, Bsize), dtype=np.cfloat)  # Retarded (left)
-    glL = np.zeros((EI, Bsize, Bsize), dtype=np.cfloat)  # Lesser (left)
-    glG = np.zeros((EI, Bsize, Bsize), dtype=np.cfloat)  # Greater (left)
+    glR = np.zeros((EI, Bsize, Bsize), dtype=np.complex128)  # Retarded (left)
+    glL = np.zeros((EI, Bsize, Bsize), dtype=np.complex128)  # Lesser (left)
+    glG = np.zeros((EI, Bsize, Bsize), dtype=np.complex128)  # Greater (left)
 
-    GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded GF
-    GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  #Off-diagonal GR
-    GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser GF
-    GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GL
-    GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater GF
-    GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GG
+    GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded GF
+    GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  #Off-diagonal GR
+    GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser GF
+    GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GL
+    GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater GF
+    GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GG
 
     # Step 1:
     # Valid?
@@ -872,9 +872,9 @@ if __name__ == '__main__':
         """
         "Open-boundary conditions"-like matrices
         """
-        SBL = sparse.random(n, n, 1, dtype=np.cfloat)
+        SBL = sparse.random(n, n, 1, dtype=np.complex128)
         SBL = (SBL + SBL.T.conj()) / 2
-        SBR = sparse.random(n, n, 1, dtype=np.cfloat)
+        SBR = sparse.random(n, n, 1, dtype=np.complex128)
         SBR = (SBR + SBR.T.conj()) / 2
         SB = sparse.block_diag((SBL, sparse.csc_matrix((n * (nBlocks - 2), n * (nBlocks - 2))), SBR))
         M = H + SB
@@ -931,9 +931,9 @@ if __name__ == '__main__':
             #req5 = comm.Isend(SigG[:Bmin[EI+1], :Bmin[EI+1]], dest=1, tag=5)
             #MPI.Request.Waitall([req1, req2, req3, req4, req5])
 
-            grR = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-            grL = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-            grG = np.zeros((NB - EI, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
+            grR = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+            grL = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+            grG = np.zeros((NB - EI, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
 
             # Step 1:
             step1_GF_rs(M[Bmin[EI]:, Bmin[EI]:], SigL[Bmin[EI]:, Bmin[EI]:], SigG[Bmin[EI]:, Bmin[EI]:], grR, grL, grG,
@@ -941,9 +941,9 @@ if __name__ == '__main__':
 
             # Exchange:
 
-            glR_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.cfloat)
-            glL_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.cfloat)
-            glG_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.cfloat)
+            glR_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.complex128)
+            glL_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.complex128)
+            glG_ex = np.zeros((Bmax[EI - 1] - Bmin[EI - 1] + 1, Bmax[EI - 1] - Bmin[EI - 1] + 1), dtype=np.complex128)
 
             comm.Recv(glR_ex, source=1, tag=21)
             comm.Recv(glL_ex, source=1, tag=22)
@@ -955,12 +955,12 @@ if __name__ == '__main__':
             #MPI.Request.Waitall([req21, req22, req23,
             #                    req24, req25, req26])
 
-            GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded GF
-            GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  #Off-diagonal GR
-            GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser GF
-            GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GL
-            GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater GF
-            GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GG
+            GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded GF
+            GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  #Off-diagonal GR
+            GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser GF
+            GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GL
+            GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater GF
+            GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GG
 
             NM = Bmax[EI - 1] - Bmin[EI - 1] + 1
             NI = Bmax[EI] - Bmin[EI] + 1
@@ -1086,44 +1086,44 @@ if __name__ == '__main__':
         lNI, lNK, lNNZ = size_buffer_M
         indptr = np.empty(lNI + 1, dtype=np.int32)
         indices = np.empty(lNNZ, dtype=np.int32)
-        data = np.empty(lNNZ, dtype=np.cfloat)
+        data = np.empty(lNNZ, dtype=np.complex128)
         comm.Recv(indptr, source=0, tag=4)
         comm.Recv(indices, source=0, tag=5)
         comm.Recv(data, source=0, tag=6)
-        M_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.cfloat)
+        M_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.complex128)
 
         comm.Recv(size_buffer_SigL, source=0, tag=7)
         lNI, lNK, lNNZ = size_buffer_SigL
         indptr = np.empty(lNI + 1, dtype=np.int32)
         indices = np.empty(lNNZ, dtype=np.int32)
-        data = np.empty(lNNZ, dtype=np.cfloat)
+        data = np.empty(lNNZ, dtype=np.complex128)
         comm.Recv(indptr, source=0, tag=8)
         comm.Recv(indices, source=0, tag=9)
         comm.Recv(data, source=0, tag=10)
-        SigL_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.cfloat)
+        SigL_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.complex128)
 
         comm.Recv(size_buffer_SigG, source=0, tag=11)
         lNI, lNK, lNNZ = size_buffer_SigG
         indptr = np.empty(lNI + 1, dtype=np.int32)
         indices = np.empty(lNNZ, dtype=np.int32)
-        data = np.empty(lNNZ, dtype=np.cfloat)
+        data = np.empty(lNNZ, dtype=np.complex128)
         comm.Recv(indptr, source=0, tag=12)
         comm.Recv(indices, source=0, tag=13)
         comm.Recv(data, source=0, tag=14)
-        SigG_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.cfloat)
+        SigG_part = sparse.csr_matrix((data, indices, indptr), shape=(lNI, lNK), dtype=np.complex128)
 
-        glR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (left)
-        glL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (left)
-        glG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (left)
+        glR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (left)
+        glL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (left)
+        glG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (left)
 
         step1_GF_ls(M_part[:Bmin[EI], :Bmin[EI]], SigL_part[:Bmin[EI], :Bmin[EI]], SigG_part[:Bmin[EI], :Bmin[EI]], glR,
                     glL, glG, Bmin[:EI], Bmax[:EI])  # EI or EI+1??
 
         # Exchange:
 
-        grR_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.cfloat)
-        grL_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.cfloat)
-        grG_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.cfloat)
+        grR_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.complex128)
+        grL_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.complex128)
+        grG_ex = np.zeros((Bmax[-1] - Bmin[-1] + 1, Bmax[-1] - Bmin[-1] + 1), dtype=np.complex128)
 
         comm.Send(glR[-1], dest=0, tag=21)
         comm.Send(glL[-1], dest=0, tag=22)
@@ -1135,12 +1135,12 @@ if __name__ == '__main__':
         #MPI.Request.Waitall([req21, req22, req23,
         #                     req24, req25, req26])
 
-        GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded GF
-        GRnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  #Off-diagonal GR
-        GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser GF
-        GLnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GL
-        GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater GF
-        GGnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Off-diagonal GG
+        GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded GF
+        GRnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  #Off-diagonal GR
+        GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser GF
+        GLnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GL
+        GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater GF
+        GGnn1 = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Off-diagonal GG
 
         NM = Bmax[NB - 2] - Bmin[NB - 2] + 1
         NI = Bmax[NB - 1] - Bmin[NB - 1] + 1

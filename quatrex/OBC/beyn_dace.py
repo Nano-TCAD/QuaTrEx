@@ -21,7 +21,7 @@ N, NM = (dace.symbol(s) for s in ('N', 'NM'))
 
 def check_imag_cond(k, kR, phiR, phiL, M10, M01, max_imag):
     imag_cond = np.zeros(len(k))
-    dEk_dk = np.zeros(len(k), dtype=np.cfloat)
+    dEk_dk = np.zeros(len(k), dtype=np.complex128)
 
     ind = np.where(np.abs(np.imag(k)) < np.max((0.5, max_imag)))[0]
     Ikmax = len(ind)
@@ -61,8 +61,8 @@ def sort_k(k, kR, phiL, phiR, M01, M10, imag_limit, factor):
     Nk = len(k)
     NT = len(phiL[:, 0])
 
-    ksurf = np.zeros(Nk, dtype=np.cfloat)
-    Vsurf = np.zeros((NT, Nk), dtype=np.cfloat)
+    ksurf = np.zeros(Nk, dtype=np.complex128)
+    Vsurf = np.zeros((NT, Nk), dtype=np.complex128)
 
     imag_cond, dEk_dk = check_imag_cond(k, kR, phiR, phiL, M10, M01, imag_limit)
 

@@ -49,7 +49,7 @@ def calc_W(DH, E, PG, PL, PR, V, w_mask, mkl_threads=1, worker_num=1):
     lb_max_mm = np.max(bmax_ref - bmin_ref + 1)
 
     (WR_3D_E, WRnn1_3D_E, WL_3D_E, WLnn1_3D_E, WG_3D_E, WGnn1_3D_E) = initialize_block_G(NE, nb_mm, lb_max_mm)
-    XR_3D_E = np.zeros((NE, nb_mm, lb_max_mm, lb_max_mm), dtype=np.cfloat)
+    XR_3D_E = np.zeros((NE, nb_mm, lb_max_mm, lb_max_mm), dtype=np.complex128)
 
     #mkl.set_num_threads(mkl_threads)
 

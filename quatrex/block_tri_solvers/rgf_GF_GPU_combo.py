@@ -2,7 +2,7 @@ import cupy as cp
 import cupyx as cpx
 import numpy as np
 import scipy.sparse as sp
-import magmapy as mp
+#import magmapy as mp
 
 from collections import namedtuple
 csr_matrix = namedtuple('csr_matrix', ['data', 'indices', 'indptr'])
@@ -214,7 +214,7 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     
     # start = time.time()
     # print(f"Starting RGF: {start}")
-    queue = mp.create_queue(device_id = 0)
+    #queue = mp.create_queue(device_id = 0)
     # Sizes
     # Why are subtracing by 1 every time? Fix 0-based indexing
     Bmax = Bmax_fi - 1
@@ -420,7 +420,7 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
     if solve:
         gpu_identity = cp.identity(NN, dtype=md.dtype)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], batch_size, axis=0)
-        gr[:, 0:NN, 0:NN] = mp.linalg.solve(md[:, 0:NN, 0:NN], gpu_identity_batch, queue)
+        gr[:, 0:NN, 0:NN] = cp.linalg.solve(md[:, 0:NN, 0:NN], gpu_identity_batch)
     else:
         gr[:, 0:NN, 0:NN] = cp.linalg.inv(md[:, 0:NN, 0:NN])
     gr_h = cp.conjugate(gr[:, 0:NN, 0:NN].transpose((0,2,1)))
@@ -532,7 +532,7 @@ def rgf_batched_GPU(energies,  # Energy vector, dense format
         if solve:
             gpu_identity = cp.identity(NI, dtype=inv_arg.dtype)
             gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], batch_size, axis=0)
-            gr[:, 0:NI, 0:NI] = mp.linalg.solve(inv_arg, gpu_identity_batch, queue)
+            gr[:, 0:NI, 0:NI] = cp.linalg.solve(inv_arg, gpu_identity_batch)
         else:
             gr[:, 0:NI, 0:NI] = cp.linalg.inv(inv_arg)
         gr_h = cp.conjugate(gr[:, 0:NI, 0:NI].transpose((0,2,1)))

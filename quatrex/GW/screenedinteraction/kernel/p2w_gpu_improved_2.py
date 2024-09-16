@@ -50,7 +50,7 @@ def _toarray(data, indices, indptr, out, srow, erow, scol, ecol):
                 out[bid, j - scol] = data[i]
 
 
-def spgemm(A, B, rows: int = 338):
+def spgemm(A, B, rows: int = 5408):
     C = None
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -62,7 +62,7 @@ def spgemm(A, B, rows: int = 338):
     return C
 
 
-def spgemm_direct(A, B, C, rows: int = 338):
+def spgemm_direct(A, B, C, rows: int = 5408):
     idx = 0
     for i in range(0, A.shape[0], rows):
         A_block = A[i:min(A.shape[0], i+rows)]
@@ -152,6 +152,7 @@ def calc_W_pool_mpi_split(
     block_inv: bool = False,
     use_dace: bool = False,
     validate_dace: bool = False,
+    iter : int = 117
 ):
     """Memory-optimized version of the p2w_gpu function.
 
@@ -726,6 +727,24 @@ def calc_W_pool_mpi_split(
             )
 
     else:
+
+        comm.Barrier()
+        start_save = time.perf_counter()
+
+        # if (rank % 40) == 0 and (iter % 100) < 5:
+        #     path = '/capstor/scratch/cscs/ldeuschl/block_results/blocks_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
+        #     filename = path + "W_energy_%.4f" % energy[0] + "iter_" + str(iter) + "_rank_" + str(rank) + ".npz"
+        #     np.savez(filename, MB_left = mb00, MB_right = mbNN, M00_left = mr_s0, M01_left = mr_s1, M10_left = mr_s2, M00_right = mr_s0, M01_right = mr_e1, M10_right = mr_e2)
+
+
+
+        comm.Barrier()
+        finish_save = time.perf_counter()
+
+        if rank == 0:
+            print("    Time for saving boundary blocks w: %.3f s" % (finish_save - start_save), flush=True)
+
+
         comm.Barrier()
         start_beyn_w = time.perf_counter()
 
@@ -809,6 +828,22 @@ def calc_W_pool_mpi_split(
         #         dxr_sd,
         #         dxr_ed,
         #     )
+
+        comm.Barrier()
+        start_save = time.perf_counter()
+
+        # if (rank % 40) == 0 and (iter % 100) < 5:
+        #     path = '/capstor/scratch/cscs/ldeuschl/block_results/blocks_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
+        #     filename = path + "W<>_energy_%.4f" % energy[0] + "iter_" + str(iter) + "_rank_" + str(rank) + ".npz"
+        #     np.savez(filename, LG00_left = lg_s0, LG01_left = lg_s1, LL00_left = ll_s0, LL01_left = ll_s1, LG00_right = lg_e0, LG01_right = lg_e1, LL00_right = ll_e0, LL01_right = ll_e1)
+
+
+
+        comm.Barrier()
+        finish_save = time.perf_counter()
+
+        if rank == 0:
+            print("    Time for saving boundary blocks w<>: %.3f s" % (finish_save - start_save), flush=True)
             
         comm.Barrier()
         start_obc_l = time.perf_counter()

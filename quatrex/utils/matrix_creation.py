@@ -20,7 +20,7 @@ class NumpyArrayEncoder(JSONEncoder):
 
 
 def create_matrices_W(n, n_blocks, sparsity=1):
-    V00 = sparse.random(n, n, 1, dtype=np.cfloat)
+    V00 = sparse.random(n, n, 1, dtype=np.complex128)
     V00 = (V00 + V00.conj()) / 2
     V00 = (V00 + V00.T) / 2
     V01 = sparse.random(n, n, 1)
@@ -117,7 +117,7 @@ def get_matrices(fileName):
 
         n = data['n']
         nBlocks = data['nBlocks']
-        V = sparse.csr_matrix(data['V'], dtype=np.cfloat)
+        V = sparse.csr_matrix(data['V'], dtype=np.complex128)
         PR = sparse.csr_matrix(data['PR_r']) + sparse.csr_matrix(data['PR_i']) * 1j
         PL = sparse.csr_matrix(data['PL_r']) + sparse.csr_matrix(data['PL_i']) * 1j
 
@@ -150,9 +150,9 @@ def mat_assembly_fullG(G_block, Gnn1_block, Bmin_fi, Bmax_fi, format='sparse', t
     NT = Bmax[-1] + 1
 
     if format == 'sparse':
-        G = sparse.lil_matrix((NT, NT), dtype=np.cfloat)
+        G = sparse.lil_matrix((NT, NT), dtype=np.complex128)
     elif format == 'dense':
-        G = np.zeros((NT, NT), dtype=np.cfloat)
+        G = np.zeros((NT, NT), dtype=np.complex128)
 
     if type == 'R':
         for IB in range(NB):

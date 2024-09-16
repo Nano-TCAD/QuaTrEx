@@ -11,12 +11,12 @@ def inv_E(A_E):
     #return np.linalg.solve(A_E, np.tile(np.eye(A_E.shape[-1], dtype=complex), s))
 
     #option 3
-    #B = np.zeros(A_E.shape, dtype=np.cfloat)
+    #B = np.zeros(A_E.shape, dtype=np.complex128)
     #for Ept, A in enumerate(A_E):
     #    B[Ept] = np.linalg.inv(A)
 
     #option4
-    B = np.zeros(A_E.shape, dtype=np.cfloat)
+    B = np.zeros(A_E.shape, dtype=np.complex128)
     for Ept, A in enumerate(A_E):
         B[Ept] = np.linalg.solve(A, np.eye(len(A), dtype=complex))
 
@@ -27,7 +27,7 @@ def read_E(A, b_starts, b_length, nt, nEpts, b_hight=None):
 
     if not b_hight:
         b_hight = b_length
-    B = [np.ndarray((nEpts, b_length, b_hight), dtype=np.cfloat) for i in range(len(b_starts))]
+    B = [np.ndarray((nEpts, b_length, b_hight), dtype=np.complex128) for i in range(len(b_starts))]
     for Ept, block in enumerate(A):
         for i, b_start in enumerate(b_starts):
             s_r = b_start[0]

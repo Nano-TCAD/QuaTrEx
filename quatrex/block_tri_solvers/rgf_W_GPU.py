@@ -997,14 +997,14 @@ def rgf_w_opt_standalone_batched_gpu(
 
 
     # not true inverse, but build up inverses from either corner
-    xr_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
-    wg_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
-    wl_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
-    wr_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
+    xr_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    wg_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    wl_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    wr_diag_rgf = cp.zeros((nb_mm, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
 
     # True inverse M^-1 off-diagonal blocks
-    xr_upper = cp.zeros((nb_mm - 1, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
-    xr_lower = cp.zeros((nb_mm - 1, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.cfloat)
+    xr_upper = cp.zeros((nb_mm - 1, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
+    xr_lower = cp.zeros((nb_mm - 1, energy_batchsize, lb_max_mm, lb_max_mm), dtype=cp.complex128)
 
     # todo
     # find out if IdE, DOS, dWL, dWG are needed
@@ -1033,7 +1033,7 @@ def rgf_w_opt_standalone_batched_gpu(
     lb_lb = lb_vec_mm[idx_lb]
 
 
-    gpu_identity = cp.identity(lb_lb, dtype=cp.cfloat)
+    gpu_identity = cp.identity(lb_lb, dtype=cp.complex128)
     gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis=0)
     xr_lb = cp.linalg.solve(mr_diag_gpu[-1, :, :lb_lb, :lb_lb], gpu_identity_batch)
     #xr_lb = np.linalg.inv(mr_diag[-1, :, :lb_lb, :lb_lb])

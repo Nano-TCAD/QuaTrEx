@@ -166,9 +166,9 @@ if __name__ == "__main__":
         time_pickle = -time.perf_counter()
     
 
-    restart_dict = {'iter_num': 200,
-                    'SE_input_path': '/capstor/scratch/cscs/ldeuschl/restart_results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE_bias_0_10/',
-                    'delta_Vg': 0.05}
+    restart_dict = {'iter_num': 325,
+                    'SE_input_path': '/capstor/scratch/cscs/ldeuschl/restart_results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE_bias_minus_0_15/',
+                    'delta_Vg': -0.00}
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'atomic', bias_point = 0, rank = rank, layer_matrix = '/Layer_Matrix50.dat', homogenize = True, NCpSC = 4, poisson_path = poisson_path, restart_dict = restart_dict)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
@@ -640,12 +640,12 @@ if __name__ == "__main__":
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]), dtype=np.complex128, order="C")
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.50
+    mem_s = 0.00
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 451
+    max_iter = 151
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -675,7 +675,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/capstor/scratch/cscs/ldeuschl/results/restart_0_15_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
+    folder = '/capstor/scratch/cscs/ldeuschl/results/restart_minus_0_15_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -1381,7 +1381,7 @@ if __name__ == "__main__":
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE_bias_0_15/'
+            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE_bias_minus_0_15/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn_h2g, slp = sl_phn_h2g, srp = sr_phn_h2g, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:

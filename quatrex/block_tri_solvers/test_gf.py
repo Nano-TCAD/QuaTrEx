@@ -286,11 +286,11 @@ def rgf_standaloneGF_batched_GPU(
     SigGBR_gpu = cp.asarray(SigGBR)
     SigLBR_gpu = cp.asarray(SigLBR)
 
-    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Retarded (right)
-    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser (right)
-    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater (right)
-    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser boundary self-energy
-    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater boundary self-energy
+    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Retarded (right)
+    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser (right)
+    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater (right)
+    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser boundary self-energy
+    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater boundary self-energy
 
     # IdE = np.zeros((NB, energy_batchsize))
     # n = np.zeros((NB, energy_batchsize))
@@ -298,7 +298,7 @@ def rgf_standaloneGF_batched_GPU(
 
     # First step of iteration
     NN = Bmax[-1] - Bmin[-1] + 1
-    gpu_identity = cp.identity(NN, dtype = cp.cfloat)
+    gpu_identity = cp.identity(NN, dtype = cp.complex128)
     gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
     print(ham_diag_gpu.shape)
     print(gpu_identity_batch.shape)
@@ -340,7 +340,7 @@ def rgf_standaloneGF_batched_GPU(
         # # Extracting off-diagonal greater Self-energy block (lower)
         # SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
-        gpu_identity = cp.identity(NI, dtype = cp.cfloat)
+        gpu_identity = cp.identity(NI, dtype = cp.complex128)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
        # gR_gpu[IB, :, 0:NI, 0:NI] = cp.linalg.inv(ham_diag_gpu[IB, :, 0:NN, 0:NN] \
        #                                           - ham_upper_gpu[IB, :, 0:NI, 0:NP] \
