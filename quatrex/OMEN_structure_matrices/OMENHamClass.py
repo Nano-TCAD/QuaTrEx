@@ -50,7 +50,7 @@ class Hamiltonian:
     Vpot_new = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None, restart_dict = None):
+    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None, restart_dict = None, cbn = 2):
         if(not rank):
             self.no_orb = no_orb
             self.sim_folder = sim_folder
@@ -107,7 +107,7 @@ class Hamiltonian:
             if(potential_type == 'read_in_diag'):
                 self.Vpot = np.loadtxt(self.sim_folder + 'Vpot_diag.npy')
             if(potential_type == 'linear'):
-                self.Vpot = self.get_linear_potential_drop()
+                self.Vpot = self.get_linear_potential_drop(cbn)
             elif (potential_type == 'unit_cell'):
                 self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
                 self.Vpot = self.get_unit_cell_potential()
@@ -374,7 +374,7 @@ class Hamiltonian:
         self.columns = indI[:ind].astype('int32')
         self.rows = indJ[:ind].astype('int32')
 
-    def get_linear_potential_drop(self, ):
+    def get_linear_potential_drop(self, cbn):
         """
         This function returns the linear potential drop for the current system.
         The potential drop is calculated from the difference in the applied bias in the left and right reservoirs.
@@ -391,16 +391,18 @@ class Hamiltonian:
 
         x = self.LM[:, 0].astype(float)
         orb_per_at_loc = self.no_orb[self.LM[:, 3].astype(int) - 1]
-        indL = np.arange(0, ABmin[2] - 1)
-        indR = np.arange(ABmin[self.NBlock - 2] - 1, self.NA)
-        indC = np.arange(ABmin[2] - 1, ABmin[self.NBlock - 2] - 1)
+        indL = np.arange(0, ABmin[cbn] - 1)
+        indR = np.arange(ABmin[self.NBlock - cbn] - 1, self.NA)
+        indC = np.arange(ABmin[cbn] - 1, ABmin[self.NBlock - cbn] - 1)
 
         V = np.zeros(self.NA)
 
         V[indL] = 0
         V[indR] = -self.Vappl
-        if (ABmin.shape[0] > 5):
-            V[indC] = -self.Vappl * (x[indC] - x[indC[0]]) / (x[indC[-1]] - x[indC[0]])
+        lowest_x = np.min(x[indC])
+        highest_x = np.max(x[indC])
+        if (ABmin.shape[0] >= (2*cbn + 1)):
+            V[indC] = -self.Vappl * (x[indC] - lowest_x) / (highest_x - lowest_x)
 
         Vpot = np.zeros(np.sum(orb_per_at_loc))
 
