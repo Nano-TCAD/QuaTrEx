@@ -48,11 +48,11 @@ def rgf_standaloneGF_batched(
 
     energy_batchsize = ham_diag.shape[1]
 
-    gR = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    gL = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    gG = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    SigLB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    gR = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    gL = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    gG = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    SigLB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Lesser boundary self-energy
+    SigGB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Greater boundary self-energy
 
     IdE = np.zeros((NB, energy_batchsize))
     n = np.zeros((NB, energy_batchsize))
@@ -345,11 +345,11 @@ def rgf_standaloneGF_GPU(
     
 
 
-    gR_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.cfloat)  # Retarded (right)
-    gL_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.cfloat)  # Lesser (right)
-    gG_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.cfloat)  # Greater (right)
-    SigLB_gpu = cp.zeros((NB - 1, Bsize, Bsize), dtype=cp.cfloat)  # Lesser boundary self-energy
-    SigGB_gpu = cp.zeros((NB - 1, Bsize, Bsize), dtype=cp.cfloat)  # Greater boundary self-energy
+    gR_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.complex128)  # Retarded (right)
+    gL_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.complex128)  # Lesser (right)
+    gG_gpu = cp.zeros((NB, Bsize, Bsize), dtype=cp.complex128)  # Greater (right)
+    SigLB_gpu = cp.zeros((NB - 1, Bsize, Bsize), dtype=cp.complex128)  # Lesser boundary self-energy
+    SigGB_gpu = cp.zeros((NB - 1, Bsize, Bsize), dtype=cp.complex128)  # Greater boundary self-energy
 
     # IdE = np.zeros((NB, energy_batchsize))
     # n = np.zeros((NB, energy_batchsize))
@@ -357,7 +357,7 @@ def rgf_standaloneGF_GPU(
 
     # First step of iteration
     NN = Bmax[-1] - Bmin[-1] + 1
-    # gpu_identity = cp.identity(NN, dtype = cp.cfloat)
+    # gpu_identity = cp.identity(NN, dtype = cp.complex128)
     # gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
     # gR_gpu[-1, :, 0:NN, 0:NN] = cp.linalg.solve(ham_diag_gpu[-1, :, 0:NN, 0:NN], gpu_identity_batch)
     gR_gpu[-1, 0:NN, 0:NN] = cp.linalg.inv(ham_diag_gpu[-1, 0:NN, 0:NN])
@@ -397,7 +397,7 @@ def rgf_standaloneGF_GPU(
         # # Extracting off-diagonal greater Self-energy block (lower)
         # SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
-        # gpu_identity = cp.identity(NI, dtype = cp.cfloat)
+        # gpu_identity = cp.identity(NI, dtype = cp.complex128)
         # gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
         gR_gpu[IB, 0:NI, 0:NI] = cp.linalg.inv(ham_diag_gpu[IB, 0:NN, 0:NN] \
                                                   - ham_upper_gpu[IB, 0:NI, 0:NP] \
@@ -694,11 +694,11 @@ def rgf_standaloneGF_batched_GPU(
     SigGBR_gpu = cp.asarray(SigGBR)
     SigLBR_gpu = cp.asarray(SigLBR)
 
-    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Retarded (right)
-    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser (right)
-    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater (right)
-    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser boundary self-energy
-    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater boundary self-energy
+    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Retarded (right)
+    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser (right)
+    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater (right)
+    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser boundary self-energy
+    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater boundary self-energy
 
     # IdE = np.zeros((NB, energy_batchsize))
     # n = np.zeros((NB, energy_batchsize))
@@ -706,7 +706,7 @@ def rgf_standaloneGF_batched_GPU(
 
     # First step of iteration
     NN = Bmax[-1] - Bmin[-1] + 1
-    gpu_identity = cp.identity(NN, dtype = cp.cfloat)
+    gpu_identity = cp.identity(NN, dtype = cp.complex128)
     gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
     gR_gpu[-1, :, 0:NN, 0:NN] = cp.linalg.solve(ham_diag_gpu[-1, :, 0:NN, 0:NN], gpu_identity_batch)
     #gR_gpu[-1, :, 0:NN, 0:NN] = cp.linalg.inv(ham_diag_gpu[-1, :, 0:NN, 0:NN])
@@ -746,7 +746,7 @@ def rgf_standaloneGF_batched_GPU(
         # # Extracting off-diagonal greater Self-energy block (lower)
         # SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
-        gpu_identity = cp.identity(NI, dtype = cp.cfloat)
+        gpu_identity = cp.identity(NI, dtype = cp.complex128)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
        # gR_gpu[IB, :, 0:NI, 0:NI] = cp.linalg.inv(ham_diag_gpu[IB, :, 0:NN, 0:NN] \
        #                                           - ham_upper_gpu[IB, :, 0:NI, 0:NP] \
@@ -1026,11 +1026,11 @@ def rgf_standaloneGF_batched_GPU_part1(
     
 
 
-    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Retarded (right)
-    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser (right)
-    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater (right)
-    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Lesser boundary self-energy
-    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.cfloat)  # Greater boundary self-energy
+    gR_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Retarded (right)
+    gL_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser (right)
+    gG_gpu = cp.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater (right)
+    SigLB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Lesser boundary self-energy
+    SigGB_gpu = cp.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=cp.complex128)  # Greater boundary self-energy
 
     # IdE = np.zeros((NB, energy_batchsize))
     # n = np.zeros((NB, energy_batchsize))
@@ -1038,7 +1038,7 @@ def rgf_standaloneGF_batched_GPU_part1(
 
     # First step of iteration
     NN = Bmax[-1] - Bmin[-1] + 1
-    gpu_identity = cp.identity(NN, dtype = cp.cfloat)
+    gpu_identity = cp.identity(NN, dtype = cp.complex128)
     gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
     gR_gpu[-1, :, 0:NN, 0:NN] = cp.linalg.solve(ham_diag_gpu[-1, :, 0:NN, 0:NN], gpu_identity_batch)
     gL_gpu[-1, :, 0:NN, 0:NN] = gR_gpu[-1, :, 0:NN, 0:NN] @ (sl_diag_gpu[-1, :, 0:NN, 0:NN]) @ gR_gpu[-1, :, 0:NN, 0:NN].conjugate().transpose((0,2,1))
@@ -1077,7 +1077,7 @@ def rgf_standaloneGF_batched_GPU_part1(
         # # Extracting off-diagonal greater Self-energy block (lower)
         # SigG_l = SigG[Bmin[IB + 1]:Bmax[IB + 1] + 1, Bmin[IB]:Bmax[IB] + 1].toarray()
 
-        gpu_identity = cp.identity(NI, dtype = cp.cfloat)
+        gpu_identity = cp.identity(NI, dtype = cp.complex128)
         gpu_identity_batch = cp.repeat(gpu_identity[cp.newaxis, :, :], energy_batchsize, axis = 0)
         #gR_gpu[IB, :, 0:NI, 0:NI] = cp.linalg.inv(ham_diag_gpu[IB, :, 0:NN, 0:NN] \
         gR_gpu[IB, :, 0:NI, 0:NI] = cp.linalg.solve(ham_diag_gpu[IB, :, 0:NN, 0:NN] \

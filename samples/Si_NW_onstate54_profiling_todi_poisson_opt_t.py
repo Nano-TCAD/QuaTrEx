@@ -8,6 +8,7 @@ import time
 print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
 import sys
+from threadpoolctl import threadpool_info, threadpool_limits
 import numpy as np
 import cupy as cp
 import cupyx as cpx
@@ -55,6 +56,9 @@ from quatrex.GreensFunction import calc_GF_pool_GPU, calc_GF_pool_GPU_memopt_2
 from quatrex.GW.screenedinteraction.kernel import p2w_gpu, p2w_gpu_improved_2
 from quatrex.GW.polarization.kernel import g2p_gpu
 from quatrex.GW.selfenergy.kernel import gw2s_gpu
+
+
+
     # except ImportError:
     #     print("GPU import error, make sure you have the right GPU driver and CUDA version installed")
 
@@ -71,7 +75,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         print("MPI Initialized.", flush = True)
-
+    threadpool_limits(limits = 1, user_api = 'blas')
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/capstor/scratch/cscs/ldeuschl/quat_inputs/"
@@ -153,7 +157,7 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-40, 35, 14400, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-40, 35, 144, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-6, 1, 72, endpoint=True, dtype=float)  # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
@@ -252,11 +256,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 1
+    w_worker_threads = 16
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 1
+    gf_worker_threads = 16
     
     # physical parameter -----------
 
@@ -570,7 +574,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 25
+    max_iter = 11
     ECmin_vec = np.zeros((2, max_iter + 1))
     ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
     EVmax_vec = np.zeros((2, max_iter))
@@ -600,7 +604,7 @@ if __name__ == "__main__":
     if rank == 0:
         time_start = -time.perf_counter()
     # output folder
-    folder = '/capstor/scratch/cscs/ldeuschl/results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
+    folder = '/capstor/scratch/cscs/ldeuschl/results/savetest_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -1037,7 +1041,8 @@ if __name__ == "__main__":
                 NCpSC=NCpSC,
                 mkl_threads=w_mkl_threads,
                 worker_num=w_worker_threads,
-                compute_mode = 1
+                compute_mode = 1,
+                iter = iter_num
             )
 
         # transform from block format to 2D format-----------------------------------
@@ -1309,7 +1314,7 @@ if __name__ == "__main__":
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE/'
+            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/savetest_longSi_NW_14400_54_GVG_realV_eps5_ps1_mems50_SE/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn_h2g, slp = sl_phn_h2g, srp = sr_phn_h2g, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:

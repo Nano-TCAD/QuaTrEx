@@ -75,7 +75,7 @@ class Hamiltonian:
                     #self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.NH = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
             #Otherwise read from file
             else:
@@ -85,7 +85,7 @@ class Hamiltonian:
 
                 if np.abs(self.Overlap[self.keys[ii]][0, 0] + 1) < 1e-6:
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
 
             #Check that hamiltonian is hermitean
@@ -227,7 +227,7 @@ class Hamiltonian:
 
         full_filled = True
         #err35 = np.max(np.absolute(self.Hamiltonian['H_3'] - self.Hamiltonian['H_5'].H))
-        err44 = np.max(np.absolute(self.Hamiltonian['H_4'] - self.Hamiltonian['H_4'].H))
+        err44 = np.max(np.absolute(self.Hamiltonian['H_4'] - self.Hamiltonian['H_4'].conjugate().T))
 
         #print(type(err35))
         #print(err35.max().min())
