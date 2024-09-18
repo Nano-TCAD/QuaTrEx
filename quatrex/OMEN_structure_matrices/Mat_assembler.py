@@ -180,8 +180,13 @@ class Matrices:
 
             # Set kpoints (MP grid)
             self.kp = self.k_points(Nk)
+            gamma_idx = np.where(np.all(self.kp == np.zeros(3), axis=1))[0]
             # Apply shift to k-points
-            self.kp += kp_shift
+            self.kp = (self.kp + kp_shift + 1/2) % 1 - 1/2
+            # Have to do this stupid fix to avoid floating point errors
+            self.kp[gamma_idx] = kp_shift
+            # Assert that the k-points are within the first Brillouin zone
+            assert np.all(np.abs(self.kp) <= 1/2), "k-points are not within the first Brillouin zone"
             # Number of kpoints
             self.nkpts = np.prod(Nk)
             # create k-dependent Hamiltonian
