@@ -20,8 +20,9 @@ def where_kp(kpoint: npt.NDArray[np.float64], kpoints: npt.NDArray[np.float64], 
     Returns:
         int: index of kpoint in kpoints
     """
+    # This is not a perfect solution, for example if kpoints is [0,0,0] and kpoint is [0,0,0.0000001] it will not find it
     for kp in numba.prange(kpoints.shape[0]):
-        if np.all(np.abs(kpoint - kpoints[kp]) <= rel_tol*np.max(np.abs(kpoints[kp]))):
+        if np.all(np.abs(kpoint - kpoints[kp]) <= rel_tol*np.max(np.abs(kpoints))):  # [kp]))):
             return kp
     return -1
 
