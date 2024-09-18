@@ -59,16 +59,17 @@ if __name__ == "__main__":
     # assume every rank has enough memory to read the initial data
     # path to solution
     # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
-    # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/jiang_matrices/bias/"
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/"
+    # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/jiang_matrices/tmp/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/ort_matrices/tmp/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    jiang = True
+    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
+    #jiang = True
+    jiang = False
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -135,22 +136,23 @@ if __name__ == "__main__":
         comm.Barrier()
 
     # create hamiltonian object
-    # one orbital on C atoms, two same types
-    no_orb = np.array([3, 3, 5, 3, 3, 5])
-    Vappl = 0.0  # -0.2
+    #Vappl = -0.2
+    Vappl = 0.2
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    num_kpoints = np.array([1, 1, 1])
+    num_kpoints = np.array([1, 3, 1])
     Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
     if jiang:
-        #kp_shift = np.array([0, 1/3, 0])
-        kp_shift = np.array([0, 0, 0])
+        kp_shift = np.array([0, 1/3, 0])
+        #kp_shift = np.array([0, 0, 0])
     else:
         kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
     EPHN = np.array([0.0])  # Phonon energy
+    #DPHN = np.array([2.5e-1])  # Electron-phonon coupling
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
+    #DPHN = np.array([0.0])  # Electron-phonon coupling
 
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
@@ -176,6 +178,7 @@ if __name__ == "__main__":
     nkpts:      np.int32                = np.int32(np.prod(num_kpoints))
     no:         np.int32                = np.int32(columns.shape[0])
     pre_factor: np.complex128           = -1.0j * denergy / (np.pi*nkpts)
+    #pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
     nao:        np.int64                = np.max(bmax) + 1
 
     data_shape = np.array([no, ne*nkpts], dtype=np.int32)
@@ -210,7 +213,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 1.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
     # DFT Valence Band Maximum
@@ -219,7 +222,17 @@ if __name__ == "__main__":
         ECmin -= 0.9
         EVmax -= 0.9
     # Fermi Level of Left Contact
-    energy_fl = EVmax + (ECmin - EVmax)/2
+    if Vappl == 0.0:
+        # energy_fl = EVmax + (ECmin - EVmax)/2
+        energy_fl = EVmax + 0.2
+        # energy_fl = ECmin - 0.05
+    # Device should be symmetric, but let negative Vappl correspond to p-doped and positive Vappl to n-doped
+    elif Vappl > 0.0:
+        # p-doped
+        energy_fl = EVmax + 0.1
+    else:
+        # n-doped
+        energy_fl = ECmin - 0.05
     # Fermi Level of Right Contact
     energy_fr = energy_fl + Vappl
 
@@ -552,7 +565,16 @@ if __name__ == "__main__":
         #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
-        energy_fl = EVmax_vec[iter_num+1] + (ECmin_vec[iter_num+1] - EVmax_vec[iter_num+1])/2
+        if Vappl == 0.0:
+            # energy_fl = EVmax_vec[iter_num+1] + (ECmin_vec[iter_num+1] - EVmax_vec[iter_num+1])/2
+            energy_fl = EVmax_vec[iter_num+1] + 0.2
+            # energy_fl = ECmin_vec[iter_num+1] - 0.05
+        elif Vappl > 0.0:
+            # p-doped
+            energy_fl = EVmax_vec[iter_num+1] + 0.1
+        else:
+            # n-doped
+            energy_fl = ECmin_vec[iter_num+1] - 0.05
         energy_fr = energy_fl + Vappl
 
         num_energies_below_fl = sum(energy < energy_fl)  # len(energy) // 2  # Doesn't seem to work with len(energy) // 2. Don't know why
