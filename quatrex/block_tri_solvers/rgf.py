@@ -60,15 +60,15 @@ def rgf(M: ComplexArray, SigL: ComplexArray, SigG: ComplexArray, GR: ComplexArra
     LBsize = Bmax[0] - Bmin[0] + 1
     RBsize = Bmax[NB - 1] - Bmin[NB - 1] + 1
 
-    gR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    gL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    gG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    #GR = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Retarded GF
-    #GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) #Off-diagonal GR
-    #GL = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Lesser GF
-    #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GL
-    #GG = np.zeros((NB, Bsize, Bsize), dtype=np.cfloat) # Greater GF
-    #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.cfloat) # Off-diagonal GG
+    gR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    gL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    gG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    #GR = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Retarded GF
+    #GRnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) #Off-diagonal GR
+    #GL = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Lesser GF
+    #GLnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) # Off-diagonal GL
+    #GG = np.zeros((NB, Bsize, Bsize), dtype=np.complex128) # Greater GF
+    #GGnn1 = np.zeros((NB - 1, Bsize, Bsize), dtype=np.complex128) # Off-diagonal GG
 
     IdE = np.zeros(NB)
     DOS = np.zeros(NB)

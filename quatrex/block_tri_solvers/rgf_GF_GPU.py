@@ -48,11 +48,11 @@ def rgf_standaloneGF_batched(
 
     energy_batchsize = ham_diag.shape[1]
 
-    gR = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Retarded (right)
-    gL = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Lesser (right)
-    gG = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Greater (right)
-    SigLB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Lesser boundary self-energy
-    SigGB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.cfloat)  # Greater boundary self-energy
+    gR = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Retarded (right)
+    gL = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Lesser (right)
+    gG = np.zeros((NB, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Greater (right)
+    SigLB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Lesser boundary self-energy
+    SigGB = np.zeros((NB - 1, energy_batchsize, Bsize, Bsize), dtype=np.complex128)  # Greater boundary self-energy
 
     IdE = np.zeros((NB, energy_batchsize))
     n = np.zeros((NB, energy_batchsize))

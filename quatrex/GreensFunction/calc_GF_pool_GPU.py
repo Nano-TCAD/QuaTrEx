@@ -441,10 +441,10 @@ if __name__ == "__main__":
 
     (GR_3D_E_btch, GRnn1_3D_E_btch, GL_3D_E_btch, GLnn1_3D_E_btch, GG_3D_E_btch, GGnn1_3D_E_btch) = initialize_block_G_batched(NE, NB, Bsize)
 
-    DOS = np.zeros((NE, Bsize), dtype = np.cfloat)
-    nE = np.zeros((NE, Bsize), dtype = np.cfloat)
-    nP = np.zeros((NE, Bsize), dtype = np.cfloat)
-    idE = np.zeros((NE, Bsize), dtype = np.cfloat)
+    DOS = np.zeros((NE, Bsize), dtype = np.complex128)
+    nE = np.zeros((NE, Bsize), dtype = np.complex128)
+    nP = np.zeros((NE, Bsize), dtype = np.complex128)
+    idE = np.zeros((NE, Bsize), dtype = np.complex128)
 
     bmin = np.arange(1, NB * Bsize-Bsize + Bsize, Bsize, dtype=np.int32)
     bmax = np.arange(Bsize, NB * Bsize + Bsize, Bsize, dtype=np.int32)

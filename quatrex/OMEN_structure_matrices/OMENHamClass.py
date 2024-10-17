@@ -85,7 +85,7 @@ class Hamiltonian:
                     #self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.NH = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
             #Otherwise read from file
             else:
@@ -95,7 +95,7 @@ class Hamiltonian:
 
                 if np.abs(self.Overlap[self.keys[ii]][0, 0] + 1) < 1e-6:
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
             
             current = time.perf_counter()
@@ -207,7 +207,7 @@ class Hamiltonian:
                     #self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.NH = self.Hamiltonian[self.keys[ii]].shape[0]
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
             #Otherwise read from file
             else:
@@ -219,7 +219,7 @@ class Hamiltonian:
 
                 if np.abs(self.Overlap[self.keys[ii]][0, 0] + 1) < 1e-6:
                     self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
-                                                                  dtype=np.cfloat,
+                                                                  dtype=np.complex128,
                                                                   format='csr')
             
             current = time.perf_counter()

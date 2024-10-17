@@ -30,7 +30,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
 
     """
     factor = e / (4 * np.pi * eps0 * eps_r) * 1e9
-    V_atomic = np.zeros((DH.NA, DH.NB + 1, DH.TB, DH.TB), dtype=np.cfloat)
+    V_atomic = np.zeros((DH.NA, DH.NB + 1, DH.TB, DH.TB), dtype=np.complex128)
     SF = np.outer(np.arange(1, -0.1, -0.1), np.arange(1, -0.1, -0.1))
     Vmax = float(0.0)
 
@@ -55,7 +55,7 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
                     Vmax = Vact
                 
                 if (orb_uniform):
-                    V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.cfloat)
+                    V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * np.ones((orbA, orbB), dtype = np.complex128)
                 else:
                     V_atomic[ia, ib + 1, 0:orbA, 0:orbB] = Vact * SF[0:orbA, 0:orbB]
                 
@@ -64,16 +64,16 @@ def construct_coulomb_matrix(DH, eps_r, eps0, e, diag = False, orb_uniform = Fal
         orbA = DH.orb_per_at[ia+1] - DH.orb_per_at[ia]
         if(diag):
             if (orb_uniform):
-                #V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat) - np.eye(int(orbA), dtype = np.cfloat))
-                V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.cfloat))
+                #V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.complex128) - np.eye(int(orbA), dtype = np.complex128))
+                V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * (np.ones((orbA, orbA), dtype = np.complex128))
             else:
                 V_atomic[ia,0, 0:orbA, 0:orbA] = 1.5 * Vmax * SF[0:orbA, 0:orbA]
         elif(orbA > 1):
             if(orb_uniform):
-                V_atomic[ia,0, 0:orbA, 0:orbA] = Vmax * (np.ones((orbA, orbA), dtype = np.cfloat)- np.eye(int(orbA), dtype = np.cfloat))
+                V_atomic[ia,0, 0:orbA, 0:orbA] = Vmax * (np.ones((orbA, orbA), dtype = np.complex128)- np.eye(int(orbA), dtype = np.complex128))
             else: 
                 pass #not changing this as it will break the test unfortunately.   
-        #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.cfloat)
+        #V_atomic[ia,0, :orbA, :orbA] = 1.5 * Vmax * np.eye(int(orbA), dtype = np.complex128)
 
     V_sparse = map_4D_to_sparse(V_atomic, DH)
     return V_sparse
