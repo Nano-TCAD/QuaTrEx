@@ -205,6 +205,8 @@ def calc_bandstructure_mpi_interpol_2(E, S, H, E_target, SigmaR_GW_vec, indE, Bm
     # SigG = SigG1 + (SigG2 - SigG1) / (E2 - E1) * (E_target - E1)
     # SigG = (SigG - SigG.conj().T) / 2
 
+    xp = cp.get_array_module(SigmaR_GW_vec)
+
     SigR1 = SigmaR_GW_vec[0]
     SigR2 = SigmaR_GW_vec[1]
     SigR = SigR1 + (SigR2 - SigR1) / (E2 - E1) * (E_target - E1)
@@ -223,7 +225,7 @@ def calc_bandstructure_mpi_interpol_2(E, S, H, E_target, SigmaR_GW_vec, indE, Bm
         block_data_indices = mapping[block_idx][0]
         block_rows = mapping[block_idx][1]
         block_cols = mapping[block_idx][2]
-        uncompressed = np.zeros((block_size, block_size), dtype=compressed.dtype)
+        uncompressed = xp.zeros((block_size, block_size), dtype=compressed.dtype)
         uncompressed[block_rows, block_cols] = compressed[block_data_indices]
         return uncompressed
     
@@ -233,17 +235,21 @@ def calc_bandstructure_mpi_interpol_2(E, S, H, E_target, SigmaR_GW_vec, indE, Bm
 
     if side == 'left':
         LBsize = Bmax[0] - Bmin[0] + 1
-        H00 = H[:LBsize, :LBsize].toarray()
-        H01 = H[:LBsize, LBsize:2 * LBsize].toarray()
-        H10 = H[LBsize:2 * LBsize, :LBsize].toarray()
+        # H00 = H[:LBsize, :LBsize].toarray()
+        # H01 = H[:LBsize, LBsize:2 * LBsize].toarray()
+        # H10 = H[LBsize:2 * LBsize, :LBsize].toarray()
 
-        H00 += _get_dense_block(SigR, mapping_diag, 0, LBsize)
-        H01 += _get_dense_block(SigR, mapping_upper, 0, LBsize)
-        H10 += _get_dense_block(SigR, mapping_lower, 0, LBsize)
+        # H00 += _get_dense_block(SigR, mapping_diag, 0, LBsize)
+        # H01 += _get_dense_block(SigR, mapping_upper, 0, LBsize)
+        # H10 += _get_dense_block(SigR, mapping_lower, 0, LBsize)
 
-        S00 = S[:LBsize, :LBsize].toarray()
-        S01 = S[:LBsize, LBsize:2 * LBsize].toarray()
-        S10 = S[LBsize:2 * LBsize, :LBsize].toarray()
+        H00 = H[0] + _get_dense_block(SigR, mapping_diag, 0, LBsize)
+        H01 = H[1] + _get_dense_block(SigR, mapping_upper, 0, LBsize)
+        H10 = H[2] + _get_dense_block(SigR, mapping_lower, 0, LBsize)
+
+        # S00 = S[:LBsize, :LBsize].toarray()
+        # S01 = S[:LBsize, LBsize:2 * LBsize].toarray()
+        # S10 = S[LBsize:2 * LBsize, :LBsize].toarray()
 
     elif side == 'right':
         RBsize = Bmax[-1] - Bmin[-1] + 1

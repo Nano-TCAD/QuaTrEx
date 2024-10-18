@@ -1,5 +1,6 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
+import cupy as cp
 import numpy as np
 from scipy.sparse import csc_array
 
@@ -275,7 +276,8 @@ def get_band_edge_mpi_interpol_2(ECmin_DFT,
                       mapdiag, mapupper, maplower, ij2ji):
     nao = Bmax[-1] + 1
     nnz = SigmaR_GW.shape[1]
-    SigmaR_GW_vec = np.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
+    xp = cp.get_array_module(SigmaR_GW)
+    SigmaR_GW_vec = xp.ndarray((2, nnz), dtype=SigmaR_GW.dtype)
 
     # First step: get a first estimate of the CB edge
     (min_ind, send_rank_1, send_rank_2) = get_send_ranks_interpol(ECmin_DFT, E, comm, rank, size, count, disp)
@@ -661,6 +663,9 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
     SigmaG_GW: local SigmaG_GW vector in sparse format: np.ndarray[np.object]
     SigmaR_PHN: local SigmaR_PHN vector in sparse format: np.ndarray[np.object]
     """
+
+    xp = cp.get_array_module(SigmaR_GW)
+
     if rank == 0:
         if send_rank_1 == 0:
             SigmaR_GW_vec[0] = SigmaR_GW[min_ind - disp[1, rank]]
@@ -669,7 +674,7 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
             # SigmaR_PHN_vec[0] = SigmaR_PHN[min_ind - disp[1, rank]]
 
         else:
-            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            sr_gw_buf = xp.empty(nnz, dtype=np.complex128)
             # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
             # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
             # sr_phn_buf = np.empty(nnz, dtype=np.complex128)
@@ -702,7 +707,7 @@ def send_sigmas_GWRGL_PHNR_to_root_2(SigmaR_GW_vec, send_rank_1, send_rank_2, mi
             # SigmaG_GW_vec[1] = SigmaG_GW[min_ind + 1 - disp[1, rank]]
             # SigmaR_PHN_vec[1] = SigmaR_PHN[min_ind + 1 - disp[1, rank]]
         else:
-            sr_gw_buf = np.empty(nnz, dtype=np.complex128)
+            sr_gw_buf = xp.empty(nnz, dtype=np.complex128)
             # sl_gw_buf = np.empty(nnz, dtype=np.complex128)
             # sg_gw_buf = np.empty(nnz, dtype=np.complex128)
             # sr_phn_buf = np.empty(rows.shape[0], dtype=np.complex128)

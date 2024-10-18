@@ -4,7 +4,6 @@ import numpy as np
 import cupy as cp
 import cupyx as cpx
 import numpy as np
-#import magmapy as mp
 
 from quatrex.block_tri_solvers.rgf_GF_GPU_combo import (
     _copy_csr_to_gpu,
@@ -26,13 +25,14 @@ def _get_coulomb_batch(
 
     tid = int(cpx.jit.threadIdx.x)
     if tid < block_size:
-        num_threads = cpx.jit.blockDim.x
-        bid = cpx.jit.blockIdx.x
+        num_threads = int(cpx.jit.blockDim.x)
+        bid = int(cpx.jit.blockIdx.x)
         ie = bid // block_size
         ir = bid % block_size
 
         # NOTE: The buffer size here should ideally not be hardcoded.
-        buf = cpx.jit.shared_memory(cp.complex128, 768)
+        # buf = cpx.jit.shared_memory(cp.complex128, 416)
+        buf = cpx.jit.shared_memory(cp.complex128, 2016)
         for i in range(tid, block_size, num_threads):
             buf[i] = 0
         cpx.jit.syncthreads()
@@ -97,7 +97,7 @@ def rgf_batched_GPU(
 ):
     # start = time.time()
     # print(f"Starting RGF: {start}")
-    #queue = mp.create_queue(device_id = 0)
+
     # Sizes
     batch_size = len(energies)
     num_blocks = len(vh_diag_host)
@@ -109,17 +109,19 @@ def rgf_batched_GPU(
     num_threads = min(1024, block_size)
     num_thread_blocks = batch_size * block_size
 
-    map_diag_mm_dev = [cp.empty_like(mm) for mm in map_diag_mm]
-    map_upper_mm_dev = [cp.empty_like(mm) for mm in map_upper_mm]
-    map_lower_mm_dev = [cp.empty_like(mm) for mm in map_lower_mm]
+    if not isinstance(map_diag_mm, cp.ndarray):
 
-    map_diag_m_dev = [cp.empty_like(m) for m in map_diag_m]
-    map_upper_m_dev = [cp.empty_like(m) for m in map_upper_m]
-    map_lower_m_dev = [cp.empty_like(m) for m in map_lower_m]
+        map_diag_mm_dev = [cp.empty_like(mm) for mm in map_diag_mm]
+        map_upper_mm_dev = [cp.empty_like(mm) for mm in map_upper_mm]
+        map_lower_mm_dev = [cp.empty_like(mm) for mm in map_lower_mm]
 
-    map_diag_l_dev = [cp.empty_like(l) for l in map_diag_l]
-    map_upper_l_dev = [cp.empty_like(l) for l in map_upper_l]
-    map_lower_l_dev = [cp.empty_like(l) for l in map_lower_l]
+        map_diag_m_dev = [cp.empty_like(m) for m in map_diag_m]
+        map_upper_m_dev = [cp.empty_like(m) for m in map_upper_m]
+        map_lower_m_dev = [cp.empty_like(m) for m in map_lower_m]
+
+        map_diag_l_dev = [cp.empty_like(l) for l in map_diag_l]
+        map_upper_l_dev = [cp.empty_like(l) for l in map_upper_l]
+        map_lower_l_dev = [cp.empty_like(l) for l in map_lower_l]
 
     vd_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
     vu_batch = cp.empty((batch_size, block_size, block_size), dtype=dtype)
@@ -174,15 +176,33 @@ def rgf_batched_GPU(
     wG_gpu = cp.empty(
         (num_blocks, batch_size, block_size, block_size), dtype=dtype
     )  # Greater (right)
-    dll_gpu = cp.empty(
-        (num_blocks - 1, batch_size, block_size, block_size), dtype=dtype
-    )  # Lesser boundary self-energy
-    dlg_gpu = cp.empty(
-        (num_blocks - 1, batch_size, block_size, block_size), dtype=dtype
-    )  # Greater boundary self-energy
-    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
-    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype)
+    # # EXPERIMENTAL
+    # xR_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Retarded (right)
+    # wL_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Lesser (right)
+    # wG_cpu = np.empty(
+    #     (num_blocks, batch_size, block_size, block_size), dtype=dtype
+    # )  # Greater (right)
+    # xR_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Retarded (right)
+    # wL_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Lesser (right)
+    # wG_gpu = cp.empty(
+    #     (3, batch_size, block_size, block_size), dtype=dtype
+    # )  # Greater (right)
+    ############################
+    # dll_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
+    # dlg_gpu = cp.empty((num_blocks - 1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
+    dll_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Lesser boundary self-energy
+    dlg_gpu = cp.empty((1, batch_size, block_size, block_size), dtype=dtype)  # Greater boundary self-energy
+    DOS_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(dosw, np.ndarray) else dosw
+    nE_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nEw, np.ndarray) else nEw
+    nP_gpu = cp.empty((batch_size, num_blocks), dtype=dtype) if isinstance(nPw, np.ndarray) else nPw
     # idE_gpu = cp.empty((batch_size, num_blocks), dtype=idE.dtype)
 
     XR_gpu = cp.empty(
@@ -210,13 +230,13 @@ def rgf_batched_GPU(
         (1, batch_size, block_size, block_size), dtype=dtype
     )  # Greater (right)
 
-    WR_compressed = cp.zeros_like(wr_host)
-    WL_compressed = cp.zeros_like(wl_host)
-    WG_compressed = cp.zeros_like(wg_host)
+    WR_compressed = cp.zeros_like(wr_host) if isinstance(wr_host, np.ndarray) else wr_host
+    WL_compressed = cp.zeros_like(wl_host) if isinstance(wl_host, np.ndarray) else wl_host
+    WG_compressed = cp.zeros_like(wg_host) if isinstance(wg_host, np.ndarray) else wg_host
 
-    mr_dev = cp.empty_like(mr_host)
-    ll_dev = cp.empty_like(ll_host)
-    lg_dev = cp.empty_like(lg_host)
+    mr_dev = cp.empty_like(mr_host) if isinstance(mr_host, np.ndarray) else None
+    ll_dev = cp.empty_like(ll_host) if isinstance(ll_host, np.ndarray) else None
+    lg_dev = cp.empty_like(lg_host) if isinstance(lg_host, np.ndarray) else None
     dmr_dev = [None for _ in range(num_blocks)]
     dvh_dev = [None for _ in range(num_blocks)]
     dll_dev = [None for _ in range(num_blocks)]
@@ -234,34 +254,66 @@ def rgf_batched_GPU(
     nidx = nIB % 2
     NN = bmax[-1] - bmin[-1] + 1
 
-    dmr_dev[0] = cp.asarray(dmr_left_host)
-    dmr_dev[-1] = cp.asarray(dmr_right_host)
-
-    dvh_dev[0] = cp.asarray(dvh_left_host)
-    dvh_dev[-1] = cp.asarray(dvh_right_host)
-
-    dll_dev[0] = cp.asarray(dll_left_host)
-    dll_dev[-1] = cp.asarray(dll_right_host)
-    dlg_dev[0] = cp.asarray(dlg_left_host)
-    dlg_dev[-1] = cp.asarray(dlg_right_host)
-
     with input_stream:
 
-        for i in range(num_blocks):
-            map_diag_mm_dev[i].set(map_diag_mm[i])
-            map_diag_m_dev[i].set(map_diag_m[i])
-            map_diag_l_dev[i].set(map_diag_l[i])
-            if i < num_blocks - 1:
-                map_upper_mm_dev[i].set(map_upper_mm[i])
-                map_upper_m_dev[i].set(map_upper_m[i])
-                map_upper_l_dev[i].set(map_upper_l[i])
-                map_lower_mm_dev[i].set(map_lower_mm[i])
-                map_lower_m_dev[i].set(map_lower_m[i])
-                map_lower_l_dev[i].set(map_lower_l[i])
+        if not isinstance(map_diag_mm, cp.ndarray):
+            for i in range(num_blocks):
+                map_diag_mm_dev[i].set(map_diag_mm[i])
+                map_diag_m_dev[i].set(map_diag_m[i])
+                map_diag_l_dev[i].set(map_diag_l[i])
+                if i < num_blocks - 1:
+                    map_upper_mm_dev[i].set(map_upper_mm[i])
+                    map_upper_m_dev[i].set(map_upper_m[i])
+                    map_upper_l_dev[i].set(map_upper_l[i])
+                    map_lower_mm_dev[i].set(map_lower_mm[i])
+                    map_lower_m_dev[i].set(map_lower_m[i])
+                    map_lower_l_dev[i].set(map_lower_l[i])
+        else:
+            map_diag_mm_dev = map_diag_mm
+            map_upper_mm_dev = map_upper_mm
+            map_lower_mm_dev = map_lower_mm
+            map_diag_m_dev = map_diag_m
+            map_upper_m_dev = map_upper_m
+            map_lower_m_dev = map_lower_m
+            map_diag_l_dev = map_diag_l
+            map_upper_l_dev = map_upper_l
+            map_lower_l_dev = map_lower_l
 
-        mr_dev.set(mr_host)
-        ll_dev.set(ll_host)
-        lg_dev.set(lg_host)
+        # for i in range(num_blocks):
+        #     map_diag_mm_dev[i].set(map_diag_mm[i])
+        #     if i < num_blocks - 1:
+        #         map_upper_mm_dev[i].set(map_upper_mm[i])
+        #         map_lower_mm_dev[i].set(map_lower_mm[i])
+
+        # if isinstance(map_diag_m, np.ndarray):
+        #     for i in range(num_blocks):
+        #         # map_diag_mm_dev[i].set(map_diag_mm[i])
+        #         map_diag_m_dev[i].set(map_diag_m[i])
+        #         map_diag_l_dev[i].set(map_diag_l[i])
+        #         if i < num_blocks - 1:
+        #             # map_upper_mm_dev[i].set(map_upper_mm[i])
+        #             map_upper_m_dev[i].set(map_upper_m[i])
+        #             map_upper_l_dev[i].set(map_upper_l[i])
+        #             # map_lower_mm_dev[i].set(map_lower_mm[i])
+        #             map_lower_m_dev[i].set(map_lower_m[i])
+        #             map_lower_l_dev[i].set(map_lower_l[i])
+        #     else:
+        #         map_diag_m_dev = map_diag_m
+        #         map_upper_m_dev = map_upper_m
+        #         map_lower_m_dev = map_lower_m
+        #         map_diag_l_dev = map_diag_l
+        #         map_upper_l_dev = map_upper_l
+        #         map_lower_l_dev = map_lower_l
+
+
+        if mr_dev is not None:
+            mr_dev.set(mr_host)
+            ll_dev.set(ll_host)
+            lg_dev.set(lg_host)
+        else:
+            mr_dev = mr_host
+            ll_dev = ll_host
+            lg_dev = lg_host
         input_events[idx].record(stream=input_stream)
 
         if num_blocks > 1:
@@ -274,22 +326,27 @@ def rgf_batched_GPU(
             nlgd = lg_diag_buffer[nidx]
             nlgl = lg_lower_buffer[nidx]
 
-            ndmr = dmr_dev[nIB]
-            ndll = dll_dev[nIB]
-            ndlg = dlg_dev[nIB]
-
-            # NOTE: The next block can already be at the boundary!
-            _get_dense_block_batch(mr_dev, map_diag_m_dev, nIB, nmrd, ndmr)
+            # NOTE: We are assuming here that the next block is not in the boundary.
+            _get_dense_block_batch(mr_dev, map_diag_m_dev, nIB, nmrd)
             _get_dense_block_batch(mr_dev, map_upper_m_dev, nIB, nmru)
             _get_dense_block_batch(mr_dev, map_lower_m_dev, nIB, nmrl)
-            _get_dense_block_batch(ll_dev, map_diag_l_dev, nIB, nlld, ndll)
+            _get_dense_block_batch(ll_dev, map_diag_l_dev, nIB, nlld)
             _get_dense_block_batch(ll_dev, map_lower_l_dev, nIB, nlll)
-            _get_dense_block_batch(lg_dev, map_diag_l_dev, nIB, nlgd, ndlg)
+            _get_dense_block_batch(lg_dev, map_diag_l_dev, nIB, nlgd)
             _get_dense_block_batch(lg_dev, map_lower_l_dev, nIB, nlgl)
 
             input_events[nidx].record(stream=input_stream)
 
+    dmr_dev[0] = cp.asarray(dmr_left_host)
+    dmr_dev[-1] = cp.asarray(dmr_right_host)
 
+    dvh_dev[0] = cp.asarray(dvh_left_host)
+    dvh_dev[-1] = cp.asarray(dvh_right_host)
+
+    dll_dev[0] = cp.asarray(dll_left_host)
+    dll_dev[-1] = cp.asarray(dll_right_host)
+    dlg_dev[0] = cp.asarray(dlg_left_host)
+    dlg_dev[-1] = cp.asarray(dlg_right_host)
 
     computation_stream.wait_event(event=input_events[idx])
 
@@ -300,6 +357,9 @@ def rgf_batched_GPU(
     xr = xR_gpu[IB]
     wl = wL_gpu[IB]
     wg = wG_gpu[IB]
+    # xr = xR_gpu[idx]
+    # wl = wL_gpu[idx]
+    # wg = wG_gpu[idx]
 
     dmr = dmr_dev[IB]
     dll = dll_dev[IB]
@@ -345,6 +405,14 @@ def rgf_batched_GPU(
         with input_stream:
 
             input_stream.wait_event(event=backward_events[pidx])
+
+            # xr = xR_gpu[pidx]
+            # xr.get(out=xR_cpu[pIB])
+            # wl = wL_gpu[pidx]
+            # wl.get(out=wL_cpu[pIB])
+            # wg = wG_gpu[pidx]
+            # wg.get(out=wG_cpu[pIB])
+
             if nIB >= 0:
 
                 nmrd = mr_diag_buffer[nidx]
@@ -394,9 +462,19 @@ def rgf_batched_GPU(
         pwl = wL_gpu[IB + 1]
         wg = wG_gpu[IB]
         pwg = wG_gpu[IB + 1]
+
+        # xr = xR_gpu[idx]
+        # pxr = xR_gpu[pidx]
+        # wl = wL_gpu[pidx]
+        # pwl = wL_gpu[pidx]
+        # wg = wG_gpu[pidx]
+        # pwg = wG_gpu[pidx]
+
         dmr = dmr_dev[IB]
-        dll = dll_gpu[IB]
-        dlg = dlg_gpu[IB]
+        # dll = dll_gpu[IB]
+        # dlg = dlg_gpu[IB]
+        dll = dll_gpu[0]
+        dlg = dlg_gpu[0]
 
         if IB == 0:
             xr = XR_gpu[0]
@@ -455,6 +533,23 @@ def rgf_batched_GPU(
     with input_stream:
 
         input_stream.wait_event(event=backward_events[idx])
+
+        # if IB == 0:
+
+        #     xr = xR_gpu[idx]
+        #     xr.get(out=xR_cpu[IB])
+        #     wl = wL_gpu[idx]
+        #     wl.get(out=wL_cpu[IB])
+        #     wg = wG_gpu[idx]
+        #     wg.get(out=wG_cpu[IB])
+
+        #     nnxr = xR_gpu[2]
+        #     nnxr.set(xR_cpu[IB+2])
+        #     nnwl = wL_gpu[2]
+        #     nnwl.set(wL_cpu[IB+2])
+        #     nnwg = wG_gpu[2]
+        #     nnwg.set(wG_cpu[IB+2])
+
         if nIB < num_blocks:
 
             npmru = mr_upper_buffer[nidx]
@@ -640,6 +735,14 @@ def rgf_batched_GPU(
 
                 if nIB < num_blocks - 1:
 
+                    # nnIB = nIB + 1
+                    # nnidx = nnIB % 3
+                    # nnxr = xR_gpu[nnidx]
+                    # nnxr.set(xR_cpu[nnIB])
+                    # nnwl = wL_gpu[nnidx]
+                    # nnwl.set(wL_cpu[nnIB])
+                    # nnwg = wG_gpu[nnidx]
+
                     nmru = mr_diag_buffer[nidx]
                     nmrl = ll_diag_buffer[nidx]
                     nllu = ll_upper_buffer[nidx]
@@ -671,6 +774,11 @@ def rgf_batched_GPU(
         xr = xR_gpu[IB]
         wl = wL_gpu[IB]
         wg = wG_gpu[IB]
+
+        # current_idx = IB % 3
+        # xr = xR_gpu[current_idx]
+        # wl = wL_gpu[current_idx]
+        # wg = wG_gpu[current_idx]
 
         dvh = dvh_dev[IB]
 
@@ -742,6 +850,10 @@ def rgf_batched_GPU(
             nxr = xR_gpu[nIB]
             nwl = wL_gpu[nIB]
             nwg = wG_gpu[nIB]
+            # next_index = nIB % 3
+            # nxr = xR_gpu[next_index]
+            # nwl = wL_gpu[next_index]
+            # nwg = wG_gpu[next_index]
 
             mru = mr_diag_buffer[idx]  # NOTE: This is not a mistake.
             mrl = ll_diag_buffer[idx]
@@ -852,8 +964,10 @@ def rgf_batched_GPU(
             num_blocks - 1,
             WG_compressed,
         )
-        WL_compressed.get(out=wl_host)
-        WG_compressed.get(out=wg_host)
+        if isinstance(wl_host, np.ndarray):
+            WL_compressed.get(out=wl_host, blocking=False)
+        if isinstance(wg_host, np.ndarray):
+            WG_compressed.get(out=wg_host, blocking=False)
     _store_compressed(
         map_diag_mm_dev,
         map_upper_mm_dev,
@@ -863,12 +977,14 @@ def rgf_batched_GPU(
         num_blocks - 1,
         WR_compressed,
     )
-    WR_compressed.get(out=wr_host)
+    if isinstance(wr_host, np.ndarray):
+        WR_compressed.get(out=wr_host, blocking=False)
 
     computation_stream.synchronize()
-    DOS_gpu.get(out=dosw)
-    nE_gpu.get(out=nEw)
-    nP_gpu.get(out=nPw)
+    if isinstance(dosw, np.ndarray):
+        DOS_gpu.get(out=dosw, blocking=False)
+        nE_gpu.get(out=nEw, blocking=False)
+        nP_gpu.get(out=nPw, blocking=False)
     input_stream.synchronize()
     computation_stream.synchronize()
 

@@ -82,7 +82,7 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
 @cpx.jit.rawkernel()
 def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
 
-    idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
     if idx < z_size * b_size * b_size:
 
         i = idx // (b_size * b_size)
@@ -106,7 +106,7 @@ def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
 @cpx.jit.rawkernel()
 def compute_dEk_dk(dEk_dk, kL, kR, phiL, phiR, pRpL, M01, M10, ind_k, Ikmax, N, isL):
 
-    idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
     if idx < Ikmax * N * N:
 
         i = idx // (N * N)
@@ -852,13 +852,17 @@ def beyn_sigma_batched_gpu(kL, kR, phiL, phiR, M00, M01, M10, imag_lim, ref_iter
     T = cp.empty_like(M00)
     min_dEk = np.zeros(batch_size, dtype=np.float64)
     for i in range(batch_size):
-        ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
-        T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
-        ind = np.where(abs(dEk_dk))
-        if len(ind[0]) > 0:
-            min_dEk[i] = np.min(abs(dEk_dk[ind]))
-        else:
+        if kL[i] is None:
+            T[i] = 0.0
             min_dEk[i] = 1e8
+        else:
+            ksurf, Vsurf, inv_Vsurf, dEk_dk = prepare_input_data_gpu(kL[i], kR[i], phiL[i], phiR[i], M01[i], M10[i], imag_lim, rfactor)
+            T[i] = Vsurf @ cp.diag(cp.exp(ifactor * ksurf)) @ inv_Vsurf
+            ind = np.where(abs(dEk_dk))
+            if len(ind[0]) > 0:
+                min_dEk[i] = np.min(abs(dEk_dk[ind]))
+            else:
+                min_dEk[i] = 1e8
 
     gR = cp.linalg.inv(M00 + second @ T)
     for _ in range(ref_iteration):

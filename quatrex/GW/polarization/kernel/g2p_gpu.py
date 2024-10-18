@@ -14,6 +14,10 @@ sys.path.append(parent_path)
 
 from quatrex.utils import linalg_gpu
 
+import cupyx as cpx
+fft_gpu = cpx.scipy.fft.fft
+ifft_gpu = cpx.scipy.fft.ifft
+
 
 def g2p_fft_gpu(pre_factor: np.complex128, ij2ji: cp.ndarray, gg: cp.ndarray, gl: cp.ndarray,
                 gr: cp.ndarray) -> typing.Tuple[cp.ndarray, cp.ndarray, cp.ndarray]:
@@ -194,7 +198,7 @@ def g2p_fft_mpi_gpu(
 
     return (pg, pl, pr)
 
-def g2p_fft_mpi_gpu_batched_nopr(
+def g2p_fft_mpi_gpu_batched_nopr(pg, pl,
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
     gl_transposed: npt.NDArray[np.complex128], batch_size: int = 1000
 ) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
@@ -218,17 +222,46 @@ def g2p_fft_mpi_gpu_batched_nopr(
     ne = gg.shape[1]
     no = gg.shape[0]
 
-    batches = no // batch_size
+    mempool = cp.get_default_memory_pool()
+    max_bytes = 64 * 1024 ** 3
+    used_bytes = mempool.used_bytes()
+    spare_bytes = max_bytes - used_bytes
+    # spare_bytes -= 2 * no * ne * 16  #  PG, PL, 16 bytes for complex128
+    num_buffers = 12  # closer to 6 but overapproximating
+    avail_buffer_size = spare_bytes // num_buffers
+    batch_size = avail_buffer_size // (2 * ne * 16)  # 16 bytes for complex128
+    batch_size = min(batch_size, no)
+    batches = int(np.ceil(no / batch_size))
+    batch_size = int(np.ceil(no / batches))  # Balance last batch
+    # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+    # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+    # print(f"Spare bytes: {spare_bytes}, Batches: {batches}, Batch size: {batch_size}", flush=True)
 
-    pg = np.empty((no, ne), dtype=np.complex128)
-    pl = np.empty((no, ne), dtype=np.complex128)
+    # # Assuming FFT space is complexity is O(NlogN), where N is ne (above)
+    # total_space = 2 * ne * int(np.log2(ne)) * no
+    # # The following is an assumption for LUMI
+    # max_energies = 64 * 8 * 64
+    # max_orbitals = 1000
+    # max_space = 2 * max_energies * int(np.log2(2 * max_energies)) * max_orbitals
+    # batches = int(np.ceil(total_space / max_space))
+    # batch_size = int(np.ceil(no / batches))
+    # print("Total space: ", total_space, ", Max space: ", max_space, ", Batches: ", batches, flush=True)
+
+
+    # batches = no // batch_size
+    # if batches == 0:
+    #     batch_size = no
+    #     batches = 1
+
+    # pg = cp.empty((no, ne), dtype=np.complex128)
+    # pl = cp.empty((no, ne), dtype=np.complex128)
 
 
     # load data to gpu and compute----------------------------------------------
     # allocate gpu memory
-    gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
-    gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gg_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gl_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
+    # gl_transposed_gpu = cp.empty((batch_size + no % batch_size, ne), dtype=np.complex128)
 
 
     # compute pg/pl/pr----------------------------------------------------------
@@ -236,21 +269,29 @@ def g2p_fft_mpi_gpu_batched_nopr(
         batch_start = batch * batch_size
         # last batch different, if not dividable
         batch_end = batch_size * (batch + 1) if batch != batches - 1 else batch_size * (batch + 1) + no % batch_size
-        # fft
-        gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
-        gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
 
-        gl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(gl_transposed[batch_start:batch_end, :])
-        gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        # fft
+        # gg_gpu[0:batch_end - batch_start] = cp.asarray(gg[batch_start:batch_end, :])
+        # gg_t_gpu = cp.fft.fft(gg_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gg_gpu = gg[batch_start:batch_end, :]
+        gg_t_gpu = cp.fft.fft(gg_gpu, n=2 * ne, axis=1)
+
+        # gl_transposed_gpu[0:batch_end - batch_start] = cp.asarray(gl_transposed[batch_start:batch_end, :])
+        # gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu[0:batch_end - batch_start], n=2 * ne, axis=1)
+        gl_transposed_gpu = gl_transposed[batch_start:batch_end, :]
+        gl_t_transposed_gpu = cp.fft.fft(gl_transposed_gpu, n=2 * ne, axis=1)
 
         # time reversed
-        gl_t_mod_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)
+        # gl_t_mod_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)
+        gl_t_transposed_gpu = cp.roll(cp.flip(gl_t_transposed_gpu, axis=1), 1, axis=1)
 
         # multiply elementwise
-        pg_t_gpu = cp.multiply(gg_t_gpu, gl_t_mod_gpu)
+        # pg_t_gpu = cp.multiply(gg_t_gpu, gl_t_mod_gpu)
+        pg_t_gpu = cp.multiply(gg_t_gpu, gl_t_transposed_gpu)
 
         # ifft, cutoff and multiply with pre factor
-        pg_gpu = cp.multiply(cp.fft.ifft(pg_t_gpu, axis=1), pre_factor)
+        # pg_gpu = cp.multiply(cp.fft.ifft(pg_t_gpu, axis=1), pre_factor)
+        pg_gpu = cp.multiply(ifft_gpu(pg_t_gpu, axis=1, overwrite_x=True), pre_factor)
         pl_gpu = -cp.conjugate(cp.roll(cp.flip(pg_gpu, axis=1), 1, axis=1))
 
         # cutoff
@@ -259,10 +300,13 @@ def g2p_fft_mpi_gpu_batched_nopr(
 
         # load data to cpu----------------------------------------------------------
 
-        pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start].get()
-        pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start].get()
+        pg[batch_start:batch_end, :] = pg_gpu[0:batch_end - batch_start]
+        pl[batch_start:batch_end, :] = pl_gpu[0:batch_end - batch_start]
 
-    return (pg, pl)
+        # print(f"Used bytes: {mempool.used_bytes()}", flush=True)
+        # print(f"Total bytes: {mempool.total_bytes()}", flush=True)
+
+    # return (pg, pl)
 
 
 def g2p_fft_mpi_gpu_streams(pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
@@ -364,7 +408,9 @@ def g2p_fft_mpi_gpu_batched_streams(pre_factor: np.complex128, gg: npt.NDArray[n
     # batch over no
     batches = no // batch_size
     if batches == 0:
-        print("Too large batch size")
+        # print("Too large batch size")
+        batch_size = no
+        batches = 1
 
     # load data to gpu and compute----------------------------------------------
     # allocate gpu memory

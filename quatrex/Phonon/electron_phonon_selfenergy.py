@@ -1,5 +1,6 @@
 """ Script for calculating the Electron-Phonon self-energy. Based on Mathieu's calc_SE_GF_EPHN function
 from the matlab GW code."""
+import cupy as cp
 import numpy as np
 
 
@@ -8,59 +9,32 @@ def calc_SE_GF_EPHN(energy, gl_diag, gg_diag, sg_phn_old, sl_phn_old, sr_phn_old
     kB = 1.38e-23
     q = 1.6022e-19
 
-    dE = energy[1]-energy[0]
+    dE = energy[1]-energy[0] if len(energy) > 1 else np.float64(1.0)
 
     UT = kB*temp/q
 
-    SigmaL = np.zeros(sl_phn_old.shape, dtype=np.complex128)
-    SigmaG = np.zeros(sg_phn_old.shape, dtype=np.complex128)
+    SigmaL = cp.zeros(sl_phn_old.shape, dtype=np.complex128)
+    SigmaG = cp.zeros(sg_phn_old.shape, dtype=np.complex128)
 
     for IPH in range(len(EPHN)):
         NPH = 1 / (np.exp(max(EPHN[IPH], 5e-3) / UT) - 1)
-        SigmaL += 1j * np.imag(calc_Sigma_el_phon(gl_diag, NPH, NPH+1, EPHN[IPH], DPHN[IPH], dE))
-        SigmaG += 1j * np.imag(calc_Sigma_el_phon(gg_diag, NPH+1, NPH, EPHN[IPH], DPHN[IPH], dE))
+        SigmaL += 1j * cp.imag(calc_Sigma_el_phon(gl_diag, NPH, NPH+1, EPHN[IPH], DPHN[IPH], dE))
+        SigmaG += 1j * cp.imag(calc_Sigma_el_phon(gg_diag, NPH+1, NPH, EPHN[IPH], DPHN[IPH], dE))
 
     SigmaR = (SigmaG - SigmaL) / 2.0
 
-    SigmaL = (1 - memory_factor) * SigmaL + memory_factor * sl_phn_old
-    SigmaG = (1 - memory_factor) * SigmaG + memory_factor * sg_phn_old
-    SigmaR = (1 - memory_factor) * SigmaR + memory_factor * sr_phn_old
+    sl_phn_old[:] = (1 - memory_factor) * SigmaL + memory_factor * sl_phn_old
+    sg_phn_old[:] = (1 - memory_factor) * SigmaG + memory_factor * sg_phn_old
+    sr_phn_old[:] = (1 - memory_factor) * SigmaR + memory_factor * sr_phn_old
 
-    return SigmaG, SigmaL, SigmaR
-
-def calc_SE_GF_EPHN_mpi(energy, gl_diag, gg_diag, EPHN, DPHN, temp, memory_factor):
-
-    kB = 1.38e-23
-    q = 1.6022e-19
-
-    dE = energy[1]-energy[0]
-
-    UT = kB*temp/q
-
-    SigmaL = np.zeros(gl_diag.shape, dtype=np.complex128, order = 'C')
-    SigmaG = np.zeros(gg_diag.shape, dtype=np.complex128, order = 'C')
-
-    for IPH in range(len(EPHN)):
-        NPH = 1 / (np.exp(max(EPHN[IPH], 5e-3) / UT) - 1)
-        SigmaL += 1j * np.imag(calc_Sigma_el_phon_mpi(gl_diag, NPH, NPH+1, EPHN[IPH], DPHN[IPH], dE))
-        SigmaG += 1j * np.imag(calc_Sigma_el_phon_mpi(gg_diag, NPH+1, NPH, EPHN[IPH], DPHN[IPH], dE))
-
-    SigmaR = (SigmaG - SigmaL) / 2.0
-
-    # Memory update needs to be performed in the main code after a2a communication
-    # SigmaL = (1 - memory_factor) * SigmaL + memory_factor * sl_phn_old
-    # SigmaG = (1 - memory_factor) * SigmaG + memory_factor * sg_phn_old
-    # SigmaR = (1 - memory_factor) * SigmaR + memory_factor * sr_phn_old
-
-
-    return SigmaG, SigmaL, SigmaR
+    # return SigmaG, SigmaL, SigmaR
 
 
 def calc_Sigma_el_phon(g, fup, fdown, homega_ph, D, dE):
 
     ne, nao = g.shape
 
-    Sigma = np.zeros((ne, nao), dtype=np.complex128)
+    Sigma = cp.zeros((ne, nao), dtype=np.complex128)
 
     neph = round(homega_ph/dE)
 
@@ -68,18 +42,3 @@ def calc_Sigma_el_phon(g, fup, fdown, homega_ph, D, dE):
     Sigma[:ne-neph, :] = Sigma[:ne-neph, :] + D * fdown * g[neph:ne, :]
 
     return Sigma
-
-
-def calc_Sigma_el_phon_mpi(g, fup, fdown, homega_ph, D, dE):
-
-    ne, nao = g.T.shape
-
-    #create fortran order so transposed is returned as C order.
-    Sigma = np.zeros((ne, nao), dtype=np.complex128, order = 'F')
-
-    neph = round(homega_ph/dE)
-
-    Sigma[neph:ne, :] = D * fup * g.T[:ne-neph, :]
-    Sigma[:ne-neph, :] = Sigma[:ne-neph, :] + D * fdown * g.T[neph:ne, :]
-
-    return Sigma.T

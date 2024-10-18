@@ -2,6 +2,7 @@
 
 import numpy as np
 import glob
+import time
 from scipy import sparse
 from scipy.sparse import identity
 #import matplotlib.pylab as plt
@@ -50,12 +51,35 @@ class Hamiltonian:
     Vpot_new = None
     
     
-    def __init__(self,sim_folder, no_orb, Vappl = 0.0, bias_point = 0, potential_type = 'linear', layer_matrix = '/Layer_Matrix.dat', homogenize = False, NCpSC = 1, rank = 0, poisson_path = None, restart_dict = None, cbn = 2):
-        if(not rank):
+    def __init__(self,
+                 sim_folder,
+                 no_orb,
+                 Vappl = 0.0,
+                 bias_point = 0,
+                 potential_type = 'linear',
+                 layer_matrix = '/Layer_Matrix.dat',
+                 homogenize = False,
+                 NCpSC = 1,
+                 rank = 0,
+                 poisson_path = None,
+                 restart_dict = None,
+                 cbn = 2,
+                 comm = None):
+
+        if comm is None and rank == 0:
+
+            start_time = time.perf_counter()
+            print(f"Starting to create Hamiltonian object for {sim_folder} ...", flush=True)
+            begin = start_time
+
             self.no_orb = no_orb
             self.sim_folder = sim_folder
             self.blocks = glob.glob(self.sim_folder + '/H*.bin')
             self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
+
+            current = time.perf_counter()
+            print(f"Time to read files: {current - begin:.2f} seconds", flush=True)
+            begin = current
 
             self.keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
 
@@ -88,9 +112,17 @@ class Hamiltonian:
                                                                   dtype=np.complex128,
                                                                   format='csr')
 
+            current = time.perf_counter()
+            print(f"Time to read Hamiltonian and Overlap matrices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             #Check that hamiltonian is hermitean
             self.hermitean = self.check_hermitivity(tol=1e-6)
             #self.hermitean = True
+
+            current = time.perf_counter()
+            print(f"Time to check hermitivity: {current - begin:.2f} seconds", flush=True)
+            begin = current
 
             #Read Block Properties
             self.LM = read_file_to_float_ndarray(sim_folder + layer_matrix)
@@ -99,9 +131,26 @@ class Hamiltonian:
             self.TB = np.max(self.no_orb)
             self.Smin = read_file_to_int_ndarray(sim_folder + '/Smin_dat')
             self.Smin = self.Smin.reshape((self.Smin.shape[0], )).astype(int)
+
+            current = time.perf_counter()
+            print(f"Time to read block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             self.prepare_block_properties()
-            self.map_neighbor_indices()
+            current = time.perf_counter()
+            print(f"Time to prepare block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            self.map_neighbor_indices_opt()
+            current = time.perf_counter()
+            print(f"Time to map neighbor indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             self.map_sparse_indices()
+            current = time.perf_counter()
+            print(f"Time to map sparse indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             if(homogenize):
                 self.homogenize(NCpSC)
             if(potential_type == 'read_in_diag'):
@@ -124,6 +173,10 @@ class Hamiltonian:
                 self.Vpot = self.get_atomic_potential()
             self.add_potential()
 
+            current = time.perf_counter()
+            print(f"Time to add potential: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
             if poisson_path:
                 self.poisson_atom_index = read_file_to_float_ndarray(poisson_path + '/atom_index.dat').astype('int').reshape((-1,))
                 self.poisson_gate_index = read_file_to_float_ndarray(poisson_path + '/gate_index.dat').astype('int').reshape((-1,))
@@ -142,7 +195,186 @@ class Hamiltonian:
                 self.stiffness = np.loadtxt(poisson_path + '/FitMat_dat', skiprows = 3)
                 self.stiffness_mat = sparse.csc_matrix((self.stiffness[:, 2], (self.stiffness[:, 0] - 1, self.stiffness[:,1] - 1)), shape =(self.stiffness_head[0], self.poisson_grid.shape[0]))
 
-            print('Hamiltonian class initialized')
+                current = time.perf_counter()
+                print(f"Time to read Poisson data: {current - begin:.2f} seconds", flush=True)
+            
+            print('Hamiltonian class initialized', flush=True)
+            return
+            
+        if comm is not None:
+
+            start_time = time.perf_counter()
+            if rank == 0:
+                print(f"Starting to create Hamiltonian object for {sim_folder} ...", flush=True)
+            begin = start_time
+
+            self.no_orb = no_orb
+            self.sim_folder = sim_folder
+            if rank == 0:
+                self.blocks = glob.glob(self.sim_folder + '/H*.bin')
+                self.Sblocks = glob.glob(self.sim_folder + '/S*.bin')
+                num_blocks = len(self.blocks)
+                sblocks_bool = (not self.Sblocks)
+            else:
+                num_blocks = None
+                sblocks_bool = None
+            num_blocks = comm.bcast(num_blocks, root=0)
+            sblocks_bool = comm.bcast(sblocks_bool, root=0)
+            if rank != 0:
+                self.blocks = [None for _ in range(num_blocks)]
+                self.Sblocks = [None for _ in range(num_blocks)]
+
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to read files: {current - begin:.2f} seconds", flush=True)
+            begin = current 
+
+            if rank == 0:
+                keys = [i.rsplit('/')[-1].rsplit('.bin')[0] for i in self.blocks]
+            else:
+                keys = None
+            self.keys = comm.bcast(keys, root=0)
+
+            self.Vappl = Vappl
+            self.bias_point = bias_point
+            #self.Hamiltonian = []
+            #for p in self.blocks:
+            #   self.Hamiltonian.append(read_sparse_matrix(p))
+
+            self.Hamiltonian = {}
+            self.Overlap = {}
+
+            #If orthogonal basis set, define S as diagonal.
+            # if not self.Sblocks:  
+            if sblocks_bool:                  
+                for ii in range(0, len(self.blocks)):
+                    self.blocks[ii] = comm.bcast(self.blocks[ii], root=0)
+                    self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix_distr(self.blocks[ii], rank=rank, comm=comm)
+                    #self.NH[self.keys[ii]] = self.Hamiltonian[self.keys[ii]].shape[0]
+                    self.NH = self.Hamiltonian[self.keys[ii]].shape[0]
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
+                                                                  dtype=np.complex128,
+                                                                  format='csr')
+            #Otherwise read from file
+            else:
+                for ii in range(0, len(self.blocks)):
+                    self.blocks[ii] = comm.bcast(self.blocks[ii], root=0)
+                    self.Sblocks[ii] = comm.bcast(self.Sblocks[ii], root=0)
+                    self.Hamiltonian[self.keys[ii]] = self.read_sparse_matrix_distr(self.blocks[ii], rank=rank, comm=comm)
+                    self.Overlap[self.keys[ii]] = self.read_sparse_matrix_distr(self.Sblocks[ii], rank=rank, comm=comm)
+
+                if np.abs(self.Overlap[self.keys[ii]][0, 0] + 1) < 1e-6:
+                    self.Overlap[self.keys[ii]] = sparse.identity(self.Hamiltonian[self.keys[ii]].shape[0],
+                                                                  dtype=np.complex128,
+                                                                  format='csr')
+            
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to read Hamiltonian and Overlap matrices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            #Check that hamiltonian is hermitean
+            self.hermitean = self.check_hermitivity(tol=1e-6)
+            #self.hermitean = True
+
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to check hermitivity: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            #Read Block Properties
+            self.LM = read_file_to_float_ndarray_distr(sim_folder + layer_matrix, rank = rank, comm = comm)
+            self.NA = self.LM.shape[0]
+            self.NB = self.LM.shape[1] - 4
+            self.TB = np.max(self.no_orb)
+            self.Smin = read_file_to_int_ndarray_distr(sim_folder + '/Smin_dat', rank = rank, comm = comm)
+            self.Smin = self.Smin.reshape((self.Smin.shape[0], )).astype(int)
+
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to read block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            self.prepare_block_properties()
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to prepare block properties: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            self.map_neighbor_indices_opt()
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to map neighbor indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            if potential_type is None:
+                pass
+                # import os
+                # self.map_sparse_indices_opt()
+                # self.ij2ji = np.load(os.path.join(self.sim_folder, "ij2ji.npy"))
+                # self.ij2ji_m = np.load(os.path.join(self.sim_folder, "ij2ji_m.npy"))
+                # self.ij2ji_l = np.load(os.path.join(self.sim_folder, "ij2ji_l.npy"))
+            else:
+                self.map_sparse_indices()
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to map sparse indices: {current - begin:.2f} seconds", flush=True)
+            begin = current
+
+            if(homogenize):
+                self.homogenize(NCpSC)
+            if (potential_type is not None):
+                if rank == 0:
+                    print("Adding potential is not supported in distributed Hamiltonian creation.")
+                raise NotImplementedError
+                if(potential_type == 'read_in_diag'):
+                    self.Vpot = np.loadtxt(self.sim_folder + 'Vpot_diag.npy')
+                if(potential_type == 'linear'):
+                    self.Vpot = self.get_linear_potential_drop(cbn)
+                elif (potential_type == 'unit_cell'):
+                    self.Vbias = read_file_to_float_ndarray(sim_folder + '/Vpot.dat', ",")
+                    self.Vpot = self.get_unit_cell_potential()
+                elif (potential_type == 'atomic'):
+                    if not poisson_path:
+                        try:
+                            self.Vatom = read_file_to_float_ndarray(sim_folder + '/Vatom.dat', ",")
+                        except:
+                            self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
+                    else:
+                        self.Vatom = np.loadtxt(sim_folder + '/Vatom.dat').reshape((self.NA, -1))
+                    if restart_dict is not None:
+                        self.Vatom = np.loadtxt(restart_dict['SE_input_path'] + 'Vatom_' + str(restart_dict['iter_num']) + '.dat').reshape((self.NA, -1))
+                    self.Vpot = self.get_atomic_potential()
+                self.add_potential()
+
+            current = time.perf_counter()
+            if rank == 0:
+                print(f"Time to add potential: {current - begin:.2f} seconds", flush=True)
+            
+            # TODO: Is this OK for distributed loading?
+            if poisson_path:
+                self.poisson_atom_index = read_file_to_float_ndarray(poisson_path + '/atom_index.dat').astype('int').reshape((-1,))
+                self.poisson_gate_index = read_file_to_float_ndarray(poisson_path + '/gate_index.dat').astype('int').reshape((-1,))
+                self.poisson_grid = read_file_to_float_ndarray(poisson_path + '/grid.dat').astype('int')
+                self.grid_index = np.ones(len(self.poisson_grid[:, 0]), dtype=bool)
+                self.grid_index[self.poisson_gate_index] = 0
+                self.grid_index = np.where(self.grid_index)[0]
+                self.poisson_doping = read_file_to_float_ndarray(poisson_path + '/doping.dat').reshape((-1,))
+                if restart_dict is None:
+                    self.Vpoiss = np.loadtxt(poisson_path + '/Vpot.dat').reshape((-1,))
+                    self.poisson_Vg = np.mean(self.Vpoiss[self.poisson_gate_index[0]])
+                else:
+                    self.Vpoiss = np.loadtxt(restart_dict['SE_input_path'] + 'VPoiss_' + str(restart_dict['iter_num']) + '.dat').reshape((-1,))
+                    self.poisson_Vg = np.loadtxt(restart_dict['SE_input_path'] + 'Vg_' + str(restart_dict['iter_num']) + '.dat') + restart_dict['delta_Vg']
+                self.stiffness_head = np.loadtxt(poisson_path + '/FitMat_dat', max_rows = 3 ,dtype = int)
+                self.stiffness = np.loadtxt(poisson_path + '/FitMat_dat', skiprows = 3)
+                self.stiffness_mat = sparse.csc_matrix((self.stiffness[:, 2], (self.stiffness[:, 0] - 1, self.stiffness[:,1] - 1)), shape =(self.stiffness_head[0], self.poisson_grid.shape[0]))
+
+                current = time.perf_counter()
+                if rank == 0:
+                    print(f"Time to read Poisson data: {current - begin:.2f} seconds", flush=True)
+
+            print('Hamiltonian class initialized', flush=True)
 
     #Helper function to initialise all hamiltonians
     def read_sparse_matrix(self, fname='./H_4.bin'):
@@ -158,6 +390,56 @@ class Hamiltonian:
         M = matlab_fread(fid, 4 * int(head[1]), 'double')
         blob = np.reshape(M, (int(head[1]), 4))
         fid.close()
+
+        #Matrix indexes start with zero
+        if head[2] == 0:
+            H = sparse.csc_matrix((blob[:, 2] + 1j * blob[:, 3], (blob[:, 0], blob[:, 1])),
+                                  shape=(int(head[0]), int(head[0])))
+        #Matrix indexes start with one
+        else:
+            H = sparse.csc_matrix((blob[:, 2] + 1j * blob[:, 3], (blob[:, 0] - 1, blob[:, 1] - 1)),
+                                  shape=(int(head[0]), int(head[0])))
+
+        return H
+    
+    def read_sparse_matrix_distr(self, fname='./H_4.bin', rank = None, comm = None):
+
+        if rank == 0:
+            fid = open(fname, 'rb')
+
+            #Read the Header head[0]: Contains the format 0 if indexing starts at 0, 1 if indexing starts at 1
+            #                head[1]: number of non-zero elements
+            #                head[2]: matrix size
+            head = matlab_fread(fid, 3, 'double')
+
+            #Read the data and reshape it
+            M = matlab_fread(fid, 4 * int(head[1]), 'double')
+            blob = np.reshape(M, (int(head[1]), 4))
+            fid.close()
+        else:
+            head = None
+            blob = None
+        head = comm.bcast(head, root=0)
+        # blob = comm.bcast(blob, root=0)
+        
+        step = int(2e9 // (4 * 8))  # Dividing by 4 elements per row and 8 bytes per element
+        if rank == 0:
+            rows = list(range(0, len(blob), step))
+        else:
+            rows = None
+        rows = comm.bcast(rows, root=0)
+        for i in rows:
+            if rank == 0:
+                print(f"Broadcasting rows {i} to {min(i + step, len(blob))} ...", flush=True)
+                sub_block = blob[i: min(i + step, len(blob))]
+            else:
+                sub_block = None
+            sub_block = comm.bcast(sub_block, root=0)
+            if rank != 0:
+                if blob is None:
+                    blob = sub_block
+                else:
+                    blob = np.vstack([blob, sub_block])
 
         #Matrix indexes start with zero
         if head[2] == 0:
@@ -322,6 +604,39 @@ class Hamiltonian:
                         if self.LM[neigh - 1, 4 + IB2].astype(int) == IA + 1:
                             self.LM_map[IA, 4 + IB1] = IB2 + 1
                             break
+    
+    def map_neighbor_indices_opt(self, ):
+        """
+        This functions generates the content of the field LM_map.
+        Assume atom i and atom j are neighbors. Using the layer matrix it holds that
+        LM(i,4+IB_i)=j. However it doesn't hold LM(j,4+IB_i)=i, instead we 
+        find the reciprocal neighbor with LM(j,4+IB_j)=i. 
+        
+        LM_map has the following property: LM_map(i,4+IB_i)=IB_j and LM_map(j,4+IB_j)=IB_i
+
+        Returns
+        -------
+        None.
+
+        """
+        self.LM_map = np.copy(self.LM)
+        self.LM_int = self.LM.astype(int)
+
+        for IA in range(self.NA):
+
+            # for IB1 in range(self.NB):
+            for idx, neigh in enumerate(self.LM_int[IA, 4:]):
+                # neigh = self.LM_int[IA, 4 + IB1]
+                if neigh > 0:
+                    try:
+                        IB2 = next(i for i, val in enumerate(self.LM_int[neigh - 1, 4:]) if val == IA + 1)
+                    except StopIteration:
+                        continue
+                    # self.LM_map[IA, 4 + IB1] = IB2 + 1
+                    self.LM_map[IA, idx] = IB2 + 1
+                    break
+        
+        del self.LM_int
 
     def map_sparse_indices(self, ):
         """
@@ -373,6 +688,22 @@ class Hamiltonian:
             indA = ind
         self.columns = indI[:ind].astype('int32')
         self.rows = indJ[:ind].astype('int32')
+    
+
+    def map_sparse_indices_opt(self, ):
+        """
+        This functions generates the content of the rows and cols field.
+        The meaning of rows and cols are the non-zero indices of the sparse system matrices,
+        they are derived from the neighbor information in the layer matrix.
+        Using these indices, the transformation between sparse, block and energy contigous formats can be done.
+        """
+        import os
+        # self.LM_int = self.LM.astype(int)
+        self.rows = np.load(os.path.join(self.sim_folder, 'rows.npy'))
+        self.columns = np.load(os.path.join(self.sim_folder, 'columns.npy'))
+        # max_orb = np.max(self.no_orb)
+        self.NH = self.Bmax[-1]
+
 
     def get_linear_potential_drop(self, cbn):
         """

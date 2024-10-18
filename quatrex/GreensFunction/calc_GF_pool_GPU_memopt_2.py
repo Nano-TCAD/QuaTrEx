@@ -1,13 +1,12 @@
 # Copyright 2023 ETH Zurich and the QuaTrEx authors. All rights reserved.
 
-import concurrent.futures
-from itertools import repeat
+# import concurrent.futures
+# from itertools import repeat
 
 import time
 
 import numpy as np
 import numpy.typing as npt
-
 class dummy:
     def __init__(self):
         pass
@@ -19,20 +18,18 @@ try:
 except (ImportError, ModuleNotFoundError):
     mkl = dummy()
 
-from mpi4py import MPI
-
 import cupy as cp
 import cupyx as cpx
 
-from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
+# from quatrex.utils.matrix_creation import homogenize_matrix_Rnosym, extract_small_matrix_blocks
 from quatrex.GreensFunction.fermi import fermi_function
-from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
+# from quatrex.GreensFunction.self_energy_preprocess import self_energy_preprocess_2d
 
 import quatrex.block_tri_solvers.rgf_GF_GPU_combo as rgf_GF_GPU_combo
-from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
+# from quatrex.OBC.obc_gf_gpu_2 import obc_GF_gpu
 from quatrex.OBC.beyn_batched import beyn_batched_gpu_3 as beyn_gpu
 
-from operator import mul
+# from operator import mul
 
 
 import time
@@ -68,18 +65,13 @@ def calc_GF_pool_mpi_split_memopt(
     size,
     homogenize=True,
     NCpSC: int = 1,
-    EEdge: npt.NDArray[np.float64] = None,
-    peak_DOS_lim: float = 5.0,
-    n_atom = None,
-    p_atom = None,
     mkl_threads: int = 1,
     worker_num: int = 1,
-    DOS_hr: npt.NDArray[np.float64] = None,
-    iter: int = 0        
+    post_process: bool = True,
+    batchsize: int = None,      
 ):
     comm.Barrier()
-    if rank == 0:
-        time_pre_OBC = -time.perf_counter()
+    time_pre_OBC = -time.perf_counter()
     
     kB = 1.38e-23
     q = 1.6022e-19
@@ -89,8 +81,6 @@ def calc_GF_pool_mpi_split_memopt(
     vfermi = np.vectorize(fermi_function)
     fL = cp.asarray(vfermi(energy, Efl, UT)).reshape(len(energy), 1, 1)
     fR = cp.asarray(vfermi(energy, Efr, UT)).reshape(len(energy), 1, 1)
-
-
 
     # initialize the Green's function in block format with zero
     # number of energy points
@@ -103,28 +93,24 @@ def calc_GF_pool_mpi_split_memopt(
 
     mkl.set_num_threads(mkl_threads)
 
-    index_e = np.arange(ne)
+    # index_e = np.arange(ne)
     bmin = DH.Bmin.copy()
     bmax = DH.Bmax.copy()
 
-    bmin_fi = bmin -1
-    bmax_fi = bmax -1
+    # bmin_fi = bmin -1
+    # bmax_fi = bmax -1
 
     LBsize = bmax[0] - bmin[0] + 1
     RBsize = bmax[nb - 1] - bmin[nb - 1] + 1
 
-    # energy resolved number of electrons/holes per orbital
-    n_orb = cpx.zeros_pinned((ne, DH.NH), dtype = float)
-    p_orb = cpx.zeros_pinned((ne, DH.NH), dtype = float)
-
-    SigRBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigRBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
-    SigLBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigLBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
-    SigGBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
-    SigGBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
-    condl = np.zeros((ne), dtype = np.float64)
-    condr = np.zeros((ne), dtype = np.float64)
+    # SigRBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigRBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # SigLBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigLBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # SigGBL = cpx.zeros_pinned((ne, LBsize, LBsize), dtype = np.complex128)
+    # SigGBR = cpx.zeros_pinned((ne, RBsize, RBsize), dtype = np.complex128)
+    # condl = np.zeros((ne), dtype = np.float64)
+    # condr = np.zeros((ne), dtype = np.float64)
 
 
     # rgf_M_0 = generator_rgf_GF(energy, DH)
@@ -264,63 +250,69 @@ def calc_GF_pool_mpi_split_memopt(
     #                                                                     SigG[ie][bmin[1] - 1:bmax[1], bmin[0] - 1:bmax[0]], NCpSC, 'L')
     #         SigG[ie] = homogenize_matrix_Rnosym(SigG00,
     #                                         SigG01, SigG10, len(bmax))
-    cp.cuda.Stream.null.synchronize()
     comm.Barrier() 
 
+    time_pre_OBC += time.perf_counter()
     if rank == 0:
-        time_pre_OBC += time.perf_counter()
-        print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
-        time_save = -time.perf_counter()
-
-    # if (rank % 2) == 0 and (iter % 100) < 10:
-    #     path = '/usr/scratch/mont-fort23/dleonard/Si_NW_13cells_54_boundary_blocks/'
-    #     filename = path + "energy_%.4f" % energy[0] + "iter_" + str(iter) + "_rank_" + str(rank) + ".npz"
-    #     np.savez(filename, M00_left = M00_left.get(), M01_left = M01_left.get(), M10_left = M10_left.get(), M00_right = M00_right.get(), M01_right = M01_right.get(), M10_right = M10_right.get())
-
-    comm.Barrier()
-    if rank == 0:
-        time_save += time.perf_counter()
-        print("Time for saving: %.3f s" % time_save, flush = True)
-        time_OBC = -time.perf_counter()
-
-    # if rank == 0:
-    #     time_pre_OBC += time.perf_counter()
-    #     print("Time for pre-processing OBC: %.3f s" % time_pre_OBC, flush = True)
-    #     time_OBC = -time.perf_counter()
+        print("Time for pre-processing OBC: %.6f s" % time_pre_OBC, flush = True)
+    time_OBC = -time.perf_counter()
                 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
-        executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
-           fL,
-           fR,
-           SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
-           repeat(bmin),
-           repeat(bmax),
-           repeat(NCpSC))
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=worker_num) as executor:
+    #     executor.map(obc_GF_gpu, M00_left, M01_left, M10_left, M00_right, M01_right, M10_right,
+    #        fL,
+    #        fR,
+    #        SigRBL, SigRBR, SigLBL, SigLBR, SigGBL, SigGBR,
+    #        repeat(bmin),
+    #        repeat(bmax),
+    #        repeat(NCpSC))
     
     # imag_lim = 5e-4
     # R = 1000
     # SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
-    # assert not any(np.isnan(cond) for cond in condL)
+    # # assert not any(np.isnan(cond) for cond in condL)
     # GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
     # (1j * fL * GammaL).get(out=SigLBL)
     # (1j * (fL - 1) * GammaL).get(out=SigGBL)
     # SigRBL_gpu.get(out=SigRBL)
     # SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
-    # assert not any(np.isnan(cond) for cond in condR)
+    # # assert not any(np.isnan(cond) for cond in condR)
     # GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
     # (1j * fR * GammaR).get(out=SigLBR)
     # (1j * (fR - 1) * GammaR).get(out=SigGBR)
     # SigRBR_gpu.get(out=SigRBR)
-    
+    imag_lim = 5e-4
+    R = 1000
+    left_beyn_time = -time.perf_counter()
+    SigRBL_gpu, _, condL, _ = beyn_gpu(NCpSC, M00_left, M01_left, M10_left, imag_lim, R, 'L')
+    left_beyn_time += time.perf_counter()
+    # assert not any(np.isnan(cond) for cond in condL)
+    GammaL = 1j * (SigRBL_gpu - SigRBL_gpu.transpose(0, 2, 1).conj())
+    # (1j * fL * GammaL).get(out=SigLBL)
+    SigLBL = 1j * fL * GammaL
+    # (1j * (fL - 1) * GammaL).get(out=SigGBL)
+    SigGBL = 1j * (fL - 1) * GammaL
+    # SigRBL_gpu.get(out=SigRBL)
+    SigRBL = SigRBL_gpu
+    right_beyn_time = -time.perf_counter()
+    SigRBR_gpu, _, condR, _ = beyn_gpu(NCpSC, M00_right, M01_right, M10_right, imag_lim, R, 'R')
+    right_beyn_time += time.perf_counter()
+    # assert not any(np.isnan(cond) for cond in condR)
+    GammaR = 1j * (SigRBR_gpu - SigRBR_gpu.transpose(0, 2, 1).conj())
+    # (1j * fR * GammaR).get(out=SigLBR)
+    SigLBR = 1j * fR * GammaR
+    # (1j * (fR - 1) * GammaR).get(out=SigGBR)
+    SigGBR = 1j * (fR - 1) * GammaR
+    # SigRBR_gpu.get(out=SigRBR)
+    SigRBR = SigRBR_gpu
     cp.cuda.Stream.null.synchronize()
+    
     comm.Barrier()
+    time_OBC += time.perf_counter()
     if rank == 0:
-        time_OBC += time.perf_counter()
-        print("Time for OBC: %.3f s" % time_OBC, flush = True)
-        time_GF_trafo = -time.perf_counter()
+        print("Time for OBC: %.6f s" % time_OBC, flush = True)
 
-    l_defect = np.count_nonzero(np.isnan(condl))
-    r_defect = np.count_nonzero(np.isnan(condr))
+    l_defect = np.count_nonzero(np.isnan(condL))
+    r_defect = np.count_nonzero(np.isnan(condR))
 
     if l_defect > 0 or r_defect > 0:
         print("Warning: %d left and %d right boundary conditions are not satisfied." % (l_defect, r_defect))
@@ -334,21 +326,12 @@ def calc_GF_pool_mpi_split_memopt(
     # overlap_diag, overlap_upper, overlap_lower = rgf_GF_GPU_combo.csr_to_block_tridiagonal_csr(DH.Overlap['H_4'], bmin - 1, bmax)
     # input_stream = cp.cuda.stream.Stream(non_blocking=True)
 
-    comm.Barrier()
-    if rank == 0:
-        time_GF_trafo += time.perf_counter()
-        print("Time for GF transformation: %.3f s" % time_GF_trafo, flush = True)
-        time_SE = -time.perf_counter()
 
-
-    energy_batchsize = 4
+    energy_batchsize = batchsize if batchsize is not None else ne
     energy_batch = np.arange(0, ne, energy_batchsize)
 
     comm.Barrier()
-    if rank == 0:
-        time_SE += time.perf_counter()
-        print("Time for SE subtraction: %.3f s" % time_SE, flush = True)
-        time_GF = -time.perf_counter()
+    time_GF = -time.perf_counter()
     for ie in energy_batch:
         rgf_GF_GPU_combo.rgf_batched_GPU(energy[ie:ie+energy_batchsize],
                             mapping_diag_dev, mapping_upper_dev, mapping_lower_dev,
@@ -360,38 +343,45 @@ def calc_GF_pool_mpi_split_memopt(
                             SigGBL[ie:ie+energy_batchsize, :, :], SigGBR[ie:ie+energy_batchsize, :, :],
                             gr_h2g[ie:ie+energy_batchsize, :], gl_h2g[ie:ie+energy_batchsize, :], gg_h2g[ie:ie+energy_batchsize, :],
                             DOS[ie:ie+energy_batchsize, :], nE[ie:ie+energy_batchsize, :],
-                            nP[ie:ie+energy_batchsize, :], n_orb[ie:ie+energy_batchsize,:], p_orb[ie:ie+energy_batchsize,:],
-                            idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = True,
-                            input_stream = input_stream,
-                            DOS_hr = DOS_hr[ie:ie+energy_batchsize, :] if DOS_hr is not None else None)
-
-    cp.cuda.Stream.null.synchronize()    
+                            nP[ie:ie+energy_batchsize, :], idE[ie:ie+energy_batchsize, :], bmin, bmax, solve = False,
+                            input_stream = input_stream)
+        
     comm.Barrier()
+    time_GF += time.perf_counter()
     if rank == 0:
-        time_GF += time.perf_counter()
-        print("Time for GF: %.3f s" % time_GF, flush = True)
-        time_post_proc = -time.perf_counter()
+        print("Time for GF: %.6f s" % time_GF, flush = True)
+    time_post_proc = -time.perf_counter()
+    
+    runtimes = []
+    runtimes.append({'kernel': 'G-K1.1', 'time': time_pre_OBC + time_OBC})
+    runtimes.append({'kernel': 'G-K1.2', 'time': time_GF})
 
+    if not post_process:
+        return runtimes
     
     # Calculate F1, F2, which are the relative errors of GR-GA = GG-GL
     F1 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(DOS) + 1e-6), axis=1)
     F2 = np.max(np.abs(DOS - (nE + nP)) / (np.abs(nE + nP) + 1e-6), axis=1)
 
     buf_recv_r = np.empty((DOS.shape[1]), dtype=np.complex128)
-    buf_send_r = np.empty((DOS.shape[1]), dtype=np.complex128)
+    # buf_send_r = np.empty((DOS.shape[1]), dtype=np.complex128)
     buf_recv_l = np.empty((DOS.shape[1]), dtype=np.complex128)
-    buf_send_l = np.empty((DOS.shape[1]), dtype=np.complex128)
+    # buf_send_l = np.empty((DOS.shape[1]), dtype=np.complex128)
     if size > 1:
         if rank == 0:
-            buf_send_r[:] = DOS[ne - 1, :]
+            # buf_send_r[:] = DOS[ne - 1, :]
+            buf_send_r = DOS[ne - 1, :]
             comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
 
         elif rank == size - 1:
-            buf_send_l[:] = DOS[0, :]
+            # buf_send_l[:] = DOS[0, :]
+            buf_send_l = DOS[0, :]
             comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
         else:
-            buf_send_r[:] = DOS[ne - 1, :]
-            buf_send_l[:] = DOS[0, :]
+            # buf_send_r[:] = DOS[ne - 1, :]
+            # buf_send_l[:] = DOS[0, :]
+            buf_send_r = DOS[ne - 1, :]
+            buf_send_l = DOS[0, :]
             comm.Sendrecv(sendbuf=buf_send_r, dest=rank + 1, recvbuf=buf_recv_r, source=rank + 1)
             comm.Sendrecv(sendbuf=buf_send_l, dest=rank - 1, recvbuf=buf_recv_l, source=rank - 1)
 
@@ -424,59 +414,22 @@ def calc_GF_pool_mpi_split_memopt(
                                        axis=1), [np.max(np.abs(DOS[ne - 1, :] / (buf_recv_r + 1)))]))
 
     # Find indices of elements satisfying the conditions
-    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > peak_DOS_lim) & (dDOSp > peak_DOS_lim)))[0]
+    # ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)))[0]
+    ind_zeros = np.where((F1 > 0.1) | (F2 > 0.1) | ((dDOSm > 5) & (dDOSp > 5)) | (np.isnan(condL) | np.isnan(condR)))[0]
 
     for index in ind_zeros:
         gr_h2g[index, :] = 0
         gl_h2g[index, :] = 0
         gg_h2g[index, :] = 0
-        n_orb[index, :] = 0
-        p_orb[index, :] = 0
-    if EEdge is not None:
-        calc_charge(n_orb, p_orb, energy, EEdge, DH, n_atom, p_atom, comm)
-
-    cp.cuda.Stream.null.synchronize()    
+        
     comm.Barrier()
+    time_post_proc += time.perf_counter()
     if rank == 0:
-        time_post_proc += time.perf_counter()
-        print("Time for post-processing: %.3f s" % time_post_proc, flush = True)
+        print("Time for post-processing: %.6f s" % time_post_proc, flush = True)
+    
+    runtimes.append({'kernel': 'G-post', 'time': time_post_proc})
+    return runtimes
     
 def generator_rgf_GF(E, DH):
     for i in range(E.shape[0]):
         yield (E[i] + 1j * 1e-12) * DH.Overlap['H_4'] - DH.Hamiltonian['H_4']
-
-import numpy as np
-
-def calc_charge(nE_orb, pE_orb, E, EEdges, DH, n_at, p_at, comm):
-    Bmax = DH.Bmax - 1
-    Bmin = DH.Bmin - 1
-    NB = DH.Smin[0]
-    NA = DH.Smin[-1]
-
-    # Assuming E is a NumPy array and NE is its length
-    NE = len(E)
-    dE = np.concatenate(([E[1] - E[0]], (E[2:NE] - E[0:NE-2]), [E[NE-1] - E[NE-2]])) / 2
-
-    Smin = np.copy(DH.Smin[1:])
-    Smin[-1] += 1
-
-    for IB in range(NB):
-        indEn = np.where(E > (EEdges[0, IB] + EEdges[1, IB]) / 2)[0]
-        indEp = np.where(E < (EEdges[0, IB] + EEdges[1, IB]) / 2)[0]
-
-        nE_act = np.sum(nE_orb[indEn, Bmin[IB]:Bmax[IB]+1] * (dE[indEn][:, np.newaxis] * np.ones((len(indEn), Bmax[IB] - Bmin[IB] + 1))), axis=0)
-        pE_act = np.sum(pE_orb[indEp, Bmin[IB]:Bmax[IB]+1] * (dE[indEp][:, np.newaxis] * np.ones((len(indEp), Bmax[IB] - Bmin[IB] + 1))), axis=0)
-
-        ind = 0
-        for IA in range(Smin[IB] - 1, Smin[IB+1]-1):
-            no_orb = DH.orb_per_at[IA+1] - DH.orb_per_at[IA]
-
-            # Factor 2 for spin
-            n_at[IA] = 2 * np.sum(nE_act[ind:ind+no_orb])
-            p_at[IA] = 2 * np.sum(pE_act[ind:ind+no_orb])
-
-            ind += no_orb
-
-    # Here we need to perform MPI_Allreduce on n_at and p_at
-    comm.Allreduce(MPI.IN_PLACE, n_at, op=MPI.SUM)
-    comm.Allreduce(MPI.IN_PLACE, p_at, op=MPI.SUM)
