@@ -162,6 +162,8 @@ class Matrices:
                 else:
                     self.Overlap[key] = sparse.csr_matrix((self.NH, self.NH), dtype=np.complex128)
 
+            self.NBlock, self.Bmin, self.Bmax = self.prepare_block_properties()
+
             # Hartree potentials
             if potential_type == 'linear':
                 self.Vpot = self.get_linear_potential_drop()
@@ -200,7 +202,7 @@ class Matrices:
 
             # Prepare block properties. Should be done from the k_Hamiltonian
             band_gap_kp = tuple(kp_shift)
-            self.NBlock, self.Bmin, self.Bmax = self.prepare_block_properties(self.k_Hamiltonian[band_gap_kp])
+            #self.NBlock, self.Bmin, self.Bmax = self.prepare_block_properties(self.k_Hamiltonian[band_gap_kp])
             assert self.size == self.Bmax[-1] - self.Bmin[0] + 1, f"Size of the Ham.: ({self.size}) does not match Bmax[-1] - Bmin[0] +1: ({self.Bmax[-1] - self.Bmin[0]+1})"
             assert len(set(self.Bmax-self.Bmin)) == 1, f"Block sizes are not equal. {self.Bmax-self.Bmin}"
             assert self.NBlock % 3 == 0, f"Number of blocks is not divisible by 3. NBlock: {self.NBlock}. This can cause some problems because the blocksizes for the calculation of the Screened interaction wont be the same."
@@ -208,7 +210,8 @@ class Matrices:
             # assert np.allclose(self.k_Coulomb_matrix[(0, 0, 0)].toarray(), self.k_Coulomb_matrix[(0, 0, 0)].T.toarray()), "Coulomb matrix is not symmetric"
 
             # returns the sparse indices of the k_Coulomb_matrix
-            self.rows, self.columns = self.map_sparse_indices(self.k_Coulomb_matrix[(0,0,0)])
+            self.rows, self.columns = self.map_sparse_indices(self.k_Hamiltonian[band_gap_kp])
+            self.rows_cm, self.columns_cm = self.map_sparse_indices(self.k_Coulomb_matrix[band_gap_kp])
             # Following part is added just to be compatible with the code
             self.Hamiltonian['H_4'] = self.k_Hamiltonian[band_gap_kp]  
             self.Overlap['H_4'] = self.k_Overlap[band_gap_kp]
@@ -266,7 +269,7 @@ class Matrices:
             np.concatenate((np.reshape(head2, (3, 1)), M2)).astype(
                 'double').tofile(write_file)
 
-    def prepare_block_properties(self, matrix):
+    def prepare_block_properties(self, matrix=None):
         """
         Function that prepares the block properties of the Hamiltonian. Not sure where it is needed.
 
@@ -326,9 +329,14 @@ class Matrices:
             Vappl = self.Vappl
         # Only interested in the x-coordinate (transport direction)
         x = position_vector[:, 0]
-        xmin = np.min(x)
-        xmax = np.max(x)
-        Vpot = - Vappl * (x - xmin) / (xmin - xmax)
+        bs_indx = self.Bmax[0]
+        #bs_indx = 1
+        xmin = x[bs_indx]
+        xmax = x[-bs_indx]
+        #Vpot = Vappl * (x - xmin) / (xmax - xmin)
+        Vpot =  np.zeros(self.size)
+        Vpot[bs_indx:-bs_indx] = Vappl * (x[bs_indx:-bs_indx]-xmin) / (xmax - xmin)
+        Vpot[-bs_indx:] = Vappl
         return Vpot
 
     def _get_unit_cell_potential(self,):
