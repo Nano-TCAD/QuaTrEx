@@ -280,6 +280,8 @@ def calc_GF_pool_mpi(
     nE,
     nP,
     idE,
+    idE_in,
+    idE_out,
     factor: npt.NDArray[np.float64],
     comm,
     rank,
@@ -380,14 +382,14 @@ def calc_GF_pool_mpi(
         #results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG,
         if(return_sigma_boundary):
             results = executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                        DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC),repeat(block_inv),
+                        DOS, nE, nP, idE, idE_in, idE_out, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC),repeat(block_inv),
                         repeat(use_dace), repeat(validate_dace))
             for idx, res in enumerate(results):
                 SigRBL[idx, :, :] = res[0]
                 SigRBR[idx, :, :] = res[1]
         else:
             executor.map(rgf_GF, rgf_M, rgf_H, SigL, SigG, GR_3D_E, GRnn1_3D_E, GL_3D_E, GLnn1_3D_E, GG_3D_E, GGnn1_3D_E,
-                     DOS, nE, nP, idE, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
+                     DOS, nE, nP, idE, idE_in, idE_out, fL, fR, repeat(bmin), repeat(bmax), factor, index_e, repeat(NCpSC), repeat(block_inv),
                      repeat(use_dace), repeat(validate_dace))
         #for res in results:
         #    assert res == 0
