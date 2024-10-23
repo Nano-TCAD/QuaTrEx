@@ -56,15 +56,17 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/"
+    #scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/no_kpoints/tmp/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    jiang = True
+    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
+    #jiang = True
+    jiang = False
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -133,7 +135,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
-    Vappl = 0.0
+    Vappl = -0.2
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
@@ -200,7 +202,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 20.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
     # DFT Valence Band Maximum
@@ -209,9 +211,12 @@ if __name__ == "__main__":
         ECmin -= 0.9
         EVmax -= 0.9
     # Fermi Level of Left Contact
-    energy_fl = EVmax + (ECmin - EVmax)/2
+    if Vappl == 0.0:
+        energy_fl = EVmax + (ECmin - EVmax)/2
+    else:
+        energy_fl = ECmin - 0.10
     # Fermi Level of Right Contact
-    energy_fr = energy_fl - Vappl
+    energy_fr = energy_fl + Vappl
 
     # Physical Constants -----------
 
@@ -408,7 +413,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 60
+    max_iter = 160
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
@@ -488,6 +493,10 @@ if __name__ == "__main__":
 
         # current per energy
         ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        # in-current per energy
+        ide_in = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
+        # out-current per energy
+        ide_out = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -541,8 +550,11 @@ if __name__ == "__main__":
         #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
-        energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
-        energy_fr = energy_fl - Vappl
+        if Vappl == 0.0:
+            energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
+        else:
+            energy_fl = ECmin_vec[iter_num + 1] - 0.10
+        energy_fr = energy_fl + Vappl
 
         num_energies_below_fl = sum(energy < energy_fl)
 
@@ -577,6 +589,8 @@ if __name__ == "__main__":
                                                                 nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_in[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_out[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 factor_g_loc,
                                                                 comm,
                                                                 rank,
@@ -710,17 +724,18 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            # pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
-            #                                     pre_factor,
-            #                                     gg_g2p,
-            #                                     gl_g2p,
-            #                                     gl_transposed_g2p)
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fixed_conv_cpu(
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
-                                                num_energies_below_fl,
-                                                energy,
                                                 gg_g2p,
-                                                gl_g2p)
+                                                gl_g2p,
+                                                gl_transposed_g2p)
+            pr_g2p = np.zeros_like(pg_g2p)
+            #pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fixed_conv_cpu(
+            #                                    pre_factor,
+            #                                    num_energies_below_fl,
+            #                                    energy,
+            #                                    gg_g2p,
+            #                                    gl_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -966,15 +981,15 @@ if __name__ == "__main__":
                                                                 )
         elif args.type in ("cpu"):
             vh1d_sliced = vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]]
-            sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gl_g2p, vh1d_sliced)
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
-                                                                     num_energies_below_fl,
-                                                                     gg_g2p,
-                                                                     gl_g2p,
-                                                                     wg_gw2s,
-                                                                     wl_gw2s,
-                                                                     energy, 
-                                                                     )
+            # sr_fock = gw2s_cpu.gw2s_fock_part(-pre_factor/2, gl_g2p, vh1d_sliced)
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
+            #                                                          num_energies_below_fl,
+            #                                                          gg_g2p,
+            #                                                          gl_g2p,
+            #                                                          wg_gw2s,
+            #                                                          wl_gw2s,
+            #                                                          energy, 
+            #                                                          )
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_hilbert_cpu(-pre_factor/2,
             #                                                          num_energies_below_fl,
             #                                                          gg_g2p,
@@ -983,10 +998,10 @@ if __name__ == "__main__":
             #                                                          wl_gw2s,
             #                                                          hilbert
             #                                                          )
-            sr_gw2s += sr_fock
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
-            #                                                                wg_gw2s, wl_gw2s,
-            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+            # sr_gw2s += sr_fock
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d_sliced, energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,

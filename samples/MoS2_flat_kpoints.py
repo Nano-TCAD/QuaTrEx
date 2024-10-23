@@ -60,7 +60,8 @@ if __name__ == "__main__":
     # path to solution
     # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
     # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/jiang_matrices/tmp/"
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/ort_matrices/tmp/"
+    #scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/ort_matrices/tmp/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/no_kpoints/tmp/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -136,12 +137,13 @@ if __name__ == "__main__":
         comm.Barrier()
 
     # create hamiltonian object
-    #Vappl = -0.2
-    Vappl = 0.2
+    Vappl = -0.2
+    #Vappl = 0.2
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    num_kpoints = np.array([1, 3, 1])
+    #num_kpoints = np.array([1, 3, 1])
+    num_kpoints = np.array([1, 1, 1])
     Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
     if jiang:
         kp_shift = np.array([0, 1/3, 0])
@@ -155,6 +157,7 @@ if __name__ == "__main__":
     #DPHN = np.array([0.0])  # Electron-phonon coupling
 
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
+    #hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -213,7 +216,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
     # DFT Valence Band Maximum
@@ -229,10 +232,11 @@ if __name__ == "__main__":
     # Device should be symmetric, but let negative Vappl correspond to p-doped and positive Vappl to n-doped
     elif Vappl > 0.0:
         # p-doped
-        energy_fl = EVmax + 0.1
+        energy_fl = EVmax + 0.10
     else:
         # n-doped
-        energy_fl = ECmin - 0.05
+        #energy_fl = ECmin - 0.05
+        energy_fl = ECmin - 0.10
     # Fermi Level of Right Contact
     energy_fr = energy_fl + Vappl
 
@@ -440,7 +444,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 60
+    max_iter = 300
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
@@ -512,6 +516,10 @@ if __name__ == "__main__":
 
         # current per energy
         ide = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
+        # in-current per energy
+        ide_in = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
+        # out-current per energy
+        ide_out = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -571,10 +579,10 @@ if __name__ == "__main__":
             # energy_fl = ECmin_vec[iter_num+1] - 0.05
         elif Vappl > 0.0:
             # p-doped
-            energy_fl = EVmax_vec[iter_num+1] + 0.1
+            energy_fl = EVmax_vec[iter_num+1] + 0.10
         else:
             # n-doped
-            energy_fl = ECmin_vec[iter_num+1] - 0.05
+            energy_fl = ECmin_vec[iter_num+1] - 0.10
         energy_fr = energy_fl + Vappl
 
         num_energies_below_fl = sum(energy < energy_fl)  # len(energy) // 2  # Doesn't seem to work with len(energy) // 2. Don't know why
@@ -590,7 +598,9 @@ if __name__ == "__main__":
             gf_time = -time.perf_counter()
 
         if iter_num == 60:
-            mem_s = 0.3
+            mem_s = 0.5
+        if iter_num == 100:
+            mem_s = 0.1
         # calculate the green's function at every rank------------------------------
         if args.pool:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
@@ -610,6 +620,8 @@ if __name__ == "__main__":
                                                                 nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_in[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_out[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 factor_g_loc,
                                                                 comm,
                                                                 rank,
@@ -743,26 +755,27 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            #pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
-            #                                    pre_factor,
-            #                                    gg_g2p,
-            #                                    gl_g2p,
-            #                                    gl_transposed_g2p)
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
+                                                pre_factor,
+                                                gg_g2p,
+                                                gl_g2p,
+                                                gl_transposed_g2p)
+            pr_g2p = np.zeros_like(pg_g2p)
             #pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fixed_conv_cpu(
             #                                    pre_factor,
             #                                    num_energies_below_fl,
             #                                    energy,
             #                                    gg_g2p,
             #                                    gl_g2p)
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_kpoints(
-                                                pre_factor,
-                                                num_energies_below_fl,
-                                                energy,
-                                                hamiltonian_obj.kp,
-                                                hamiltonian_obj.coul_kp,
-                                                gg_g2p,
-                                                gl_g2p
-                                                )
+            #pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_kpoints(
+            #                                    pre_factor,
+            #                                    num_energies_below_fl,
+            #                                    energy,
+            #                                    hamiltonian_obj.kp,
+            #                                    hamiltonian_obj.coul_kp,
+            #                                    gg_g2p,
+            #                                    gl_g2p
+            #                                    )
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1007,21 +1020,20 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-    # vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
             vh1d_k = np.asarray([np.squeeze(mat[rows[disp[0, rank]:disp[0, rank] + count[0, rank]],
                                                 columns[disp[0, rank]:disp[0, rank] + count[0, rank]]]) 
                                                 for mat in hamiltonian_obj.k_Coulomb_matrix.values()])
             sr_fock = gw2s_cpu.gw2s_fock_part_kpoints(-pre_factor/2, hamiltonian_obj.kp, hamiltonian_obj.coul_kp, gl_g2p, vh1d_k)
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_kpoints(-pre_factor/2,
-                                                              num_energies_below_fl,
-                                                              gg_g2p,
-                                                              gl_g2p,
-                                                              wg_gw2s,
-                                                              wl_gw2s,
-                                                              energy, 
-                                                              hamiltonian_obj.kp,
-                                                              hamiltonian_obj.coul_kp
-                                                              )
+            #sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_kpoints(-pre_factor/2,
+            #                                                  num_energies_below_fl,
+            #                                                  gg_g2p,
+            #                                                  gl_g2p,
+            #                                                  wg_gw2s,
+            #                                                  wl_gw2s,
+            #                                                  energy, 
+            #                                                  hamiltonian_obj.kp,
+            #                                                  hamiltonian_obj.coul_kp
+            #                                                  )
             #sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
             #                                                         num_energies_below_fl,
             #                                                         gg_g2p,
@@ -1038,10 +1050,12 @@ if __name__ == "__main__":
             #                                                          wl_gw2s,
             #                                                          hilbert
             #                                                          )
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
-            #                                                                wg_gw2s, wl_gw2s,
-            #                                                                wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            sr_gw2s += sr_fock
+            vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]
+            vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+            # sr_gw2s += sr_fock
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1147,11 +1161,19 @@ if __name__ == "__main__":
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, nE, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, nP, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, ide_in, op=MPI.SUM, root=0)
+            comm.Reduce(MPI.IN_PLACE, ide_out, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
+            comm.Reduce(nE, None, op=MPI.SUM, root=0)
+            comm.Reduce(nP, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
+            comm.Reduce(ide_in, None, op=MPI.SUM, root=0)
+            comm.Reduce(ide_out, None, op=MPI.SUM, root=0)
         
         if rank == 0:
             wrapping_up_time += time.perf_counter()
@@ -1163,7 +1185,11 @@ if __name__ == "__main__":
         if rank == 0:
             np.savetxt(scratch_path + 'E.dat', energy)
             np.savetxt(scratch_path + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(scratch_path + 'nE_' + str(iter_num) + '.dat', nE.view(float))
+            np.savetxt(scratch_path + 'nP_' + str(iter_num) + '.dat', nP.view(float))
             np.savetxt(scratch_path + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+            np.savetxt(scratch_path + 'IDE_IN_' + str(iter_num) + '.dat', ide_in)
+            np.savetxt(scratch_path + 'IDE_OUT_' + str(iter_num) + '.dat', ide_out)
             np.savetxt(scratch_path + 'EFL.dat', EFL_vec)
             np.savetxt(scratch_path + 'EFR.dat', EFR_vec)
             np.savetxt(scratch_path + 'ECmin.dat', ECmin_vec)

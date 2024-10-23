@@ -727,7 +727,8 @@ def gw2s_fft_mpi_cpu_PI_sr(
     #Calculating the truncated fock part
     #vh1d = np.asarray(vh[rows, cols].reshape(-1))
     gl_density = np.imag(np.sum(gl, axis = 1))
-    rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
+    #rSigmaRF = -np.multiply(gl_density, vh1D[disp[0, rank]:disp[0, rank] + count[0, rank]]).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
+    rSigmaRF = -np.multiply(gl_density, vh1D).reshape((gl_density.shape[0],1)) * np.abs(pre_factor)
     #rSigmaRF = np.tile(rSigmaRF, (1,ne))
     rSigmaRF = rSigmaRF.repeat(ne).reshape((-1, ne)).astype(np.complex128)
 

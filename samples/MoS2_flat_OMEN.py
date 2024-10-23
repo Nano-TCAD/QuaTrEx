@@ -55,7 +55,7 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
+    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/no_kpoints/tmp/"
     # scratch_path = "/scratch/aziogas/IEDM/"
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
@@ -129,11 +129,12 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     # one orbital on C atoms, two same types
-    no_orb = np.array([3, 3, 5, 3, 3, 5])
-    Vappl = 0.0
-    energy = np.linspace(-15, 7.5, 3000, endpoint = True, dtype = float) # Energy Vector
+    no_orb = np.array([3, 5, 3, 3, 5, 3])
+    Vappl = -0.2
+    energy = np.linspace(-15, 7.5, 1024, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
+    #hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix.dat')
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, rank = rank, layer_matrix='/Layer_Matrix.dat')
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -192,15 +193,18 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 5.0
     # DFT Conduction Band Minimum
     ECmin = -0.3187
     # DFT Valence Band Maximum
     EVmax = -2.0026
     # Fermi Level of Left Contact
-    energy_fl = EVmax + (ECmin - EVmax)/2
+    if np.isclose(Vappl, 0):
+        energy_fl = EVmax + (ECmin - EVmax)/2
+    else:
+        energy_fl = ECmin - 0.10
     # Fermi Level of Right Contact
-    energy_fr = energy_fl - Vappl
+    energy_fr = energy_fl + Vappl
 
     # Phyiscal Constants -----------
 
@@ -393,7 +397,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
+    max_iter = 160
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
@@ -473,6 +477,8 @@ if __name__ == "__main__":
 
         # current per energy
         ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        ide_in = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        ide_out = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
@@ -526,8 +532,11 @@ if __name__ == "__main__":
         #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
         #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
-        energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
-        energy_fr = energy_fl - Vappl
+        if np.isclose(Vappl, 0):
+            energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
+        else:
+            energy_fl = ECmin_vec[iter_num + 1] - 0.10
+        energy_fr = energy_fl + Vappl
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
@@ -539,13 +548,16 @@ if __name__ == "__main__":
             print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
             gf_time = -time.perf_counter()
 
-        if iter_num == 50:
-            mem_s = 0.3
+        if iter_num == 60:
+            mem_s = 0.5
+        if iter_num == 80:
+            mem_s = 0.1
         # calculate the green's function at every rank------------------------------
         if args.pool:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
                                                                 hamiltonian_obj,
                                                                 energy_loc,
+                                                                np.zeros_like(energy_loc, dtype=np.int32),
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
                                                                 sg_h2g_vec,
@@ -559,6 +571,8 @@ if __name__ == "__main__":
                                                                 nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_in[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                ide_out[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 factor_g_loc,
                                                                 comm,
                                                                 rank,
@@ -680,6 +694,7 @@ if __name__ == "__main__":
                                                 gg_g2p,
                                                 gl_g2p,
                                                 gl_transposed_g2p)
+            pr_g2p = np.zeros_like(pg_g2p)
         else:
             raise ValueError("Argument error, input type not possible")
 
@@ -710,7 +725,7 @@ if __name__ == "__main__":
         # use of all to all w since not divisible
         alltoall_p2g(pg_g2p, pg_p2w, transpose_net=args.net_transpose)
         alltoall_p2g(pl_g2p, pl_p2w, transpose_net=args.net_transpose)
-        #alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
+        alltoall_p2g(pr_g2p, pr_p2w, transpose_net=args.net_transpose)
 
         comm.Barrier()
 
@@ -769,7 +784,7 @@ if __name__ == "__main__":
 
             # calculate the screened interaction on every rank--------------------------
             if args.pool:
-                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
+                wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu_nokp(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
                                                                                                     pg_p2w_vec, 
@@ -919,7 +934,9 @@ if __name__ == "__main__":
         elif args.type in ("cpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s,
+                                                                           vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]],
+                                                                           energy, rank, disp, count)
             # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
             #                                                     -pre_factor/2,
             #                                                     gg_g2p,

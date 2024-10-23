@@ -612,7 +612,7 @@ class Hamiltonian:
             MR[key] = self.calculate_coulomb_matrix_elements(eps_r, eps0, e, shift=shift, diag=diag, orb_uniform=orb_uniform)
         return MR
 
-    def calculate_coulomb_matrix_elements(self, eps_r, eps0, e, shift=None, diag=False, orb_uniform=True, r0=0.1):
+    def calculate_coulomb_matrix_elements(self, eps_r, eps0, e, shift=None, diag=False, orb_uniform=True, r0=1):
         """
         This function computes a placeholder for the 2-index Coulomb matrix. It
         assumes that the atomic orbitals are point charges and computes their
