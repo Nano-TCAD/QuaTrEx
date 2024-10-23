@@ -331,6 +331,8 @@ def rgf_GF(M,
            nE,
            nP,
            idE,
+           idE_in,
+           idE_out,
            fL,
            fR,
            Bmin_fi,
@@ -477,10 +479,7 @@ def rgf_GF(M,
                 @ gR[IB+1, 0:NP, 0:NP] \
                 @ SigL_l
             
-            SigLB[IB, 0:NI, 0:NI] = M_r \
-                                @ gL[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AL - AL.T.conj())
+            SigLB[IB, 0:NI, 0:NI] = M_r @ gL[IB+1, 0:NP, 0:NP] @ M_r.T.conj() - (AL - AL.T.conj())
 
             # gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
             #                     @ (SigL_c \
@@ -490,10 +489,11 @@ def rgf_GF(M,
             #                     - (AL - AL.T.conj()))  \
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
 
-            gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigL_c \
-                                + SigLB[IB, 0:NI, 0:NI])  \
-                                @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
+            gL[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] @ (
+                                    SigL_c
+                                    + SigLB[IB, 0:NI, 0:NI]
+                                    # - (AL - AL.T.conj())
+                                ) @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AL
 
             ### What is this?
             AG = M_r \
@@ -507,19 +507,17 @@ def rgf_GF(M,
             #                     @ M_r.T.conj() \
             #                     - (AG - AG.T.conj())) \
             #                     @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
-            SigGB[IB, 0:NI, 0:NI] = M_r \
-                                @ gG[IB+1, 0:NP, 0:NP] \
-                                @ M_r.T.conj() \
-                                - (AG - AG.T.conj())
+            SigGB[IB, 0:NI, 0:NI] = M_r @ gG[IB+1, 0:NP, 0:NP] @ M_r.T.conj() - (AG - AG.T.conj())
 
-            gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] \
-                                @ (SigG_c \
-                                 + SigGB[IB, 0:NI, 0:NI]) \
-                                 @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
+            gG[IB, 0:NI, 0:NI] = gR[IB, 0:NI, 0:NI] @ (
+                                    SigG_c
+                                    + SigGB[IB, 0:NI, 0:NI]
+                                    # - (AG - AG.T.conj())
+                                 ) @ gR[IB, 0:NI, 0:NI].T.conj() # Confused about the AG. 
         
         #Second step of iteration
         GR[0, :NI, :NI] = gR[0, :NI, :NI]
-        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0] + 1, Bmin[1]:Bmax[1] + 1].toarray() @ gR[1, :NP, :NP]
+        GRnn1[0, :NI, :NP] = -GR[0, :NI, :NI] @ M[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP]
 
         GL[0, :NI, :NI] = gL[0, :NI, :NI]
         GLnn1[0, :NI, :NP] = GR[0, :NI, :NI] @ SigL[Bmin[0]:Bmax[0]+1, Bmin[1]:Bmax[1]+1].toarray() @ gR[1, :NP, :NP].T.conj() \
@@ -532,6 +530,11 @@ def rgf_GF(M,
                     - GG[0,:NI,:NI] @ M[Bmin[1]:Bmax[1]+1, Bmin[0]:Bmax[0]+1].toarray().T.conj() @ gR[1, :NP, :NP].T.conj() 
         
         idE[0] = np.real(np.trace(SigGB[0, :NI, :NI] @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLB[0, :NI, :NI]))
+        idE_in[0] = np.trace(GG[0, :NI, :NI] @ SigLB[0, :NI, :NI])
+        idE_out[0] = np.trace(SigGB[0, :NI, :NI] @ GL[0, :NI, :NI])
+        #idE[0] = np.real(np.trace(SigGBL @ GL[0, :NI, :NI] - GG[0, :NI, :NI] @ SigLBL))
+        #idE_in[0] = np.trace(GG[0, :NI, :NI] @ SigLBL)
+        #idE_out[0] = np.trace(SigGBL @ GL[0, :NI, :NI])
 
         for IB in range(1, NB):
 
@@ -636,6 +639,8 @@ def rgf_GF(M,
                                         @ M_d.T.conj() \
                                         @ gR[IB+1, 0:NP, 0:NP].T.conj()   
                 idE[IB] = np.real(np.trace(SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI] - GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI]))    
+                idE_in[IB] = np.trace(GG[IB, :NI, :NI] @ SigLB[IB, :NI, :NI])    
+                idE_out[IB] = np.trace(SigGB[IB, :NI, :NI] @ GL[IB, :NI, :NI])    
         for IB in range(NB):
            
             NI = Bmax[IB] - Bmin[IB] + 1
@@ -656,6 +661,8 @@ def rgf_GF(M,
         
         #idE[NB - 1] = idE[NB - 2]
         idE[NB-1] = np.real(np.trace(SigGBR @ GL[NB-1, :NI, :NI] - GG[NB-1, :NI, :NI] @ SigLBR))
+        idE_in[NB-1] = np.trace(GG[NB-1, :NI, :NI] @ SigLBR)
+        idE_out[NB-1] = np.trace(SigGBR @ GL[NB-1, :NI, :NI])
     
     return SigRBL, SigRBR
 
