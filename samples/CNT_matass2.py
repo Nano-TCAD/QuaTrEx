@@ -21,26 +21,20 @@ main_path = os.path.abspath(os.path.dirname(__file__))
 parent_path = os.path.abspath(os.path.join(main_path, ".."))
 sys.path.append(parent_path)
 
-from quatrex.bandstructure.calc_band_edge import (
-    get_band_edge_mpi, 
-    get_band_edge_mpi_interpol, 
-    get_cv_band_edges_mpi_interpol
-)
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi, get_band_edge_mpi_interpol
 from quatrex.GW.polarization.kernel import g2p_cpu
 from quatrex.GW.selfenergy.kernel import gw2s_cpu
-from quatrex.GW.selfenergy.current_conservation import current_conservation
 from quatrex.GW.gold_solution import read_solution
 from quatrex.GW.screenedinteraction.kernel import p2w_cpu
 from quatrex.GW.coulomb_matrix.read_coulomb_matrix import load_V, load_V_mpi
 from quatrex.GreensFunction import calc_GF_pool
+from quatrex.OMEN_structure_matrices import OMENHamClass
 from quatrex.OMEN_structure_matrices import Mat_assembler
 from quatrex.OMEN_structure_matrices.construct_CM import construct_coulomb_matrix
 from quatrex.utilss import change_format
 from quatrex.utilss import utils_gpu
 from quatrex.utilss.bsr import bsr_matrix
 from quatrex.utilss.matrix_creation import get_number_connected_blocks
-from quatrex.utilss.hilbert import HilbertTransform
-from quatrex.Phonon import electron_phonon_selfenergy
 
 if utils_gpu.gpu_avail():
     try:
@@ -58,19 +52,12 @@ if __name__ == "__main__":
 
     # assume every rank has enough memory to read the initial data
     # path to solution
-    # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/comparison_old_code_new_code/"
-    # scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/jiang_matrices/tmp/"
-    scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/kpoints/ort_matrices/tmp2/"
-    #scratch_path = "/usr/scratch/bucaramanga/awinka/quatrex_results/testing/no_kpoints/tmp/"
-    # scratch_path = "/scratch/aziogas/IEDM/"
+    scratch_path = ""
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
-    #hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/jiang_matrices/"
-    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/MoS2/MoS2_matrices/quatrex_inputs/point_charge_testing/"
-    #jiang = True
-    jiang = False
+    hamiltonian_path = "/usr/scratch/bucaramanga/awinka/CNT/quatrex_inputs/for_tests/"
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -137,31 +124,16 @@ if __name__ == "__main__":
         comm.Barrier()
 
     # create hamiltonian object
-    Vappl = -0.2
-    #Vappl = 0.2
-    energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
-    hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
+    # one orbital on C atoms, two same types
+    no_orb = np.array([1, 1])
+    Vappl = 0.0
+    energy = np.linspace(-10.5, 2.5, 128, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    #num_kpoints = np.array([1, 3, 1])
-    num_kpoints = np.array([1, 3, 1])
-    Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
-    if jiang:
-        kp_shift = np.array([0, 1/3, 0])
-        #kp_shift = np.array([0, 0, 0])
-    else:
-        kp_shift = np.array([0, 0, 0])
-    kp_band_gap = tuple(kp_shift)
-    EPHN = np.array([0.0])  # Phonon energy
-    #DPHN = np.array([2.5e-1])  # Electron-phonon coupling
-    DPHN = np.array([2.5e-3])  # Electron-phonon coupling
-    #DPHN = np.array([0.0])  # Electron-phonon coupling
-
-    hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
-    #hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk = num_kpoints, kp_shift=kp_shift, rank = rank)
+    #hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl, rank = rank, layer_matrix='/Layer_Matrix100.dat')
+    hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
-    # Modify the Hamiltonian object 
     # Extract neighbor indices
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
@@ -178,13 +150,11 @@ if __name__ == "__main__":
     ij2ji:      npt.NDArray[np.int32]   = change_format.find_idx_transposed(rows, columns)
     denergy:    npt.NDArray[np.double]  = energy[1] - energy[0]
     ne:         np.int32                = np.int32(energy.shape[0])
-    nkpts:      np.int32                = np.int32(np.prod(num_kpoints))
     no:         np.int32                = np.int32(columns.shape[0])
-    pre_factor: np.complex128           = -1.0j * denergy / (np.pi*nkpts)
-    #pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
+    pre_factor: np.complex128           = -1.0j * denergy / (np.pi)
     nao:        np.int64                = np.max(bmax) + 1
 
-    data_shape = np.array([no, ne*nkpts], dtype=np.int32)
+    data_shape = np.array([rows.shape[0], energy.shape[0]], dtype=np.int32)
 
     map_diag, map_upper, map_lower = change_format.map_block2sparse_alt(rows, columns,
                                                                     bmax, bmin)
@@ -200,47 +170,31 @@ if __name__ == "__main__":
 
     if rank == 0:
         # print size of data
-        print(f"#Energy x #kpts: {data_shape[1]} #nnz: {data_shape[0]}")
+        print(f"#Energy: {data_shape[1]} #nnz: {data_shape[0]}")
 
 
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 4
+    w_worker_threads = 6
     # set number of threads for the h2g step
     gf_mkl_threads = 1
-    gf_worker_threads = 4
+    gf_worker_threads = 6
 
     # physical parameter -----------
 
+    # Fermi Level of Left Contact
+    energy_fl = -3.85
+    # Fermi Level of Right Contact
+    energy_fr = energy_fl - Vappl
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 5.0
+    epsR = 1.0
     # DFT Conduction Band Minimum
-    ECmin = -0.3187
-    # DFT Valence Band Maximum
-    EVmax = -2.0026
-    if jiang:
-        ECmin -= 0.9
-        EVmax -= 0.9
-    # Fermi Level of Left Contact
-    if Vappl == 0.0:
-        # energy_fl = EVmax + (ECmin - EVmax)/2
-        energy_fl = EVmax + 0.2
-        # energy_fl = ECmin - 0.05
-    # Device should be symmetric, but let negative Vappl correspond to p-doped and positive Vappl to n-doped
-    elif Vappl > 0.0:
-        # p-doped
-        energy_fl = EVmax + 0.10
-    else:
-        # n-doped
-        #energy_fl = ECmin - 0.05
-        energy_fl = ECmin + 0.10
-    # Fermi Level of Right Contact
-    energy_fr = energy_fl + Vappl
+    ECmin = -3.524
 
-    # Physical Constants -----------
+    # Phyiscal Constants -----------
 
     e   = 1.6022e-19
     eps0 = 8.854e-12
@@ -253,26 +207,23 @@ if __name__ == "__main__":
     # create the corresponding factor to mask 
     # number of points to smooth the edges of the Green's Function
     dnp = 50
-    factor_w = np.ones(data_shape[1])
+    factor_w = np.ones(ne)
     #factor_w[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_w[np.where(np.invert(w_mask))[0]] = 0.0
 
     # create factor for the Green's Function
-    factor_g = np.ones(data_shape[1])
+    factor_g = np.ones(ne)
     #factor_g[ne-dnp-1:ne] = (np.cos(np.pi*np.linspace(0, 1, dnp+1)) + 1)/2
     #factor_g[0:dnp+1] = (np.cos(np.pi*np.linspace(1, 0, dnp+1)) + 1)/2
 
-    # Scale the coulomb matrix
-    hamiltonian_obj.scale_coulomb_matrix(1/epsR)
-    # vh_single = construct_coulomb_matrix(hamiltonian_obj, epsR, eps0, e, diag = False, orb_uniform = True)
-    # vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
-    # vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]/epsR
-    # vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
-    # if args.bsr:
-    #     w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
-    #     vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
+    #vh = load_V_mpi(solution_path_vh, rows, columns, comm, rank)/epsR
+    vh = hamiltonian_obj.k_Coulomb_matrix[(0,0,0)]
+    vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
+    if args.bsr:
+        w_bsize = vh.shape[0] // hamiltonian_obj.Bmin.shape[0]
+        vh = bsr_matrix(vh.tobsr(blocksize=(w_bsize, w_bsize)))
 
-    # calculation of data distribution per rank---------------------------------
+     # calculation of data distribution per rank---------------------------------
 
     # split nnz/energy per rank
     data_per_rank = data_shape // size
@@ -285,14 +236,8 @@ if __name__ == "__main__":
     disp = data_per_rank.reshape(-1, 1) * np.arange(size)
 
     # slice energy vector
-    energy_tiled = np.tile(energy, nkpts)
-    Idx_e_tiled = np.tile(Idx_e, nkpts)
-    energy_loc = energy_tiled[disp[1, rank]:disp[1, rank] + count[1, rank]]
-    Idx_e_loc = Idx_e_tiled[disp[1, rank]:disp[1, rank] + count[1, rank]]
-
-    # also need one for k-points
-    Idx_kp_repeated = np.repeat(Idx_kp, ne)
-    Idx_kp_loc = Idx_kp_repeated[disp[1, rank]:disp[1, rank] + count[1, rank]]
+    energy_loc = energy[disp[1, rank]:disp[1, rank] + count[1, rank]]
+    Idx_e_loc = Idx_e[disp[1, rank]:disp[1, rank] + count[1, rank]]
 
     # split up the factor between the ranks
     factor_w_loc = factor_w[disp[1, rank]:disp[1, rank] + count[1, rank]]
@@ -300,7 +245,7 @@ if __name__ == "__main__":
 
     # print rank distribution
     print(
-    f"Rank: {rank} #Energy x kpts/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", 
+    f"Rank: {rank} #Energy/rank: {count[1,rank]} #nnz/rank: {count[0,rank]}", 
     name)
 
     # adding checks
@@ -423,11 +368,6 @@ if __name__ == "__main__":
     sl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     sr_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
 
-    # phonon self-energy. Only diagonal so far
-    sg_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
-    sl_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
-    sr_phn = np.zeros((count[1,rank], nao), dtype=np.complex128)
-
     # initialize Green's function------------------------------------------------
     gg_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
     gl_h2g = np.zeros((count[1,rank], no), dtype=np.complex128)
@@ -439,14 +379,14 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
+    #mem_s = 0.9
     mem_s = 0.0
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 300
+    max_iter = 10
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
-    EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     ind_ek_plus = -1
@@ -477,6 +417,10 @@ if __name__ == "__main__":
                     dtype=np.complex128, order="C")
     wg_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
                     dtype=np.complex128, order="C")
+    # wg_gw2s = gg_g2p
+    # wl_gw2s = gl_g2p
+    # wr_gw2s = gr_g2p
+    # wg_transposed_gw2s = gl_transposed_g2p
     wl_transposed_gw2s = np.empty((count[0, rank], data_shape[1]),
                     dtype=np.complex128, order="C")
     # H2G
@@ -486,12 +430,16 @@ if __name__ == "__main__":
                     dtype=np.complex128, order="C")
     sr_h2g_buf = np.empty((count[1, rank], data_shape[0]),
                     dtype=np.complex128, order="C")
+    # sg_h2g_buf = pg_p2w
+    # sl_h2g_buf = pl_p2w
+    # sr_h2g_buf = pr_p2w
 
     comm.Barrier()
 
     if rank == 0:
         time_start = -time.perf_counter()
-
+    # output folder
+    folder = '/quatrex/results/CNT_testing/'
     for iter_num in range(max_iter):
 
         comm.Barrier()
@@ -503,38 +451,32 @@ if __name__ == "__main__":
 
         # initialize observables----------------------------------------------------
         # density of states
-        dos = np.zeros(shape=(data_shape[1], nb), dtype = np.complex128)
-        dosw = np.zeros(shape=(data_shape[1], nb//nbc), dtype = np.complex128)
+        dos = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        dosw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # occupied states/unoccupied states
-        nE = np.zeros(shape=(data_shape[1], nb), dtype = np.complex128)
-        nP = np.zeros(shape=(data_shape[1], nb), dtype = np.complex128)
+        nE = np.zeros(shape=(ne,nb), dtype = np.complex128)
+        nP = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
         # occupied screening/unoccupied screening
-        nEw = np.zeros(shape=(data_shape[1], nb//nbc), dtype = np.complex128)
-        nPw = np.zeros(shape=(data_shape[1], nb//nbc), dtype = np.complex128)
+        nEw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
+        nPw = np.zeros(shape=(ne,nb//nbc), dtype = np.complex128)
 
         # current per energy
-        ide = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
-        # in-current per energy
-        ide_in = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
-        # out-current per energy
-        ide_out = np.zeros(shape=(data_shape[1],nb), dtype = np.complex128)
+        ide = np.zeros(shape=(ne,nb), dtype = np.complex128)
 
         # transform from 2D format to list/vector of sparse arrays format-----------
         sg_h2g_vec = change_format.sparse2vecsparse_v2(sg_h2g, rows, columns, nao)
         sl_h2g_vec = change_format.sparse2vecsparse_v2(sl_h2g, rows, columns, nao)
         sr_h2g_vec = change_format.sparse2vecsparse_v2(sr_h2g, rows, columns, nao)
 
-        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sr_phn, np.arange(nao), np.arange(nao), nao)
-        sl_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sl_phn, np.arange(nao), np.arange(nao), nao)
-        sg_ephn_h2g_vec = change_format.sparse2vecsparse_v2(sg_phn, np.arange(nao), np.arange(nao), nao)
         
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        ECmin_vec[iter_num+1], EVmax_vec[iter_num+1], ind_ek_plus = get_cv_band_edges_mpi_interpol(ECmin_vec[iter_num]-0.05,
+        sr_ephn_h2g_vec = change_format.sparse2vecsparse_v2(np.zeros((count[1,rank], no), dtype=np.complex128), rows, columns, nao)
+        ECmin_vec[iter_num+1], ind_ek_plus = get_band_edge_mpi_interpol(ECmin_vec[iter_num]-0.05,
                                                             energy,
-                                                            hamiltonian_obj.k_Overlap[kp_band_gap], 
-                                                            hamiltonian_obj.k_Hamiltonian[kp_band_gap], 
+                                                            hamiltonian_obj.Overlap['H_4'], 
+                                                            hamiltonian_obj.Hamiltonian['H_4'], 
                                                             sr_h2g_vec,
                                                             sl_h2g_vec,
                                                             sg_h2g_vec,
@@ -566,26 +508,12 @@ if __name__ == "__main__":
         #                                                     count, 
         #                                                     disp, 
         #                                                     side = 'left')
-        # if iter_num == 0:
-        #     dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
-        #     dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
-        # else:
-        #     energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        #     energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
-
-        if Vappl == 0.0:
-            # energy_fl = EVmax_vec[iter_num+1] + (ECmin_vec[iter_num+1] - EVmax_vec[iter_num+1])/2
-            energy_fl = EVmax_vec[iter_num+1] + 0.2
-            # energy_fl = ECmin_vec[iter_num+1] - 0.05
-        elif Vappl > 0.0:
-            # p-doped
-            energy_fl = EVmax_vec[iter_num+1] + 0.10
+        if iter_num == 0:
+            dEfL_EC = energy_fl - ECmin_vec[iter_num + 1]
+            dEfR_EC = energy_fr - ECmin_vec[iter_num + 1]
         else:
-            # n-doped
-            energy_fl = ECmin_vec[iter_num+1] + 0.10
-        energy_fr = energy_fl + Vappl
-
-        num_energies_below_fl = sum(energy < energy_fl)  # len(energy) // 2  # Doesn't seem to work with len(energy) // 2. Don't know why
+            energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
+            energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
@@ -597,24 +525,20 @@ if __name__ == "__main__":
             print(f"    Pre-GF time: {pre_gf_time:.3f} s", flush=True)
             gf_time = -time.perf_counter()
 
-        if iter_num == 60:
-            if mem_s > 0.5:
-                mem_s = 0.5
-        if iter_num == 100:
-            if mem_s > 0.1:
-                mem_s = 0.1
+        if iter_num == 50:
+            mem_s = 0.3
         # calculate the green's function at every rank------------------------------
         if args.pool:
             gr_diag, gr_upper, gl_diag, gl_upper, gg_diag, gg_upper = calc_GF_pool.calc_GF_pool_mpi(
                                                                 hamiltonian_obj,
                                                                 energy_loc,
-                                                                Idx_kp_loc,
+                                                                np.zeros_like(energy_loc, dtype=int),
                                                                 sr_h2g_vec,
                                                                 sl_h2g_vec,
                                                                 sg_h2g_vec,
-                                                                sr_ephn_h2g_vec,
-                                                                sl_ephn_h2g_vec,
-                                                                sg_ephn_h2g_vec,
+                                                                np.zeros_like(sr_h2g_vec),
+                                                                np.zeros_like(sl_h2g_vec),
+                                                                np.zeros_like(sg_h2g_vec),
                                                                 energy_fl,
                                                                 energy_fr,
                                                                 temp,
@@ -622,8 +546,8 @@ if __name__ == "__main__":
                                                                 nE[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 nP[disp[1, rank]:disp[1, rank] + count[1, rank]],
                                                                 ide[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                ide_in[disp[1, rank]:disp[1, rank] + count[1, rank]],
-                                                                ide_out[disp[1, rank]:disp[1, rank] + count[1, rank]],
+                                                                np.zeros_like(ide[disp[1, rank]:disp[1, rank] + count[1, rank]]),
+                                                                np.zeros_like(ide[disp[1, rank]:disp[1, rank] + count[1, rank]]),
                                                                 factor_g_loc,
                                                                 comm,
                                                                 rank,
@@ -660,19 +584,13 @@ if __name__ == "__main__":
                                                                 validate_dace=args.validate_dace
                                                             )
         
-        if (sum(dos[:,0]<0) > 0) and rank == 11: # and iter_num == 1:
-            print("Negative DOS", flush=True)
-            # np.save(scratch_path + f'dos_{rank}.npy', dos)
-            # np.save(scratch_path + f'energy_{rank}.npy', energy_loc)
-            # with open(scratch_path + f'sr_h2g_vec_{rank}.pkl', 'wb') as f:
-            #     pickle.dump(sr_h2g_vec, f)
-        
         comm.Barrier()
 
         if rank == 0:
             gf_time += time.perf_counter()
             print(f"    GF time: {gf_time:.3f} s", flush=True)
             pre_comm0_time = -time.perf_counter()
+            
 
         # lower diagonal blocks from physics identity
         gg_lower = -gg_upper.conjugate().transpose((0,1,3,2))
@@ -736,17 +654,6 @@ if __name__ == "__main__":
             comm0_time += time.perf_counter()
             print(f"    Comm-0 time: {comm0_time:.3f} s", flush=True)
             g2p_time = -time.perf_counter()
-        
-        # save a diagonal element of the Green's function for experimental purposes
-        if iter_num == 0 and False:
-            mid_el = bmax[-1] // 2
-            ind_in_nnz_list = np.where(rows==columns)[0][mid_el]
-            if count[1, rank] < ind_in_nnz_list < count[1, rank] + count[0, rank]:
-                save_ind = ind_in_nnz_list - count[1, rank]
-                assert np.allclose(gl_g2p[save_ind], gl_transposed_g2p[save_ind])
-                print(f"Saving diagonal element of Green's function", flush=True)
-                np.save(scratch_path + f'gg_diag_{rank}.npy', gg_g2p[save_ind])
-                np.save(scratch_path + f'gl_diag_{rank}.npy', gl_g2p[save_ind])
 
         # calculate the polarization at every rank----------------------------------
         if args.type in ("gpu"):
@@ -757,35 +664,14 @@ if __name__ == "__main__":
                                                 gr_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("cpu"):
-            #pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
-            #                                    pre_factor,
-            #                                    gg_g2p,
-            #                                    gl_g2p,
-            #                                    gl_transposed_g2p)
-            #pr_g2p = np.zeros_like(pg_g2p)
-            #pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_fixed_conv_cpu(
-            #                                    pre_factor,
-            #                                    num_energies_below_fl,
-            #                                    energy,
-            #                                    gg_g2p,
-            #                                    gl_g2p)
-            pg_g2p, pl_g2p, pr_g2p = g2p_cpu.g2p_kpoints(
+            pg_g2p, pl_g2p = g2p_cpu.g2p_fft_mpi_cpu_inlined_nopr(
                                                 pre_factor,
-                                                num_energies_below_fl,
-                                                energy,
-                                                hamiltonian_obj.kp,
-                                                hamiltonian_obj.coul_kp,
                                                 gg_g2p,
-                                                gl_g2p
-                                                )
+                                                gl_g2p,
+                                                gl_transposed_g2p)
+            pr_g2p = (pg_g2p-pl_g2p)/2
         else:
             raise ValueError("Argument error, input type not possible")
-        
-        # Remove potential noise from the polarization function
-        # for ij in range(pg_g2p.shape[0]):
-        #     if rows[disp[0,rank]+ij] == columns[disp[0,rank]+ij]:
-        #         pl_g2p[ij, pl_g2p[ij].imag > 0] = pl_g2p[ij, pl_g2p[ij].imag > 0].conjugate()
-        #         pg_g2p[ij, pg_g2p[ij].imag > 0] = pg_g2p[ij, pg_g2p[ij].imag > 0].conjugate()
 
         comm.Barrier()
 
@@ -876,7 +762,7 @@ if __name__ == "__main__":
                 wg_diag, wg_upper, wl_diag, wl_upper, wr_diag, wr_upper, nb_mm, lb_max_mm, ind_zeros = p2w_cpu.p2w_pool_mpi_cpu(
                                                                                                     hamiltonian_obj,
                                                                                                     energy_loc,
-                                                                                                    Idx_kp_loc,
+                                                                                                    np.zeros_like(energy_loc, dtype=int),
                                                                                                     pg_p2w_vec, 
                                                                                                     pl_p2w_vec,
                                                                                                     pr_p2w_vec, 
@@ -1022,42 +908,33 @@ if __name__ == "__main__":
                                                                 wl_transposed_gw2s
                                                                 )
         elif args.type in ("cpu"):
-            vh1d_k = np.asarray([np.squeeze(mat[rows[disp[0, rank]:disp[0, rank] + count[0, rank]],
-                                                columns[disp[0, rank]:disp[0, rank] + count[0, rank]]]) 
-                                                for mat in hamiltonian_obj.k_Coulomb_matrix.values()])
-            sr_fock = gw2s_cpu.gw2s_fock_part_kpoints(-pre_factor/2, hamiltonian_obj.kp, hamiltonian_obj.coul_kp, gl_g2p, vh1d_k)
-            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_kpoints(-pre_factor/2,
-                                                              num_energies_below_fl,
-                                                              gg_g2p,
-                                                              gl_g2p,
-                                                              wg_gw2s,
-                                                              wl_gw2s,
-                                                              energy, 
-                                                              hamiltonian_obj.kp,
-                                                              hamiltonian_obj.coul_kp
-                                                              )
-            #sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_cpu(-pre_factor/2,
-            #                                                         num_energies_below_fl,
-            #                                                         gg_g2p,
-            #                                                         gl_g2p,
-            #                                                         wg_gw2s,
-            #                                                         wl_gw2s,
-            #                                                         energy, 
-            #                                                         )
-            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fixed_conv_hilbert_cpu(-pre_factor/2,
-            #                                                          num_energies_below_fl,
-            #                                                          gg_g2p,
-            #                                                          gl_g2p,
-            #                                                          wg_gw2s,
-            #                                                          wl_gw2s,
-            #                                                          hilbert
-            #                                                          )
-            #vh = hamiltonian_obj.k_Coulomb_matrix[kp_band_gap]
-            #vh1d = np.squeeze(np.asarray(vh[np.copy(rows), np.copy(columns)].reshape(-1)))
-            #sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
-            #                                                               wg_gw2s, wl_gw2s,
-            #                                                               wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count)
-            sr_gw2s += sr_fock
+            vh1d_sliced = vh1d[disp[0, rank]:disp[0, rank] + count[0, rank]]
+            sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_PI_sr(-pre_factor / 2, gg_g2p, gl_g2p,
+                                                                           wg_gw2s, wl_gw2s,
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d_sliced, energy, rank, disp, count)
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu_3part_sr(
+            #                                                     -pre_factor/2,
+            #                                                     gg_g2p,
+            #                                                     gl_g2p,
+            #                                                     gr_g2p,
+            #                                                     wg_gw2s,
+            #                                                     wl_gw2s,
+            #                                                     wr_gw2s,
+            #                                                     wg_transposed_gw2s,
+            #                                                     wl_transposed_gw2s
+            #                                                     )
+
+            # sg_gw2s, sl_gw2s, sr_gw2s = gw2s_cpu.gw2s_fft_mpi_cpu(
+            #                                                     -pre_factor/2,
+            #                                                     gg_g2p,
+            #                                                     gl_g2p,
+            #                                                     gr_g2p,
+            #                                                     wg_gw2s,
+            #                                                     wl_gw2s,
+            #                                                     wr_gw2s,
+            #                                                     wg_transposed_gw2s,
+            #                                                     wl_transposed_gw2s
+            #                                                     )
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1094,34 +971,7 @@ if __name__ == "__main__":
         if rank == 0:
             comm3_time += time.perf_counter()
             print(f"    Comm-3 time: {comm3_time:.3f} s", flush=True)
-            start_cc_time = time.perf_counter()
-
-        # --------------------------------------------------------------------------------
-        # -------------------------Assert current conservation----------------------------
-        # --------------------------------------------------------------------------------
-        current_conserved = current_conservation(sg_h2g_buf, sl_h2g_buf, gg_h2g, gl_h2g)
-        if rank == 0:
-            comm.Reduce(MPI.IN_PLACE, current_conserved, op=MPI.SUM, root=0)
-        else:
-            comm.Reduce(current_conserved, None, op=MPI.SUM, root=0)
-        comm.Barrier()
-
-        if rank == 0:
-            rel_current_conserved = np.abs(current_conserved[0]-current_conserved[1])/np.abs(current_conserved[0])
-            try:
-                assert np.isclose(rel_current_conserved, 0.0, atol=1e-10)
-            except AssertionError:
-                print("Assertion Error: Current conservation not satisfied", flush=True)
-                print(f"Relative error: {rel_current_conserved}", flush=True)
-                print(f"Current conserved 1: {current_conserved[0]}", flush=True)
-                print(f"Current conserved 2: {current_conserved[1]}", flush=True)
-
-        comm.Barrier()
-
-        if rank == 0:
-            end_cc_time = time.perf_counter()
-            print(f"    Current conservation time: {end_cc_time-start_cc_time:.3f} s", flush=True)
-            start_phonon_time = time.perf_counter()
+            wrapping_up_time = -time.perf_counter()
 
         if iter_num == 0:
             sg_h2g = (1.0 - mem_s) * sg_h2g_buf + mem_s * sg_h2g
@@ -1133,49 +983,20 @@ if __name__ == "__main__":
             sl_h2g = (1.0 - mem_s) * sl_h2g_buf + mem_s * sl_h2g
             sr_h2g = (1.0 - mem_s) * sr_h2g_buf + mem_s * sr_h2g
 
-        # --------------------------------------------------------------------------
-        # ---------------------------Phonon calculation-----------------------------
-        # --------------------------------------------------------------------------
-        # Extract diagonal bands
-        gg_diag_band = gg_h2g[:, rows==columns]
-        gl_diag_band = gl_h2g[:, rows==columns]
-        # Add diagonal imaginary self-energy. This will broaden the peaks and also adds
-        # a bit of stability to the self-energy as negative peaks of the dos has been observed.
-        # The Phonon energy (EPHN) is set to zero and the phonon-electron potential (DPHN) is set to 2.5e-3
-        # at the beginning of this script.
-        sg_phn, sl_phn, sr_phn = electron_phonon_selfenergy.calc_SE_GF_EPHN(energy_loc,
-                                                                            gl_diag_band,
-                                                                            gg_diag_band,
-                                                                            sg_phn,
-                                                                            sl_phn,
-                                                                            sr_phn,
-                                                                            EPHN,
-                                                                            DPHN,
-                                                                            temp,
-                                                                            mem_s)
-        
-        comm.Barrier()
-        if rank == 0:
-            end_phonon_time = time.perf_counter()
-            print(f"    Phonon time: {end_phonon_time-start_phonon_time:.3f} s", flush=True)
-            wrapping_up_time = -time.perf_counter()
+        # if iter_num == max_iter - 1:
+        #     alltoall_p2g(sg_gw2s, sg_h2g, transpose_net=args.net_transpose)
+        #     alltoall_p2g(sl_gw2s, sl_h2g, transpose_net=args.net_transpose)
+        #     alltoall_p2g(sr_gw2s, sr_h2g, transpose_net=args.net_transpose)
 
+        
         # Wrapping up the iteration
         if rank == 0:
             comm.Reduce(MPI.IN_PLACE, dos, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nE, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, nP, op=MPI.SUM, root=0)
             comm.Reduce(MPI.IN_PLACE, ide, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, ide_in, op=MPI.SUM, root=0)
-            comm.Reduce(MPI.IN_PLACE, ide_out, op=MPI.SUM, root=0)
 
         else:
             comm.Reduce(dos, None, op=MPI.SUM, root=0)
-            comm.Reduce(nE, None, op=MPI.SUM, root=0)
-            comm.Reduce(nP, None, op=MPI.SUM, root=0)
             comm.Reduce(ide, None, op=MPI.SUM, root=0)
-            comm.Reduce(ide_in, None, op=MPI.SUM, root=0)
-            comm.Reduce(ide_out, None, op=MPI.SUM, root=0)
         
         if rank == 0:
             wrapping_up_time += time.perf_counter()
@@ -1185,20 +1006,16 @@ if __name__ == "__main__":
             print()
 
         if rank == 0:
-            np.savetxt(scratch_path + 'E.dat', energy)
-            np.savetxt(scratch_path + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
-            np.savetxt(scratch_path + 'nE_' + str(iter_num) + '.dat', nE.view(float))
-            np.savetxt(scratch_path + 'nP_' + str(iter_num) + '.dat', nP.view(float))
-            np.savetxt(scratch_path + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
-            np.savetxt(scratch_path + 'IDE_IN_' + str(iter_num) + '.dat', ide_in)
-            np.savetxt(scratch_path + 'IDE_OUT_' + str(iter_num) + '.dat', ide_out)
-            np.savetxt(scratch_path + 'EFL.dat', EFL_vec)
-            np.savetxt(scratch_path + 'EFR.dat', EFR_vec)
-            np.savetxt(scratch_path + 'ECmin.dat', ECmin_vec)
+            np.savetxt(parent_path + folder + 'E.dat', energy)
+            np.savetxt(parent_path + folder + 'DOS_' + str(iter_num) + '.dat', dos.view(float))
+            np.savetxt(parent_path + folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
+            np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+            np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+            np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
     if rank == 0:
-        np.savetxt(scratch_path + 'EFL.dat', EFL_vec)
-        np.savetxt(scratch_path + 'EFR.dat', EFR_vec)
-        np.savetxt(scratch_path + 'ECmin.dat', ECmin_vec)
+        np.savetxt(parent_path + folder + 'EFL.dat', EFL_vec)
+        np.savetxt(parent_path + folder + 'EFR.dat', EFR_vec)
+        np.savetxt(parent_path + folder + 'ECmin.dat', ECmin_vec)
 
     # free datatypes------------------------------------------------------------
 

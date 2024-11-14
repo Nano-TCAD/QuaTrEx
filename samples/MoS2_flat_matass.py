@@ -135,7 +135,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     no_orb = np.array([3, 3, 5, 3, 3, 5])
-    Vappl = -0.2
+    Vappl = 0.0
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     hilbert = HilbertTransform(energy, eta=1e-12, quatrex=True)
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
