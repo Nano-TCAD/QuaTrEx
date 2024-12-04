@@ -456,6 +456,8 @@ class Matrices:
         This grid can be different from the Hamiltonian k-point grid as it is
         defined over the differences of the k-points.
 
+        Should be remade for clarity.
+
         Parameters
         ----------
         kp : ndarray

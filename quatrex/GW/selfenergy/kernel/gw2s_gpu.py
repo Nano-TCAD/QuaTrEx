@@ -653,6 +653,67 @@ def gw2s_fft_mpi_gpu_PI_sr_batched(
     return (sg, sl, sr_principale)
 
 
+def gw2s_kpoints_sr_batched(
+    pre_factor: np.complex128, kpoints: npt.NDArray[np.int32], gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
+    wg: npt.NDArray[np.complex128], wl: npt.NDArray[np.complex128],
+    wg_transposed: npt.NDArray[np.complex128], wl_transposed: npt.NDArray[np.complex128],
+    vh1D: npt.NDArray[np.complex128], energy: npt.NDArray[np.float64], rank: np.int32, disp: npt.NDArray[np.int32], count: npt.NDArray[np.int32],
+    batch_size: int = 1000
+) -> typing.Tuple[npt.NDArray[np.complex128], npt.NDArray[np.complex128], npt.NDArray[np.complex128]]:
+    """Calculate the self energy with fft on the gpu(see file description todo). 
+        The inputs are the pre factor, the Green's Functions
+        and the screened interactions.
+        Takes into account the energy grid cutoff.
+        In addition, loads/unloads the data to/from the gpu.
+
+    Args:
+        pre_factor                   (np.complex128): pre_factor, multiplied at the end
+        gg              (npt.NDArray[np.complex128]): Greater Green's Function,                 (#orbital, #energy)
+        gl              (npt.NDArray[np.complex128]): Lesser Green's Function,                  (#orbital, #energy)
+        gr              (npt.NDArray[np.complex128]): Retarded Green's Function,                (#orbital, #energy)
+        wg              (npt.NDArray[np.complex128]): Greater screened interaction,             (#orbital, #energy)
+        wl              (npt.NDArray[np.complex128]): Lesser screened interaction,              (#orbital, #energy)
+        wr              (npt.NDArray[np.complex128]): Retarded screened interaction,            (#orbital, #energy)
+        wg_transposed   (npt.NDArray[np.complex128]): Greater screened interaction transposed,  (#orbital, #energy)
+        wl_transposed   (npt.NDArray[np.complex128]): Lesser screened interaction transposed,   (#orbital, #energy)
+
+    Returns:
+        typing.Tuple[npt.NDArray[np.complex128], Greater self energy  (#orbital, #energy)
+                     npt.NDArray[np.complex128], Lesser self energy   (#orbital, #energy)
+                     npt.NDArray[np.complex128]  Retarded self energy (#orbital, #energy)
+                    ]
+    """
+    # number of energy points
+    nkpts = np.prod(kpoints, dtype=int)
+    ne: int = int(gg.shape[1]/nkpts)
+    assert gg.shape[1] == ne * nkpts, "Energy grid not divisible by number of kpoints"
+    no: int = gg.shape[0]
+
+
+    # determine number of batches
+    # batch over no
+    batches = no // batch_size
+    if batches == 0:
+        print("Too large batch size")
+
+    sg = np.empty((no, ne*nkpts), dtype=np.complex128)
+    sl = np.empty((no, ne*nkpts), dtype=np.complex128)
+    sr_principale = np.empty((no, ne*nkpts), dtype=np.complex128)
+
+    
+    for k in range(nkpts):
+        for kp in range(nkpts):
+            km = (k - kp) % nkpts
+            sg_temp, sl_temp, sr_temp = gw2s_fft_mpi_gpu_PI_sr_batched(
+                pre_factor, gg[:, kp*ne: (kp+1)*ne], gl[:, kp*ne: (kp+1)*ne], wg[:, km*ne: (km+1)*ne], wl[:, km*ne: (km+1)*ne],
+                wg_transposed[:, -km*ne: (-km+1)*ne], wl_transposed[:, -km*ne: (-km+1)*ne], vh1D[:, k*ne:(k+1)*ne], energy, rank, disp, count, batch_size
+            )
+            sg[:, k*ne: (k+1)*ne] += sg_temp
+            sl[:, k*ne: (k+1)*ne] += sl_temp
+            sr_principale[:, k*ne: (k+1)*ne] += sr_temp
+    return (sg, sl, sr_principale)
+
+
 
 def gw2s_fft_mpi_gpu_streams(
     pre_factor: np.complex128, gg: npt.NDArray[np.complex128], gl: npt.NDArray[np.complex128],
