@@ -487,7 +487,6 @@ def g2p_kpoints(
     # number of energy points and nnz
     nkpts = kpoints.shape[0]
     ne = int(gg.shape[1]/nkpts)
-    no = gg.shape[0]
 
     # create polarization arrays
     pg: npt.NDArray[np.complex128] = np.zeros_like(gg, dtype=np.complex128)

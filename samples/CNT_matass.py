@@ -60,7 +60,7 @@ if __name__ == "__main__":
     solution_path = os.path.join(scratch_path, "CNT_32/")
     solution_path_vh = os.path.join(solution_path, "V.dat")
     hamiltonian_path = "/usr/scratch/bucaramanga/awinka/CNT/quatrex_inputs/for_tests/"
-    save_for_tests = False
+    save_for_tests = True
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     # create hamiltonian object
     # one orbital on C atoms, two same types
     Vappl = 0.0
-    energy = np.linspace(-10.5, 2.5, 512, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-15, 5, 64, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
@@ -108,6 +108,8 @@ if __name__ == "__main__":
     # Extract neighbor indices
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
+    np.save(scratch_path + f'rows.npy', rows)
+    np.save(scratch_path + f'columns.npy', columns)
 
     # hamiltonian object has 1-based indexing
     bmax = hamiltonian_obj.Bmax - 1
@@ -158,7 +160,7 @@ if __name__ == "__main__":
     # DFT Valence Band Maximum
     EVmax = -2.0026
     # Fermi Level of Left Contact
-    energy_fl = -3.9
+    energy_fl = -3.85
     # Fermi Level of Right Contact
     energy_fr = energy_fl + Vappl
 
@@ -348,12 +350,12 @@ if __name__ == "__main__":
     wr_p2w = np.zeros((count[1,rank], no), dtype=np.complex128)
 
     # initialize memory factors for Self-Energy, Green's Function and Screened interaction
-    mem_s = 0.0
+    mem_s = 0.75
     mem_g = 0.0
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 160
+    max_iter = 3
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EVmax_vec = np.concatenate((np.array([EVmax]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
@@ -468,13 +470,13 @@ if __name__ == "__main__":
                                                             disp, 
                                                             side = 'left')
 
-        if Vappl == 0.0:
-            energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
-        else:
-            energy_fl = ECmin_vec[iter_num + 1] - 0.10
-        energy_fr = energy_fl + Vappl
+        #if Vappl == 0.0:
+        #    energy_fl = EVmax_vec[iter_num + 1] + (ECmin_vec[iter_num + 1] - EVmax_vec[iter_num + 1])/2
+        #else:
+        #    energy_fl = ECmin_vec[iter_num + 1] - 0.10
+        #energy_fr = energy_fl + Vappl
 
-        num_energies_below_fl = sum(energy < energy_fl)
+        #num_energies_below_fl = sum(energy < energy_fl)
 
         EFL_vec[iter_num+1] = energy_fl
         EFR_vec[iter_num+1] = energy_fr
