@@ -3,6 +3,7 @@ Example a sc-GW iteration with MPI+CUDA.
 With transposition through network.
 Applied to MoS2
 See the different GW step folders for more explanations.
+Based on Si_NW_onstate54_profiling_todi_poisson_opt_t.py
 """
 import time
 print("Starting imports on main folder", flush = True)
@@ -146,17 +147,30 @@ if __name__ == "__main__":
 
     # create hamiltonian object
     Vappl = 0.0
+    NCpSC = 1  # Number of unit cells per supercell in transport direction
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     num_kpoints = np.array([1, 5, 1])
     Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
     kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)
+    EPHN = np.array([50.0e-3])  # Phonon energy
+    DPHN = np.array([5.0e-3])  # Electron-phonon coupling
+
+    comm.Barrier()
+    if rank == 0:
+        print("Starting Hamiltonian read-in", flush = True)
+        time_pickle = -time.perf_counter()
+
     hamiltonian_obj = Mat_assembler.Matrices(args.file_hm, Nk=num_kpoints, kp_shift=kp_shift, Vappl = Vappl, rank = rank)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
-    # Modify the Hamiltonian object 
+
+    comm.Barrier()
+    if rank ==0:
+        time_pickle += time.perf_counter()
+        print("Time for Hamiltonian read-in: %.3f s" % time_pickle, flush = True)
     # Extract neighbor indices
     rows = hamiltonian_obj.rows
     columns = hamiltonian_obj.columns
@@ -465,6 +479,18 @@ if __name__ == "__main__":
             [inp_transposed, count[1,:]*count[0, rank], disp[1, :]*count[0, rank]*base_size, np.repeat(BASE_TYPE, size)],
             [outp, np.repeat([1], size), disp[0, :]*base_size, P2G_R_RIZ])
 
+
+    def alltoall_p2g_diag(inp: npt.NDArray[np.complex128], outp: npt.NDArray[np.complex128], transpose_net: bool = False):
+        if transpose_net:
+            comm.Alltoallw([inp, count_diag[1, :], disp_diag[1, :] * base_size,
+                            np.repeat(DIAG_P2G_S_RIZ, size)],
+                           [outp, np.repeat([1], size), disp_diag[0, :] * base_size, DIAG_P2G_R_RIZ])
+        else:
+            inp_transposed = np.copy(inp.T, order="C")
+            comm.Alltoallw([
+                inp_transposed, count_diag[1, :] * count_diag[0, rank], disp_diag[1, :] * count_diag[0, rank] * base_size,
+                np.repeat(BASE_TYPE, size)
+            ], [outp, np.repeat([1], size), disp_diag[0, :] * base_size, DIAG_P2G_R_RIZ])   
 
 
     # initialize self energy----------------------------------------------------
@@ -844,8 +870,9 @@ if __name__ == "__main__":
                                                 gl_g2p,
                                                 gl_transposed_g2p)
         elif args.type in ("gpu"):
-            pg_g2p, pl_g2p = g2p_gpu.g2p_fft_mpi_gpu_batched_nopr(
+            pg_g2p, pl_g2p = g2p_gpu.g2p_kpoints_nopr(
                                                 pre_factor,
+                                                num_kpoints,
                                                 gg_g2p,
                                                 gl_g2p,
                                                 gl_transposed_g2p, batch_size = 880)
