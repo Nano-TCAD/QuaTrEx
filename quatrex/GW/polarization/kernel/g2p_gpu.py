@@ -285,7 +285,7 @@ def g2p_kpoints_nopr(
                     ]
     """
     # number of energy points
-    nkpts = kpoints.shape[0]
+    nkpts = np.prod(kpoints, dtype=int)
     ne = int(gg.shape[1]/nkpts)
     assert ne*nkpts == gg.shape[1]
     no = gg.shape[0]
@@ -334,8 +334,8 @@ def g2p_kpoints_nopr(
 
                 # load data to cpu----------------------------------------------------------
 
-                pg[batch_start:batch_end, k*ne:(k+1)*ne] = pg_gpu[0:batch_end - batch_start].get()
-                pl[batch_start:batch_end, k*ne:(k+1)*ne] = pl_gpu[0:batch_end - batch_start].get()
+                pg[batch_start:batch_end, k*ne:(k+1)*ne] += pg_gpu[0:batch_end - batch_start].get()
+                pl[batch_start:batch_end, k*ne:(k+1)*ne] += pl_gpu[0:batch_end - batch_start].get()
 
     return (pg, pl)
 
