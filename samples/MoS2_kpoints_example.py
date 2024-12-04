@@ -87,8 +87,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Example of the first GW iteration with MPI+CUDA"
     )
-    parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
-    parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
+    #parser.add_argument("-fvh", "--file_vh", default=solution_path_vh, required=False)
+    #parser.add_argument("-fpw", "--file_gw", default=solution_path_gw, required=False)
     parser.add_argument("-fhm", "--file_hm", default=hamiltonian_path, required=False)
     # change manually the used implementation inside the code
     parser.add_argument("-t", "--type", default="cpu",
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     Vappl = 0.0
     energy = np.linspace(-15, 7.5, 512, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
-    num_kpoints = np.array([1, 3, 1])
+    num_kpoints = np.array([1, 5, 1])
     Idx_kp = np.arange(np.prod(num_kpoints)) # K-point Index Vector
     kp_shift = np.array([0, 0, 0])
     kp_band_gap = tuple(kp_shift)

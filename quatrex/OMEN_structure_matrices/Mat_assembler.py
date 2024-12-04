@@ -469,7 +469,7 @@ class Matrices:
         coul_kp = []
         for kp1 in kpoints:
             for kp2 in kpoints:
-                kp_diff = (kp1 - kp2 + 1/2) % 1 - 1/2
+                kp_diff = (kp2 - kp1 + 1/2) % 1 - 1/2
                 # The above operation introduces some floating point noise
                 # and we don't want to add the "same" k-point twice
                 if len(coul_kp) > 0 and np.isclose(coul_kp, kp_diff).all(axis=1).any():
