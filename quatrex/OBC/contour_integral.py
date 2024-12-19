@@ -48,7 +48,7 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
     @cpx.jit.rawkernel()
     def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
 
-        idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+        idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
         if idx < z_size * b_size * b_size:
 
             i = idx // (b_size * b_size)
@@ -71,7 +71,7 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
     @cpx.jit.rawkernel()
     def contour_batched(T, matrix_blocks, z, factor, batch_size, z_size, b_size, isL):
 
-        idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+        idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
         if idx < batch_size * z_size * b_size * b_size:
 
             ie = idx // (z_size * b_size * b_size)
@@ -99,7 +99,7 @@ void compute_theta(double* dtheta, complex<double>* dz_dtheta, complex<double>* 
     @cpx.jit.rawkernel()
     def contour_combo(T, matrix_blocks, exp_1j_theta, r, factor, z_size, b_size, isL):
 
-        idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+        idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
         if idx < 3 * z_size * b_size * b_size:
 
             ie = idx // (z_size * b_size * b_size)

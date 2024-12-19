@@ -106,7 +106,7 @@ def contour(T, matrix_blocks, z, factor, z_size, b_size, isL):
 @cpx.jit.rawkernel()
 def compute_dEk_dk(dEk_dk, kL, kR, phiL, phiR, pRpL, M01, M10, ind_k, Ikmax, N, isL):
 
-    idx = cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x
+    idx = int(cpx.jit.blockIdx.x * cpx.jit.blockDim.x + cpx.jit.threadIdx.x)
     if idx < Ikmax * N * N:
 
         i = idx // (N * N)

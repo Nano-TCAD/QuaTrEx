@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     if rank == 0:
         print("MPI Initialized.", flush = True)
-    threadpool_limits(limits = 1, user_api = 'blas')
+    threadpool_limits(limits = 3, user_api = 'blas')
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/capstor/scratch/cscs/ldeuschl/quat_inputs/"
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     no_orb = np.array([1, 4])
     NCpSC = 4
     Vappl = 0.6
-    energy = np.linspace(-40, 35, 144, endpoint = True, dtype = float) # Energy Vector
+    energy = np.linspace(-40, 35, 14400, endpoint = True, dtype = float) # Energy Vector
     #energy = np.linspace(-6, 1, 72, endpoint=True, dtype=float)  # Energy Vector
     #energy = np.linspace(-4.695, 1.391, 208, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
@@ -256,11 +256,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 16
+    w_worker_threads = 18
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 16
+    gf_worker_threads = 18
     
     # physical parameter -----------
 

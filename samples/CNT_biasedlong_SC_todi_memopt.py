@@ -7,6 +7,7 @@ See the different GW step folders for more explanations.
 import time
 print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
+from threadpoolctl import threadpool_info, threadpool_limits
 import sys
 import numpy as np
 import cupy as cp
@@ -34,7 +35,7 @@ print("Time for mpi import: %.3f s" % time_mpi, flush = True)
 
 time_quatrex = -time.perf_counter()
 
-from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2
+from quatrex.bandstructure.calc_band_edge import get_band_edge_mpi_interpol_2, get_cband_edge_mpi_interpol_2_allblocks, get_vband_edge_mpi_interpol_2_allblocks, get_spatial_band_edge, get_band_edge_mpi_interpol_cb_vb
 #from quatrex.GW.polarization.kernel import g2p_cpu
 #from quatrex.GW.selfenergy.kernel import gw2s_cpu
 #from quatrex.GW.screenedinteraction.kernel import p2w_cpu
@@ -69,12 +70,12 @@ if __name__ == "__main__":
 
     if rank == 0:
         print("MPI Initialized.", flush = True)
-
+    threadpool_limits(limits = 4, user_api = 'blas')
     # assume every rank has enough memory to read the initial data
     # path to solution
     scratch_path = "/capstor/scratch/cscs/ldeuschl/quat_inputs/"
     # scratch_path = "/scratch/aziogas/IEDM/"
-    solution_path = os.path.join(scratch_path, "CNT_32_newlayer/")
+    solution_path = os.path.join(scratch_path, "CNT_32_newlayer_longcontacts/")
     solution_path_gw = os.path.join(solution_path, "data_GPWS_IEDM_GNR_04V.mat")
     solution_path_gw2 = os.path.join(solution_path, "data_GPWS_IEDM_it2_GNR_04V.mat")
     solution_path_vh = os.path.join(solution_path, "V.dat")
@@ -152,8 +153,8 @@ if __name__ == "__main__":
     # Factor to extract block-wise quantities, i.e. DOS, IdE etc on smaller resolution
     trace_factor = 2
     Vappl = 0.2
-    #energy = np.linspace(-35, 25, 4, endpoint = True, dtype = float) # Energy Vector
     energy = np.linspace(-35, 25, 10200, endpoint = True, dtype = float) # Energy Vector
+    #energy = np.linspace(-6.695, 3.391, 240, endpoint = True, dtype = float) # Energy Vector
     Idx_e = np.arange(energy.shape[0]) # Energy Index Vector
     EPHN = np.array([0.0])  # Phonon energy
     DPHN = np.array([2.5e-3])  # Electron-phonon coupling
@@ -163,7 +164,7 @@ if __name__ == "__main__":
         print("Starting Hamiltonian read-in", flush = True)
         time_pickle = -time.perf_counter()
     
-    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix192.dat', homogenize = True)
+    hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'linear', rank = rank, layer_matrix = '/Layer_Matrix.dat', homogenize = True, cbn = 7)
     serial_ham = pickle.dumps(hamiltonian_obj)
     broadcasted_ham = comm.bcast(serial_ham, root=0)
     hamiltonian_obj = pickle.loads(broadcasted_ham)
@@ -249,11 +250,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 6
+    w_worker_threads = 15
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 6
+    gf_worker_threads = 15
 
     # physical parameter -----------
 
@@ -264,7 +265,7 @@ if __name__ == "__main__":
     # Temperature in Kelvin
     temp = 300
     # relative permittivity
-    epsR = 1.0
+    epsR = 3.0
     # DFT Conduction Band Minimum
     ECmin = -3.524
 
@@ -523,8 +524,10 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 100
-    ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
+    max_iter = 450
+    ECmin_vec = np.zeros((2, max_iter + 1))
+    ECmin_vec[:,0] = np.array([ECmin, ECmin - Vappl])
+    EVmax_vec = np.zeros((2, max_iter))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
     ind_ek = -1
@@ -550,8 +553,7 @@ if __name__ == "__main__":
         time_start = -time.perf_counter()
     # output folder
     #folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
-    #folder = '/usr/scratch/tortin19/dleonard/attelas_results/CNT_107_test/'
-    folder = '/capstor/scratch/cscs/ldeuschl/newera_results/restart_CNT_biased_SC_BB1_epsR1_n192/'
+    folder = '/capstor/scratch/cscs/ldeuschl/newera_results/restart_longCNT_biased_SC_BB1_epsR3_n171/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -607,7 +609,7 @@ if __name__ == "__main__":
         start_band_edge = time.perf_counter()
     
         # Adjusting Fermi Levels of both contacts to the current iteration band minima
-        (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
+        (ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num], ind_ek) = get_band_edge_mpi_interpol_cb_vb(ECmin_vec[0,iter_num],
                                                     energy,
                                                     hamiltonian_obj.Overlap['H_4'],
                                                     hamiltonian_obj.Hamiltonian['H_4'],
@@ -622,7 +624,23 @@ if __name__ == "__main__":
                                                     disp,
                                                     'left',
                                                     mapping_diag, mapping_upper, mapping_lower, ij2ji)
-        
+        # (ECmin_vec[iter_num + 1], ind_ek) = get_band_edge_mpi_interpol_2(ECmin_vec[iter_num],
+        #                                             energy,
+        #                                             hamiltonian_obj.Overlap['H_4'],
+        #                                             hamiltonian_obj.Hamiltonian['H_4'],
+        #                                             sr_rgf,
+        #                                             ind_ek,
+        #                                             bmin,
+        #                                             bmax,
+        #                                             comm,
+        #                                             rank,
+        #                                             size,
+        #                                             count,
+        #                                             disp,
+        #                                             'left',
+        #                                             mapping_diag, mapping_upper, mapping_lower, ij2ji)
+        EEdge = get_spatial_band_edge(DH, ECmin_vec[0, iter_num + 1], EVmax_vec[0, iter_num])
+
         comm.Barrier()
         finish_band_edge = time.perf_counter()
         if rank == 0:
@@ -650,10 +668,11 @@ if __name__ == "__main__":
         #                                             side='left')
         
         if rank == 0:
-            print(f"ECmin: {ECmin_vec[iter_num + 1]}", flush = True)
+            print(f"ECmin: {ECmin_vec[0,iter_num + 1]}", flush = True)
         
-        energy_fl = ECmin_vec[iter_num + 1] + dEfL_EC
-        energy_fr = ECmin_vec[iter_num + 1] + dEfR_EC
+        energy_fl = ECmin_vec[0, iter_num + 1] + dEfL_EC
+        #Using the same index (left) for the right contact to keep the same V_ds
+        energy_fr = ECmin_vec[0, iter_num + 1] + dEfR_EC
 
         EFL_vec[iter_num + 1] = energy_fl
         EFR_vec[iter_num + 1] = energy_fr
@@ -816,7 +835,7 @@ if __name__ == "__main__":
                                                 pre_factor,
                                                 gg_g2p,
                                                 gl_g2p,
-                                                gl_transposed_g2p, batch_size = 240)
+                                                gl_transposed_g2p, batch_size = 750)
         else: 
             raise ValueError("Argument error, input type not possible")
         
@@ -1017,7 +1036,7 @@ if __name__ == "__main__":
         elif args.type in ("gpu"):
             sg_gw2s, sl_gw2s, sr_gw2s = gw2s_gpu.gw2s_fft_mpi_gpu_PI_sr_batched(-pre_factor / 2, gg_g2p, gl_g2p,
                                                                            wg_gw2s, wl_gw2s,
-                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 240)
+                                                                           wg_transposed_gw2s, wl_transposed_gw2s, vh1d, energy, rank, disp, count, batch_size = 750)
         else:
             raise ValueError("Argument error, input type not possible")
         
@@ -1111,9 +1130,10 @@ if __name__ == "__main__":
             np.savetxt(folder + 'IDE_' + str(iter_num) + '.dat', ide.view(float))
             np.savetxt(folder + 'EFL.dat', EFL_vec)
             np.savetxt(folder + 'EFR.dat', EFR_vec)
-            np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+            np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
+            np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
 
-        if(iter_num % 5) == 0:
+        if(iter_num % 25) == 0:
             sl_rgf_dev = cp.asarray(sl_h2g)
             sg_rgf_dev = cp.asarray(sg_h2g)
             sr_rgf_dev = cp.asarray(sr_h2g)
@@ -1122,22 +1142,53 @@ if __name__ == "__main__":
             sr_phn_dev = cp.asarray(sr_phn)
             rgf_GF_GPU_combo.self_energy_preprocess_2d(sl_rgf_dev, sg_rgf_dev, sr_rgf_dev, sl_phn_dev, sg_phn_dev, sr_phn_dev, cp.asarray(rows), cp.asarray(columns), cp.asarray(ij2ji))
             sr_rgf = cp.asnumpy(sr_rgf_dev)
+
+            CB_edge = get_cband_edge_mpi_interpol_2_allblocks(EEdge,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
+            VB_edge = get_vband_edge_mpi_interpol_2_allblocks(EEdge,
+                                                    energy,
+                                                    hamiltonian_obj.Overlap['H_4'],
+                                                    hamiltonian_obj.Hamiltonian['H_4'],
+                                                    sr_rgf,
+                                                    ind_ek - 1,
+                                                    bmin,
+                                                    bmax,
+                                                    comm,
+                                                    rank,
+                                                    size,
+                                                    count,
+                                                    disp,
+                                                    mapping_diag, mapping_upper, mapping_lower, ij2ji)
             
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/capstor/scratch/cscs/ldeuschl/newera_restart_results/SE_restart_CNT_biased_SC_BB1_epsR1_n192/'
+            SE_path = '/capstor/scratch/cscs/ldeuschl/newera_restart_results/SE_restart_longCNT_biased_SC_BB1_epsR3_n171/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn, slp = sl_phn, srp = sr_phn_dev, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:
                 np.savetxt(SE_path + 'rows', rows)
                 np.savetxt(SE_path + 'columns', columns)
-                np.savetxt(SE_path + 'ECmin.dat', ECmin_vec)
+                np.savetxt(SE_path + 'ECmin.dat', ECmin_vec.T)
                 np.savetxt(SE_path + 'EFL.dat', EFL_vec)
                 np.savetxt(SE_path + 'EFR.dat', EFR_vec)
                 np.savetxt(SE_path + 'ind_ek_' + str(iter_num) + '.dat', np.array([ind_ek]))
             
-
+            if rank == 0: 
+                np.savetxt(folder + 'CB_EDGE.dat', CB_edge)
+                np.savetxt(folder + 'VB_EDGE.dat', VB_edge)
 
             comm.Barrier()
             finish_restart = time.perf_counter()
@@ -1152,7 +1203,8 @@ if __name__ == "__main__":
     if rank == 0:
         np.savetxt(folder + 'EFL.dat', EFL_vec)
         np.savetxt(folder + 'EFR.dat', EFR_vec)
-        np.savetxt(folder + 'ECmin.dat', ECmin_vec)
+        np.savetxt(folder + 'ECmin.dat', ECmin_vec.T)
+        np.savetxt(folder + 'EVmax.dat', EVmax_vec.T)
 
     # free datatypes------------------------------------------------------------
 

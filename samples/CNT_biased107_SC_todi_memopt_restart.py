@@ -7,6 +7,7 @@ See the different GW step folders for more explanations.
 import time
 print("Starting imports on main folder", flush = True)
 time_pre_mpi = -time.perf_counter()
+from threadpoolctl import threadpool_info, threadpool_limits
 import sys
 import numpy as np
 import cupy as cp
@@ -69,6 +70,8 @@ if __name__ == "__main__":
 
     if rank == 0:
         print("MPI Initialized.", flush = True)
+
+    threadpool_limits(limits = 4, user_api = 'blas')
 
     # assume every rank has enough memory to read the initial data
     # path to solution
@@ -165,7 +168,7 @@ if __name__ == "__main__":
         time_pickle = -time.perf_counter()
     
     restart_dict = {'iter_num' : 225,
-                    'SE_input_path': '/capstor/scratch/cscs/ldeuschl/restart_results/SE_restart_CNT_biased_SC_BB1_epsR1_n321/'
+                    'SE_input_path': '/capstor/scratch/cscs/ldeuschl/restart_results/SE_restart_CNT_biased_SC_BB1_epsR1_n343/'
                     }
 
     hamiltonian_obj = OMENHamClass.Hamiltonian(args.file_hm, no_orb, Vappl = Vappl,  potential_type = 'read_in_diag', rank = rank, layer_matrix = '/Layer_Matrix343.dat', homogenize = True)
@@ -254,11 +257,11 @@ if __name__ == "__main__":
     # computation parameters----------------------------------------------------
     # set number of threads for the p2w step
     w_mkl_threads = 1
-    w_worker_threads = 16
+    w_worker_threads = 15
     # set number of threads for the h2g step
     gf_mkl_threads = 1
     gf_mkl_threads_gpu = 1
-    gf_worker_threads = 16
+    gf_worker_threads = 15
 
     # physical parameter -----------
 
@@ -616,7 +619,7 @@ if __name__ == "__main__":
     mem_w = 0.0
     # max number of iterations
 
-    max_iter = 650
+    max_iter = 15
     ECmin_vec = np.concatenate((np.array([ECmin]), np.zeros(max_iter)))
     EFL_vec = np.concatenate((np.array([energy_fl]), np.zeros(max_iter)))
     EFR_vec = np.concatenate((np.array([energy_fr]), np.zeros(max_iter)))
@@ -643,7 +646,7 @@ if __name__ == "__main__":
         time_start = -time.perf_counter()
     # output folder
     #folder = '/scratch/snx3000/ldeuschl/results/CNT_biased_SC_BB1_epsR1_n180/'
-    folder = '/capstor/scratch/cscs/ldeuschl/results/restart_CNT_biased_SC_BB1_epsR1_n343/'
+    folder = '/capstor/scratch/cscs/ldeuschl/results/restart_CNT_P_biased_SC_BB1_epsR1_n343/'
     for iter_num in range(max_iter):
 
         start_iteration = time.perf_counter()
@@ -1205,7 +1208,7 @@ if __name__ == "__main__":
             np.savetxt(folder + 'EFR.dat', EFR_vec)
             np.savetxt(folder + 'ECmin.dat', ECmin_vec)
 
-        if(iter_num % 25) == 0:
+        if(iter_num % 10) == 0:
             sl_rgf_dev = cp.asarray(sl_h2g)
             sg_rgf_dev = cp.asarray(sg_h2g)
             sr_rgf_dev = cp.asarray(sr_h2g)
@@ -1218,7 +1221,7 @@ if __name__ == "__main__":
             comm.Barrier()
             start_restart = time.perf_counter()
 
-            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/SE_restart_CNT_biased_SC_BB1_epsR1_n343/'
+            SE_path = '/capstor/scratch/cscs/ldeuschl/restart_results/SE_P_restart_CNT_biased_SC_BB1_epsR1_n343/'
             filename_SE = SE_path + 'SE_' + str(iter_num) + '_' + str(rank) + '_.dat'
             np.savez(filename_SE, sgp = sg_phn, slp = sl_phn, srp = sr_phn_dev, sge = sg_h2g, sle = sl_h2g, sre = sr_h2g)
             if rank == 0:
